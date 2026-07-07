@@ -46,11 +46,12 @@ function credentials() {
   return { apiKey, privateKey };
 }
 
-// Finstat hash: sha256 of "SomeSalt+<ApiKey>+<PrivateKey>+<value>" (hex).
+// Finstat hash: sha256 of "<ApiKey>+<PrivateKey>+<value>" (hex).
+// Ref: https://www.finstat.sk/api/dokumentacia
 function computeHash(value: string): string {
   const { apiKey, privateKey } = credentials();
   return createHash("sha256")
-    .update(`SomeSalt+${apiKey}+${privateKey}+${value}`)
+    .update(`${apiKey}+${privateKey}+${value}`)
     .digest("hex");
 }
 
