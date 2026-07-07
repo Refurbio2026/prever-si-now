@@ -96,7 +96,7 @@ export const getCompanyByIcoFn = createServerFn({ method: "POST" })
       await supabaseAdmin.from("company_cache").upsert(
         {
           ico,
-          data: bundle as unknown as Record<string, unknown>,
+          data: bundle as unknown as never,
           fetched_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
