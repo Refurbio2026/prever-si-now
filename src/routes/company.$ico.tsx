@@ -217,19 +217,19 @@ function CompanyProfileView({
 
           {/* OVERVIEW */}
           <TabsContent value="overview" className="space-y-6">
-            <Card className="overflow-hidden rounded-2xl border-primary/20 shadow-soft">
-              <div className="bg-[image:var(--gradient-primary)] px-6 py-4">
-                <div className="flex items-center gap-2 text-primary-foreground">
-                  <Sparkles className="h-4 w-4" />
-                  <span className="text-sm font-semibold">AI zhrnutie</span>
+            {company.aiSummary && (
+              <Card className="overflow-hidden rounded-2xl border-primary/20 shadow-soft">
+                <div className="bg-[image:var(--gradient-primary)] px-6 py-4">
+                  <div className="flex items-center gap-2 text-primary-foreground">
+                    <Sparkles className="h-4 w-4" />
+                    <span className="text-sm font-semibold">AI zhrnutie</span>
+                  </div>
                 </div>
-              </div>
-              <div className="p-6">
-                <p className="text-sm leading-relaxed text-foreground">
-                  {company.aiSummary}
-                </p>
-              </div>
-            </Card>
+                <div className="p-6">
+                  <p className="text-sm leading-relaxed text-foreground">{company.aiSummary}</p>
+                </div>
+              </Card>
+            )}
 
             {criticalRisks.length > 0 && (
               <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
@@ -251,8 +251,8 @@ function CompanyProfileView({
                 <InfoField label="Odvetvie" value={company.industry ?? "—"} />
                 <InfoField label="Počet zamestnancov" value={company.employees ? String(company.employees) : "—"} />
                 <InfoField label="Web" value={company.website ?? "—"} />
-                <InfoField label="Tržby (2024)" value={formatCurrency(company.revenue)} />
-                <InfoField label="Zisk (2024)" value={formatCurrency(company.profit)} />
+                <InfoField label="Tržby" value={formatCurrency(company.revenue)} />
+                <InfoField label="Zisk" value={formatCurrency(company.profit)} />
                 <InfoField label="Právna forma" value={company.legalForm} />
               </div>
             </Card>
@@ -260,17 +260,24 @@ function CompanyProfileView({
 
           {/* FINANCIALS */}
           <TabsContent value="financials" className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <TrendCard label="Tržby (2024)" value={company.revenue} prev={financials[3].revenue} />
-              <TrendCard label="Zisk (2024)" value={company.profit} prev={financials[3].profit} />
-              <TrendCard label="EBITDA" value={financials[4].ebitda} prev={financials[3].ebitda} />
-              <TrendCard
-                label="Aktíva / Pasíva"
-                value={financials[4].assets - financials[4].liabilities}
-                prev={financials[3].assets - financials[3].liabilities}
-                positiveOnly
-              />
-            </div>
+            {hasFinancials && latestFin && prevFin ? (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <TrendCard label={`Tržby (${latestFin.year})`} value={latestFin.revenue} prev={prevFin.revenue} />
+                <TrendCard label={`Zisk (${latestFin.year})`} value={latestFin.profit} prev={prevFin.profit} />
+                <TrendCard label="EBITDA" value={latestFin.ebitda} prev={prevFin.ebitda} />
+                <TrendCard
+                  label="Aktíva / Pasíva"
+                  value={latestFin.assets - latestFin.liabilities}
+                  prev={prevFin.assets - prevFin.liabilities}
+                  positiveOnly
+                />
+              </div>
+            ) : (
+              <Card className="rounded-2xl border-dashed p-8 text-center text-sm text-muted-foreground">
+                Finančné údaje nie sú k dispozícii.
+              </Card>
+            )}
+
 
             <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
               <h3 className="mb-4 text-lg font-semibold">Vývoj tržieb</h3>
