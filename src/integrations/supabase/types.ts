@@ -14,7 +14,114 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          company_name: string | null
+          created_at: string
+          email: string | null
+          id: string
+          plan: string
+          updated_at: string
+        }
+        Insert: {
+          company_name?: string | null
+          created_at?: string
+          email?: string | null
+          id: string
+          plan?: string
+          updated_at?: string
+        }
+        Update: {
+          company_name?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          plan?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      recent_searches: {
+        Row: {
+          company_name: string | null
+          created_at: string
+          ico: string | null
+          id: string
+          query: string
+          user_id: string
+        }
+        Insert: {
+          company_name?: string | null
+          created_at?: string
+          ico?: string | null
+          id?: string
+          query: string
+          user_id: string
+        }
+        Update: {
+          company_name?: string | null
+          created_at?: string
+          ico?: string | null
+          id?: string
+          query?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          company_name: string
+          created_at: string
+          ico: string
+          id: string
+          report_type: string
+          user_id: string
+        }
+        Insert: {
+          company_name: string
+          created_at?: string
+          ico: string
+          id?: string
+          report_type?: string
+          user_id: string
+        }
+        Update: {
+          company_name?: string
+          created_at?: string
+          ico?: string
+          id?: string
+          report_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      watched_companies: {
+        Row: {
+          company_name: string
+          created_at: string
+          ico: string
+          id: string
+          risk_score: number | null
+          user_id: string
+        }
+        Insert: {
+          company_name: string
+          created_at?: string
+          ico: string
+          id?: string
+          risk_score?: number | null
+          user_id: string
+        }
+        Update: {
+          company_name?: string
+          created_at?: string
+          ico?: string
+          id?: string
+          risk_score?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
