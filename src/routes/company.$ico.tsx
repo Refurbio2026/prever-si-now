@@ -1,0 +1,565 @@
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import {
+  Building2,
+  MapPin,
+  Calendar,
+  Receipt,
+  Bell,
+  Download,
+  ArrowLeft,
+  Sparkles,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  TrendingUp,
+  TrendingDown,
+  Users,
+  Crown,
+  ShieldCheck,
+  ExternalLink,
+  Clock,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+import { SiteHeader, SiteFooter } from "@/components/site-chrome";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { RiskBadge, formatCurrency } from "@/components/risk-badge";
+import {
+  getCompanyByIco,
+  mockAlerts,
+  mockFinancials,
+  mockHistory,
+  mockPeople,
+  mockRisks,
+} from "@/lib/mock-data";
+import type { CompanyPerson, RiskIndicator } from "@/lib/types";
+
+export const Route = createFileRoute("/company/$ico")({
+  component: CompanyProfilePage,
+  loader: ({ params }) => {
+    const company = getCompanyByIco(params.ico);
+    if (!company) throw notFound();
+    return { company };
+  },
+  head: ({ loaderData }) => ({
+    meta: loaderData
+      ? [
+          { title: `${loaderData.company.name} — Profil firmy | PreverSi.sk` },
+          {
+            name: "description",
+            content: `Kompletné preverenie firmy ${loaderData.company.name}, IČO ${loaderData.company.ico}. Finančné zdravie, riziká, konatelia a AI analýza.`,
+          },
+        ]
+      : [{ title: "Firma — PreverSi.sk" }],
+  }),
+  notFoundComponent: () => (
+    <div className="min-h-screen bg-background">
+      <SiteHeader />
+      <div className="mx-auto max-w-2xl px-4 py-24 text-center">
+        <h1 className="text-2xl font-bold">Firma sa nenašla</h1>
+        <p className="mt-2 text-muted-foreground">Skontrolujte IČO alebo skúste znova vyhľadať.</p>
+        <Button asChild className="mt-6 rounded-xl">
+          <Link to="/search">Späť na vyhľadávanie</Link>
+        </Button>
+      </div>
+      <SiteFooter />
+    </div>
+  ),
+});
+
+function CompanyProfilePage() {
+  const { company } = Route.useLoaderData();
+  const financials = mockFinancials.default;
+  const risks = mockRisks(company);
+  const executives = mockPeople.filter((p) => p.role === "executive");
+  const owners = mockPeople.filter((p) => p.role === "owner");
+  const beneficials = mockPeople.filter((p) => p.role === "beneficial_owner");
+  const criticalRisks = risks.filter((r) => r.status !== "clear");
+
+  return (
+    <div className="min-h-screen bg-background">
+      <SiteHeader />
+
+      <div className="border-b border-border/60 bg-secondary/30">
+        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+          <Link
+            to="/search"
+            className="mb-6 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-3 w-3" /> Späť na výsledky
+          </Link>
+
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-1 items-start gap-4">
+              <div className="inline-flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-[image:var(--gradient-primary)] text-primary-foreground shadow-soft">
+                <Building2 className="h-7 w-7" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-bold sm:text-3xl">{company.name}</h1>
+                  <RiskBadge level={company.riskLevel} />
+                  {company.vatPayer && (
+                    <Badge variant="secondary" className="rounded-full">
+                      Platiteľ DPH
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
+                  <InfoRow icon={Receipt} label="IČO" value={company.ico} />
+                  {company.dic && <InfoRow icon={Receipt} label="DIČ" value={company.dic} />}
+                  {company.icDph && <InfoRow icon={Receipt} label="IČ DPH" value={company.icDph} />}
+                  <InfoRow icon={MapPin} label="Adresa" value={`${company.address}, ${company.city}`} />
+                  <InfoRow icon={Building2} label="Právna forma" value={company.legalForm} />
+                  <InfoRow
+                    icon={Calendar}
+                    label="Registrácia"
+                    value={new Date(company.registrationDate).toLocaleDateString("sk-SK")}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-stretch gap-3 lg:w-80">
+              <Card className="rounded-2xl border-border/70 p-5 shadow-soft">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Celkové skóre
+                  </span>
+                  <RiskBadge level={company.riskLevel} />
+                </div>
+                <div className="mt-2 flex items-baseline gap-1">
+                  <span className="text-4xl font-bold">{company.riskScore}</span>
+                  <span className="text-sm text-muted-foreground">/ 100</span>
+                </div>
+                <Progress value={company.riskScore} className="mt-3 h-2" />
+              </Card>
+              <div className="grid grid-cols-2 gap-2">
+                <Button className="rounded-xl shadow-soft">
+                  <Bell className="mr-1.5 h-4 w-4" /> Sledovať
+                </Button>
+                <Button variant="outline" className="rounded-xl">
+                  <Download className="mr-1.5 h-4 w-4" /> Export PDF
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+        <Tabs defaultValue="overview">
+          <TabsList className="mb-6 flex h-auto w-full flex-wrap justify-start gap-1 rounded-2xl bg-secondary/60 p-1">
+            {[
+              { v: "overview", l: "Prehľad" },
+              { v: "financials", l: "Financie" },
+              { v: "people", l: "Osoby" },
+              { v: "risks", l: "Riziká" },
+              { v: "history", l: "História" },
+              { v: "monitoring", l: "Monitoring" },
+            ].map((t) => (
+              <TabsTrigger key={t.v} value={t.v} className="rounded-xl px-4 py-2 text-sm">
+                {t.l}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          {/* OVERVIEW */}
+          <TabsContent value="overview" className="space-y-6">
+            <Card className="overflow-hidden rounded-2xl border-primary/20 shadow-soft">
+              <div className="bg-[image:var(--gradient-primary)] px-6 py-4">
+                <div className="flex items-center gap-2 text-primary-foreground">
+                  <Sparkles className="h-4 w-4" />
+                  <span className="text-sm font-semibold">AI zhrnutie</span>
+                </div>
+              </div>
+              <div className="p-6">
+                <p className="text-sm leading-relaxed text-foreground">
+                  {company.aiSummary}
+                </p>
+              </div>
+            </Card>
+
+            {criticalRisks.length > 0 && (
+              <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+                <div className="mb-4 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-warning-foreground" />
+                  <h3 className="text-lg font-semibold">Kľúčové upozornenia</h3>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {criticalRisks.map((r) => (
+                    <RiskRow key={r.key} risk={r} />
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+              <h3 className="mb-5 text-lg font-semibold">Základné informácie</h3>
+              <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+                <InfoField label="Odvetvie" value={company.industry ?? "—"} />
+                <InfoField label="Počet zamestnancov" value={company.employees ? String(company.employees) : "—"} />
+                <InfoField label="Web" value={company.website ?? "—"} />
+                <InfoField label="Tržby (2024)" value={formatCurrency(company.revenue)} />
+                <InfoField label="Zisk (2024)" value={formatCurrency(company.profit)} />
+                <InfoField label="Právna forma" value={company.legalForm} />
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* FINANCIALS */}
+          <TabsContent value="financials" className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <TrendCard label="Tržby (2024)" value={company.revenue} prev={financials[3].revenue} />
+              <TrendCard label="Zisk (2024)" value={company.profit} prev={financials[3].profit} />
+              <TrendCard label="EBITDA" value={financials[4].ebitda} prev={financials[3].ebitda} />
+              <TrendCard
+                label="Aktíva / Pasíva"
+                value={financials[4].assets - financials[4].liabilities}
+                prev={financials[3].assets - financials[3].liabilities}
+                positiveOnly
+              />
+            </div>
+
+            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+              <h3 className="mb-4 text-lg font-semibold">Vývoj tržieb</h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
+                    <defs>
+                      <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
+                    <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
+                    <YAxis
+                      stroke="oklch(0.5 0.03 255)"
+                      fontSize={12}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                    />
+                    <RTooltip
+                      contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
+                      formatter={(v: number) => formatCurrency(v)}
+                    />
+                    <Area type="monotone" dataKey="revenue" stroke="oklch(0.55 0.2 258)" strokeWidth={2} fill="url(#revGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+
+            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+              <h3 className="mb-4 text-lg font-semibold">Zisk vs. EBITDA</h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
+                    <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
+                    <YAxis
+                      stroke="oklch(0.5 0.03 255)"
+                      fontSize={12}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                    />
+                    <RTooltip
+                      contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
+                      formatter={(v: number) => formatCurrency(v)}
+                    />
+                    <Bar dataKey="profit" fill="oklch(0.55 0.2 258)" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="ebitda" fill="oklch(0.72 0.16 245)" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+
+            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+              <h3 className="mb-4 text-lg font-semibold">Aktíva a pasíva</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="py-3 text-left font-medium">Rok</th>
+                      <th className="py-3 text-right font-medium">Tržby</th>
+                      <th className="py-3 text-right font-medium">Zisk</th>
+                      <th className="py-3 text-right font-medium">EBITDA</th>
+                      <th className="py-3 text-right font-medium">Aktíva</th>
+                      <th className="py-3 text-right font-medium">Pasíva</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...financials].reverse().map((f) => (
+                      <tr key={f.year} className="border-b border-border/50 last:border-0">
+                        <td className="py-3 font-medium">{f.year}</td>
+                        <td className="py-3 text-right">{formatCurrency(f.revenue)}</td>
+                        <td className="py-3 text-right">{formatCurrency(f.profit)}</td>
+                        <td className="py-3 text-right">{formatCurrency(f.ebitda)}</td>
+                        <td className="py-3 text-right">{formatCurrency(f.assets)}</td>
+                        <td className="py-3 text-right">{formatCurrency(f.liabilities)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* PEOPLE */}
+          <TabsContent value="people" className="space-y-6">
+            <PeopleCard title="Konatelia" icon={Users} people={executives} />
+            <PeopleCard title="Spoločníci" icon={Crown} people={owners} showShare />
+            <PeopleCard title="Koneční užívatelia výhod (KUV)" icon={ShieldCheck} people={beneficials} showShare />
+          </TabsContent>
+
+          {/* RISKS */}
+          <TabsContent value="risks" className="space-y-3">
+            {risks.map((r) => (
+              <RiskRow key={r.key} risk={r} large />
+            ))}
+          </TabsContent>
+
+          {/* HISTORY */}
+          <TabsContent value="history">
+            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+              <h3 className="mb-6 text-lg font-semibold">Časová os zmien</h3>
+              <ol className="relative border-l border-border pl-6">
+                {mockHistory.map((h, i) => (
+                  <li key={i} className="relative mb-6 last:mb-0">
+                    <span
+                      className={`absolute -left-[29px] flex h-4 w-4 items-center justify-center rounded-full ring-4 ring-background ${
+                        h.severity === "critical"
+                          ? "bg-destructive"
+                          : h.severity === "warning"
+                          ? "bg-warning"
+                          : h.severity === "success"
+                          ? "bg-success"
+                          : "bg-primary"
+                      }`}
+                    />
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      {new Date(h.date).toLocaleDateString("sk-SK")}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold">{h.type}</div>
+                    <div className="text-sm text-muted-foreground">{h.description}</div>
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          </TabsContent>
+
+          {/* MONITORING */}
+          <TabsContent value="monitoring" className="space-y-6">
+            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-primary">
+                    <Bell className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="font-semibold">Táto firma nie je sledovaná</div>
+                    <div className="text-xs text-muted-foreground">
+                      Zapnite monitoring a dostávajte notifikácie o zmenách e-mailom.
+                    </div>
+                  </div>
+                </div>
+                <Button className="rounded-xl shadow-soft">
+                  <Bell className="mr-1.5 h-4 w-4" /> Zapnúť monitoring
+                </Button>
+              </div>
+            </Card>
+
+            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+              <h3 className="mb-4 text-lg font-semibold">Najnovšie upozornenia</h3>
+              <div className="space-y-3">
+                {mockAlerts.map((a) => (
+                  <div key={a.id} className="rounded-xl border border-border/60 bg-background p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium">{a.title}</div>
+                        <div className="mt-1 text-sm text-muted-foreground">{a.description}</div>
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className={`rounded-full ${
+                          a.severity === "critical"
+                            ? "bg-destructive/15 text-destructive"
+                            : a.severity === "warning"
+                            ? "bg-warning/20 text-warning-foreground"
+                            : a.severity === "success"
+                            ? "bg-success/15 text-success"
+                            : "bg-primary/10 text-primary"
+                        }`}
+                      >
+                        {new Date(a.date).toLocaleDateString("sk-SK")}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      <SiteFooter />
+    </div>
+  );
+}
+
+function InfoRow({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Icon className="h-3.5 w-3.5 flex-shrink-0 opacity-60" />
+      <span className="text-[10px] uppercase tracking-wide">{label}:</span>
+      <span className="truncate font-medium text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function InfoField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-sm font-medium">{value}</div>
+    </div>
+  );
+}
+
+function TrendCard({
+  label,
+  value,
+  prev,
+  positiveOnly,
+}: {
+  label: string;
+  value: number;
+  prev: number;
+  positiveOnly?: boolean;
+}) {
+  const diff = value - prev;
+  const pct = prev !== 0 ? (diff / Math.abs(prev)) * 100 : 0;
+  const up = diff >= 0;
+  return (
+    <Card className="rounded-2xl border-border/70 p-5 shadow-soft">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-2 text-xl font-bold">{formatCurrency(value)}</div>
+      <div
+        className={`mt-2 inline-flex items-center gap-1 text-xs font-medium ${
+          positiveOnly || up ? "text-success" : "text-destructive"
+        }`}
+      >
+        {up ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+        {pct >= 0 ? "+" : ""}
+        {pct.toFixed(1)}% r/r
+      </div>
+    </Card>
+  );
+}
+
+function RiskRow({ risk, large }: { risk: RiskIndicator; large?: boolean }) {
+  const cfg = {
+    clear: { icon: CheckCircle2, cls: "text-success bg-success/15", label: "V poriadku" },
+    warning: { icon: AlertTriangle, cls: "text-warning-foreground bg-warning/25", label: "Upozornenie" },
+    critical: { icon: XCircle, cls: "text-destructive bg-destructive/15", label: "Kritické" },
+  }[risk.status];
+  const Icon = cfg.icon;
+
+  return (
+    <Card className={`rounded-2xl border-border/70 shadow-soft ${large ? "p-5" : "p-4"}`}>
+      <div className="flex items-start gap-3">
+        <div className={`inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${cfg.cls}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="font-medium">{risk.label}</div>
+            <Badge variant="secondary" className={`rounded-full text-[10px] ${cfg.cls}`}>
+              {cfg.label}
+            </Badge>
+          </div>
+          <div className="mt-0.5 text-sm text-muted-foreground">{risk.detail}</div>
+        </div>
+        {risk.amount !== undefined && risk.amount > 0 && (
+          <div className="text-right">
+            <div className="text-xs text-muted-foreground">Suma</div>
+            <div className="text-sm font-semibold text-destructive">{formatCurrency(risk.amount)}</div>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function PeopleCard({
+  title,
+  icon: Icon,
+  people,
+  showShare,
+}: {
+  title: string;
+  icon: typeof Users;
+  people: CompanyPerson[];
+  showShare?: boolean;
+}) {
+  return (
+    <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+      <div className="mb-5 flex items-center gap-2">
+        <Icon className="h-4 w-4 text-primary" />
+        <h3 className="text-lg font-semibold">{title}</h3>
+        <Badge variant="secondary" className="rounded-full">
+          {people.length}
+        </Badge>
+      </div>
+      <div className="divide-y divide-border/60">
+        {people.map((p, i) => (
+          <div key={i} className="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
+            <div className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-primary">
+              {initials(p.name)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium">{p.name}</div>
+              <div className="text-xs text-muted-foreground">
+                od {new Date(p.since).toLocaleDateString("sk-SK")}
+              </div>
+            </div>
+            {showShare && p.share !== undefined && (
+              <div className="text-right">
+                <div className="text-xs text-muted-foreground">Podiel</div>
+                <div className="text-sm font-semibold">{p.share}%</div>
+              </div>
+            )}
+            <Button variant="ghost" size="icon" className="rounded-full">
+              <ExternalLink className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function initials(name: string): string {
+  return name
+    .replace(/[.,]/g, "")
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+}

@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SearchRouteImport } from './routes/search'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -18,7 +19,13 @@ import { Route as DashboardSearchRouteImport } from './routes/dashboard.search'
 import { Route as DashboardReportsRouteImport } from './routes/dashboard.reports'
 import { Route as DashboardProfileRouteImport } from './routes/dashboard.profile'
 import { Route as DashboardMonitoringRouteImport } from './routes/dashboard.monitoring'
+import { Route as CompanyIcoRouteImport } from './routes/company.$ico'
 
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
@@ -64,12 +71,19 @@ const DashboardMonitoringRoute = DashboardMonitoringRouteImport.update({
   path: '/monitoring',
   getParentRoute: () => DashboardRoute,
 } as any)
+const CompanyIcoRoute = CompanyIcoRouteImport.update({
+  id: '/company/$ico',
+  path: '/company/$ico',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/search': typeof SearchRoute
+  '/company/$ico': typeof CompanyIcoRoute
   '/dashboard/monitoring': typeof DashboardMonitoringRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reports': typeof DashboardReportsRoute
@@ -80,6 +94,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/search': typeof SearchRoute
+  '/company/$ico': typeof CompanyIcoRoute
   '/dashboard/monitoring': typeof DashboardMonitoringRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reports': typeof DashboardReportsRoute
@@ -92,6 +108,8 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/search': typeof SearchRoute
+  '/company/$ico': typeof CompanyIcoRoute
   '/dashboard/monitoring': typeof DashboardMonitoringRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reports': typeof DashboardReportsRoute
@@ -105,6 +123,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/register'
+    | '/search'
+    | '/company/$ico'
     | '/dashboard/monitoring'
     | '/dashboard/profile'
     | '/dashboard/reports'
@@ -115,6 +135,8 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/register'
+    | '/search'
+    | '/company/$ico'
     | '/dashboard/monitoring'
     | '/dashboard/profile'
     | '/dashboard/reports'
@@ -126,6 +148,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/register'
+    | '/search'
+    | '/company/$ico'
     | '/dashboard/monitoring'
     | '/dashboard/profile'
     | '/dashboard/reports'
@@ -138,10 +162,19 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRouteWithChildren
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
+  SearchRoute: typeof SearchRoute
+  CompanyIcoRoute: typeof CompanyIcoRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/register': {
       id: '/register'
       path: '/register'
@@ -205,6 +238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardMonitoringRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/company/$ico': {
+      id: '/company/$ico'
+      path: '/company/$ico'
+      fullPath: '/company/$ico'
+      preLoaderRoute: typeof CompanyIcoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -233,6 +273,8 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRouteWithChildren,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
+  SearchRoute: SearchRoute,
+  CompanyIcoRoute: CompanyIcoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

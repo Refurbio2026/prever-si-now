@@ -102,7 +102,7 @@ function Landing() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate({ to: "/dashboard/search", search: { q: query } as never });
+    navigate({ to: "/search", search: { q: query } });
   };
 
   return (
