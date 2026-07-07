@@ -1,9 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -16,6 +21,41 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (user) navigate({ to: "/dashboard" });
+  }, [user, navigate]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setSubmitting(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Prihlásenie úspešné");
+    navigate({ to: "/dashboard" });
+  }
+
+  async function handleForgot() {
+    if (!email) {
+      toast.error("Zadajte e-mail pre obnovenie hesla");
+      return;
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) toast.error(error.message);
+    else toast.success("Odkaz na obnovenie hesla bol odoslaný");
+  }
+
   return (
     <AuthShell>
       <div className="text-center">
@@ -23,29 +63,42 @@ function LoginPage() {
         <p className="mt-1 text-sm text-muted-foreground">Prihláste sa do svojho účtu</p>
       </div>
 
-      <form
-        className="mt-8 space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          // Supabase integration placeholder:
-          // await supabase.auth.signInWithPassword({ email, password })
-        }}
-      >
+      <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <Label htmlFor="email">E-mail</Label>
-          <Input id="email" type="email" placeholder="vas@email.sk" required className="h-11 rounded-xl" />
+          <Input
+            id="email"
+            type="email"
+            placeholder="vas@email.sk"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="h-11 rounded-xl"
+          />
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="password">Heslo</Label>
-            <a href="#" className="text-xs text-primary hover:underline">
+            <button
+              type="button"
+              onClick={handleForgot}
+              className="text-xs text-primary hover:underline"
+            >
               Zabudli ste heslo?
-            </a>
+            </button>
           </div>
-          <Input id="password" type="password" placeholder="••••••••" required className="h-11 rounded-xl" />
+          <Input
+            id="password"
+            type="password"
+            placeholder="••••••••"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="h-11 rounded-xl"
+          />
         </div>
-        <Button type="submit" className="h-11 w-full rounded-xl shadow-soft">
-          Prihlásiť sa
+        <Button type="submit" disabled={submitting} className="h-11 w-full rounded-xl shadow-soft">
+          {submitting ? "Prihlasujem…" : "Prihlásiť sa"}
         </Button>
       </form>
 
