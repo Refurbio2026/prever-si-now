@@ -23,13 +23,13 @@ import {
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/logo";
 
-const items = [
+const items: { title: string; url: string; icon: typeof LayoutDashboard; exact?: boolean }[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, exact: true },
   { title: "Vyhľadávanie", url: "/dashboard/search", icon: Search },
   { title: "Monitoring", url: "/dashboard/monitoring", icon: Bell },
   { title: "Reporty", url: "/dashboard/reports", icon: FileText },
   { title: "Profil", url: "/dashboard/profile", icon: User },
-] as const;
+];
 
 export function DashboardSidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
