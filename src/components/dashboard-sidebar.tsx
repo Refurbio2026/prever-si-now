@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Search,
@@ -8,6 +8,7 @@ import {
   LogOut,
   Settings,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   Sidebar,
@@ -22,6 +23,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/logo";
+import { supabase } from "@/integrations/supabase/client";
 
 const items: { title: string; url: string; icon: typeof LayoutDashboard; exact?: boolean }[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, exact: true },
@@ -33,9 +35,20 @@ const items: { title: string; url: string; icon: typeof LayoutDashboard; exact?:
 
 export function DashboardSidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const navigate = useNavigate();
 
   const isActive = (url: string, exact?: boolean) =>
     exact ? pathname === url : pathname === url || pathname.startsWith(url + "/");
+
+  async function handleSignOut() {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Odhlásený");
+    navigate({ to: "/login" });
+  }
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -70,11 +83,9 @@ export function DashboardSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild className="rounded-xl">
-              <Link to="/">
-                <LogOut className="h-4 w-4" />
-                <span>Odhlásiť</span>
-              </Link>
+            <SidebarMenuButton onClick={handleSignOut} className="rounded-xl">
+              <LogOut className="h-4 w-4" />
+              <span>Odhlásiť</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

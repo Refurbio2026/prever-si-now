@@ -1,8 +1,13 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthShell } from "./login";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/register")({
   component: RegisterPage,
@@ -15,6 +20,41 @@ export const Route = createFileRoute("/register")({
 });
 
 function RegisterPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [companyName, setCompanyName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (user) navigate({ to: "/dashboard" });
+  }, [user, navigate]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: { company_name: companyName },
+      },
+    });
+    setSubmitting(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    if (data.session) {
+      toast.success("Účet vytvorený");
+      navigate({ to: "/dashboard" });
+    } else {
+      toast.success("Skontrolujte e-mail pre potvrdenie účtu");
+    }
+  }
+
   return (
     <AuthShell>
       <div className="text-center">
@@ -22,28 +62,46 @@ function RegisterPage() {
         <p className="mt-1 text-sm text-muted-foreground">Začnite preverovať firmy zdarma</p>
       </div>
 
-      <form
-        className="mt-8 space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          // Supabase integration placeholder:
-          // await supabase.auth.signUp({ email, password, options: { data: { company_name } } })
-        }}
-      >
+      <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <Label htmlFor="company">Názov firmy</Label>
-          <Input id="company" type="text" placeholder="Moja Firma s.r.o." required className="h-11 rounded-xl" />
+          <Input
+            id="company"
+            type="text"
+            required
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            placeholder="Moja Firma s.r.o."
+            className="h-11 rounded-xl"
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="email">E-mail</Label>
-          <Input id="email" type="email" placeholder="vas@email.sk" required className="h-11 rounded-xl" />
+          <Input
+            id="email"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="vas@email.sk"
+            className="h-11 rounded-xl"
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="password">Heslo</Label>
-          <Input id="password" type="password" placeholder="Aspoň 8 znakov" required className="h-11 rounded-xl" />
+          <Input
+            id="password"
+            type="password"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Aspoň 8 znakov"
+            className="h-11 rounded-xl"
+          />
         </div>
-        <Button type="submit" className="h-11 w-full rounded-xl shadow-soft">
-          Vytvoriť účet
+        <Button type="submit" disabled={submitting} className="h-11 w-full rounded-xl shadow-soft">
+          {submitting ? "Vytváram účet…" : "Vytvoriť účet"}
         </Button>
         <p className="text-center text-xs text-muted-foreground">
           Registráciou súhlasíte s{" "}
