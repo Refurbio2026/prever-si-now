@@ -19,6 +19,7 @@ import { Route as DashboardSearchRouteImport } from './routes/dashboard.search'
 import { Route as DashboardReportsRouteImport } from './routes/dashboard.reports'
 import { Route as DashboardProfileRouteImport } from './routes/dashboard.profile'
 import { Route as DashboardMonitoringRouteImport } from './routes/dashboard.monitoring'
+import { Route as CompanyIcoRouteImport } from './routes/company.$ico'
 
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
@@ -70,6 +71,11 @@ const DashboardMonitoringRoute = DashboardMonitoringRouteImport.update({
   path: '/monitoring',
   getParentRoute: () => DashboardRoute,
 } as any)
+const CompanyIcoRoute = CompanyIcoRouteImport.update({
+  id: '/company/$ico',
+  path: '/company/$ico',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -77,6 +83,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/search': typeof SearchRoute
+  '/company/$ico': typeof CompanyIcoRoute
   '/dashboard/monitoring': typeof DashboardMonitoringRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reports': typeof DashboardReportsRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/search': typeof SearchRoute
+  '/company/$ico': typeof CompanyIcoRoute
   '/dashboard/monitoring': typeof DashboardMonitoringRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reports': typeof DashboardReportsRoute
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/search': typeof SearchRoute
+  '/company/$ico': typeof CompanyIcoRoute
   '/dashboard/monitoring': typeof DashboardMonitoringRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reports': typeof DashboardReportsRoute
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/search'
+    | '/company/$ico'
     | '/dashboard/monitoring'
     | '/dashboard/profile'
     | '/dashboard/reports'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/search'
+    | '/company/$ico'
     | '/dashboard/monitoring'
     | '/dashboard/profile'
     | '/dashboard/reports'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/search'
+    | '/company/$ico'
     | '/dashboard/monitoring'
     | '/dashboard/profile'
     | '/dashboard/reports'
@@ -151,6 +163,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   SearchRoute: typeof SearchRoute
+  CompanyIcoRoute: typeof CompanyIcoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -225,6 +238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardMonitoringRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/company/$ico': {
+      id: '/company/$ico'
+      path: '/company/$ico'
+      fullPath: '/company/$ico'
+      preLoaderRoute: typeof CompanyIcoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -254,6 +274,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   SearchRoute: SearchRoute,
+  CompanyIcoRoute: CompanyIcoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
