@@ -147,14 +147,7 @@ function CompanyProfilePage() {
                 </div>
                 <Progress value={company.riskScore} className="mt-3 h-2" />
               </Card>
-              <div className="grid grid-cols-2 gap-2">
-                <Button className="rounded-xl shadow-soft">
-                  <Bell className="mr-1.5 h-4 w-4" /> Sledovať
-                </Button>
-                <Button variant="outline" className="rounded-xl">
-                  <Download className="mr-1.5 h-4 w-4" /> Export PDF
-                </Button>
-              </div>
+              <CompanyActions company={company} />
             </div>
           </div>
         </div>
