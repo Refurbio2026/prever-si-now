@@ -1,11 +1,12 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import {
   Building2,
   MapPin,
   Calendar,
   Receipt,
   Bell,
-  Download,
   ArrowLeft,
   Sparkles,
   AlertTriangle,
@@ -18,6 +19,8 @@ import {
   ShieldCheck,
   ExternalLink,
   Clock,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import {
   Area,
@@ -39,57 +42,98 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { RiskBadge, formatCurrency } from "@/components/risk-badge";
 import { CompanyActions } from "@/components/company-actions";
-import {
-  getCompanyByIco,
-  mockAlerts,
-  mockFinancials,
-  mockHistory,
-  mockPeople,
-  mockRisks,
-} from "@/lib/mock-data";
-import type { CompanyPerson, RiskIndicator } from "@/lib/types";
+import { mockAlerts, mockHistory } from "@/lib/mock-data";
+import { getCompanyByIcoFn } from "@/lib/finstat.functions";
+import type { Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
 
 export const Route = createFileRoute("/company/$ico")({
   component: CompanyProfilePage,
-  loader: ({ params }) => {
-    const company = getCompanyByIco(params.ico);
-    if (!company) throw notFound();
-    return { company };
-  },
-  head: ({ loaderData }) => ({
-    meta: loaderData
-      ? [
-          { title: `${loaderData.company.name} — Profil firmy | PreverSi.sk` },
-          {
-            name: "description",
-            content: `Kompletné preverenie firmy ${loaderData.company.name}, IČO ${loaderData.company.ico}. Finančné zdravie, riziká, konatelia a AI analýza.`,
-          },
-        ]
-      : [{ title: "Firma — PreverSi.sk" }],
+  head: ({ params }) => ({
+    meta: [
+      { title: `Firma ${params.ico} — PreverSi.sk` },
+      {
+        name: "description",
+        content: `Kompletné preverenie firmy s IČO ${params.ico}. Finančné zdravie, riziká, konatelia a AI analýza.`,
+      },
+    ],
   }),
-  notFoundComponent: () => (
-    <div className="min-h-screen bg-background">
-      <SiteHeader />
-      <div className="mx-auto max-w-2xl px-4 py-24 text-center">
-        <h1 className="text-2xl font-bold">Firma sa nenašla</h1>
-        <p className="mt-2 text-muted-foreground">Skontrolujte IČO alebo skúste znova vyhľadať.</p>
-        <Button asChild className="mt-6 rounded-xl">
-          <Link to="/search">Späť na vyhľadávanie</Link>
-        </Button>
-      </div>
-      <SiteFooter />
-    </div>
-  ),
 });
 
 function CompanyProfilePage() {
-  const { company } = Route.useLoaderData();
-  const financials = mockFinancials.default;
-  const risks = mockRisks(company);
-  const executives = mockPeople.filter((p) => p.role === "executive");
-  const owners = mockPeople.filter((p) => p.role === "owner");
-  const beneficials = mockPeople.filter((p) => p.role === "beneficial_owner");
+  const { ico } = Route.useParams();
+  const fetchCompany = useServerFn(getCompanyByIcoFn);
+  const query = useQuery({
+    queryKey: ["finstat-company", ico],
+    queryFn: () => fetchCompany({ data: { ico } }),
+    staleTime: 5 * 60_000,
+  });
+
+  if (query.isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader />
+        <div className="mx-auto flex max-w-6xl items-center justify-center px-4 py-24">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-sm">Načítavam profil firmy z Finstat…</span>
+          </div>
+        </div>
+        <SiteFooter />
+      </div>
+    );
+  }
+
+  if (query.isError || (query.data && !query.data.ok)) {
+    const message =
+      query.data && !query.data.ok
+        ? query.data.error
+        : "Nepodarilo sa načítať profil firmy.";
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader />
+        <div className="mx-auto max-w-xl px-4 py-24 text-center">
+          <AlertCircle className="mx-auto h-8 w-8 text-destructive" />
+          <h1 className="mt-3 text-2xl font-bold">Chyba pri načítaní</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+          <div className="mt-6 flex justify-center gap-2">
+            <Button onClick={() => query.refetch()} className="rounded-xl">
+              Skúsiť znovu
+            </Button>
+            <Button variant="outline" asChild className="rounded-xl">
+              <Link to="/search">Späť na vyhľadávanie</Link>
+            </Button>
+          </div>
+        </div>
+        <SiteFooter />
+      </div>
+    );
+  }
+
+  if (!query.data || !query.data.ok) return null;
+
+  const { company, financials, people, risks } = query.data.data;
+  return <CompanyProfileView company={company} financials={financials} people={people} risks={risks} />;
+}
+
+function CompanyProfileView({
+  company,
+  financials,
+  people,
+  risks,
+}: {
+  company: Company;
+  financials: FinancialYear[];
+  people: CompanyPerson[];
+  risks: RiskIndicator[];
+}) {
+  const executives = people.filter((p) => p.role === "executive");
+  const owners = people.filter((p) => p.role === "owner");
+  const beneficials = people.filter((p) => p.role === "beneficial_owner");
   const criticalRisks = risks.filter((r) => r.status !== "clear");
+  const hasFinancials = financials.length > 0;
+  const latestFin = hasFinancials ? financials[financials.length - 1] : undefined;
+  const prevFin = hasFinancials && financials.length > 1 ? financials[financials.length - 2] : latestFin;
+
 
   return (
     <div className="min-h-screen bg-background">
