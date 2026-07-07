@@ -1,11 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Search, Building2, Filter } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
+import { Search, Building2, Filter, Loader2, AlertCircle } from "lucide-react";
 import { useState } from "react";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RiskBadge } from "@/components/risk-badge";
-import { searchCompanies } from "@/lib/mock-data";
+import { searchCompaniesFn } from "@/lib/finstat.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -23,8 +25,14 @@ function SearchPage() {
   const navigate = useNavigate({ from: "/dashboard/search" });
   const { user } = useAuth();
   const [query, setQuery] = useState(q ?? "");
+  const searchFn = useServerFn(searchCompaniesFn);
 
-  const results = q ? searchCompanies(q) : [];
+  const results = useQuery({
+    queryKey: ["finstat-search", q],
+    enabled: !!q,
+    queryFn: () => searchFn({ data: { query: q as string } }),
+    staleTime: 60_000,
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,16 +41,17 @@ function SearchPage() {
     navigate({ search: { q: trimmed } });
 
     if (user) {
-      // Save the search (best-effort; ignore errors so UX stays smooth).
-      const top = searchCompanies(trimmed)[0];
       await supabase.from("recent_searches").insert({
         user_id: user.id,
         query: trimmed,
-        ico: top?.ico ?? null,
-        company_name: top?.name ?? null,
+        ico: null,
+        company_name: null,
       });
     }
   }
+
+  const items = results.data?.ok ? results.data.results : [];
+  const apiError = results.data && !results.data.ok ? results.data : null;
 
   return (
     <div className="space-y-6">
@@ -79,12 +88,35 @@ function SearchPage() {
         <>
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Výsledky pre „{q}" · {results.length}{" "}
-              {results.length === 1 ? "firma" : "firiem"}
+              Výsledky pre „{q}"
+              {results.isFetching ? " · načítavam…" : ` · ${items.length}`}
             </p>
           </div>
 
-          {results.length === 0 ? (
+          {results.isLoading ? (
+            <Card className="flex items-center justify-center gap-3 rounded-2xl border-dashed p-12">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Vyhľadávam vo Finstat…</span>
+            </Card>
+          ) : apiError ? (
+            <Card className="rounded-2xl border-destructive/40 bg-destructive/5 p-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-5 w-5 text-destructive" />
+                <div>
+                  <div className="font-semibold text-destructive">Nepodarilo sa načítať výsledky</div>
+                  <p className="mt-1 text-sm text-muted-foreground">{apiError.error}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 rounded-xl"
+                    onClick={() => results.refetch()}
+                  >
+                    Skúsiť znovu
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ) : items.length === 0 ? (
             <Card className="rounded-2xl border-dashed p-12 text-center">
               <div className="text-base font-semibold">Žiadne výsledky</div>
               <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
@@ -93,7 +125,7 @@ function SearchPage() {
             </Card>
           ) : (
             <div className="grid gap-3">
-              {results.map((r) => (
+              {items.map((r) => (
                 <Link
                   key={r.ico}
                   to="/company/$ico"
@@ -111,14 +143,16 @@ function SearchPage() {
                           IČO {r.ico} · {r.city}
                         </div>
                       </div>
-                      <div className="hidden text-right sm:block">
-                        <div className="text-xs text-muted-foreground">Finančné skóre</div>
-                        <div className="text-lg font-bold">
-                          {r.riskScore}
-                          <span className="text-xs text-muted-foreground">/100</span>
+                      {r.riskScore > 0 && (
+                        <div className="hidden text-right sm:block">
+                          <div className="text-xs text-muted-foreground">Finančné skóre</div>
+                          <div className="text-lg font-bold">
+                            {r.riskScore}
+                            <span className="text-xs text-muted-foreground">/100</span>
+                          </div>
                         </div>
-                      </div>
-                      <RiskBadge level={r.riskLevel} />
+                      )}
+                      {r.riskScore > 0 && <RiskBadge level={r.riskLevel} />}
                     </div>
                   </Card>
                 </Link>
