@@ -1,4 +1,5 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { Search, Bell } from "lucide-react";
 
 import {
@@ -9,6 +10,7 @@ import {
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/dashboard")({
   component: DashboardLayout,
@@ -21,6 +23,29 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 function DashboardLayout() {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !user) navigate({ to: "/login" });
+  }, [loading, user, navigate]);
+
+  if (loading || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-secondary/30">
+        <div className="text-sm text-muted-foreground">Načítavam…</div>
+      </div>
+    );
+  }
+
+  const initials = (user.user_metadata?.company_name || user.email || "??")
+    .toString()
+    .split(/\s+/)
+    .map((s: string) => s[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-secondary/30">
@@ -42,7 +67,9 @@ function DashboardLayout() {
               <Bell className="h-4 w-4" />
             </Button>
             <Avatar className="h-9 w-9 border border-border">
-              <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">JN</AvatarFallback>
+              <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+                {initials}
+              </AvatarFallback>
             </Avatar>
           </header>
           <main className="flex-1 p-4 sm:p-6 lg:p-8">
