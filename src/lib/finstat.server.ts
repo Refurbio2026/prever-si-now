@@ -280,7 +280,6 @@ export interface CompanyDetailBundle {
   financials: FinancialYear[];
   people: CompanyPerson[];
   risks: RiskIndicator[];
-  raw: FinstatRawCompany;
 }
 
 export function normalizeDetail(raw: FinstatRawCompany): CompanyDetailBundle {
@@ -289,6 +288,5 @@ export function normalizeDetail(raw: FinstatRawCompany): CompanyDetailBundle {
     financials: normalizeFinancials(raw),
     people: normalizePeople(raw),
     risks: normalizeRisks(raw),
-    raw,
   };
 }
