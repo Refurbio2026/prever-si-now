@@ -1,13 +1,23 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Search, Building2, MapPin, TrendingUp, TrendingDown, ArrowRight, Filter } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Search,
+  Building2,
+  MapPin,
+  ArrowRight,
+  Filter,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
 import { useState } from "react";
 
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RiskBadge, formatCurrency } from "@/components/risk-badge";
-import { searchCompanies } from "@/lib/mock-data";
+import { RiskBadge } from "@/components/risk-badge";
+import { searchCompaniesFn } from "@/lib/finstat.functions";
 
 type SearchParams = { q?: string };
 
@@ -25,13 +35,24 @@ function SearchResultsPage() {
   const { q } = Route.useSearch();
   const navigate = useNavigate({ from: "/search" });
   const [query, setQuery] = useState(q ?? "");
+  const searchFn = useServerFn(searchCompaniesFn);
 
-  const results = searchCompanies(q ?? "");
+  const results = useQuery({
+    queryKey: ["finstat-search-public", q],
+    enabled: !!q,
+    queryFn: () => searchFn({ data: { query: q as string } }),
+    staleTime: 60_000,
+  });
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate({ search: { q: query } });
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    navigate({ search: { q: trimmed } });
   };
+
+  const items = results.data?.ok ? results.data.results : [];
+  const apiError = results.data && !results.data.ok ? results.data : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -62,16 +83,57 @@ function SearchResultsPage() {
 
           <p className="mt-4 text-sm text-muted-foreground">
             {q ? (
-              <>Nájdených <span className="font-semibold text-foreground">{results.length}</span> firiem pre „{q}"</>
+              <>
+                {results.isFetching ? (
+                  "Vyhľadávam vo Finstat…"
+                ) : (
+                  <>
+                    Nájdených{" "}
+                    <span className="font-semibold text-foreground">{items.length}</span> firiem pre
+                    „{q}"
+                  </>
+                )}
+              </>
             ) : (
-              <>Zobrazené všetky firmy · {results.length}</>
+              <>Zadajte názov firmy alebo IČO na vyhľadávanie.</>
             )}
           </p>
         </div>
       </div>
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        {results.length === 0 ? (
+        {!q ? (
+          <Card className="rounded-2xl border-dashed p-12 text-center shadow-soft">
+            <Search className="mx-auto h-10 w-10 text-muted-foreground" />
+            <h2 className="mt-4 text-lg font-semibold">Začnite vyhľadávať</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Zadajte názov firmy alebo IČO vyššie.
+            </p>
+          </Card>
+        ) : results.isLoading ? (
+          <Card className="flex items-center justify-center gap-3 rounded-2xl border-dashed p-12">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Vyhľadávam vo Finstat…</span>
+          </Card>
+        ) : apiError ? (
+          <Card className="rounded-2xl border-destructive/40 bg-destructive/5 p-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-5 w-5 text-destructive" />
+              <div>
+                <div className="font-semibold text-destructive">Nepodarilo sa načítať výsledky</div>
+                <p className="mt-1 text-sm text-muted-foreground">{apiError.error}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 rounded-xl"
+                  onClick={() => results.refetch()}
+                >
+                  Skúsiť znovu
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ) : items.length === 0 ? (
           <Card className="rounded-2xl border-border/70 p-12 text-center shadow-soft">
             <Building2 className="mx-auto h-10 w-10 text-muted-foreground" />
             <h2 className="mt-4 text-lg font-semibold">Nenašli sme žiadnu firmu</h2>
@@ -79,7 +141,7 @@ function SearchResultsPage() {
           </Card>
         ) : (
           <div className="grid gap-4">
-            {results.map((c) => (
+            {items.map((c) => (
               <Card
                 key={c.ico}
                 className="rounded-2xl border-border/70 p-6 shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-elevated"
@@ -92,30 +154,22 @@ function SearchResultsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-lg font-semibold">{c.name}</h3>
-                        <RiskBadge level={c.riskLevel} />
+                        {c.riskScore > 0 && <RiskBadge level={c.riskLevel} />}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span>IČO {c.ico}</span>
-                        <Badge variant="secondary" className="rounded-full text-[10px]">
-                          {c.legalForm}
-                        </Badge>
+                        {c.legalForm && c.legalForm !== "—" && (
+                          <Badge variant="secondary" className="rounded-full text-[10px]">
+                            {c.legalForm}
+                          </Badge>
+                        )}
                         <span className="inline-flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
-                          {c.address}, {c.city}
+                          {c.address}
+                          {c.city && c.city !== "—" ? `, ${c.city}` : ""}
                         </span>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="grid flex-shrink-0 grid-cols-3 gap-6 lg:gap-8">
-                    <Metric label="Tržby" value={formatCurrency(c.revenue)} />
-                    <Metric
-                      label="Zisk"
-                      value={formatCurrency(c.profit)}
-                      icon={c.profit >= 0 ? TrendingUp : TrendingDown}
-                      positive={c.profit >= 0}
-                    />
-                    <Metric label="Skóre" value={`${c.riskScore}/100`} />
                   </div>
 
                   <Button asChild className="rounded-xl shadow-soft lg:ml-2">
@@ -131,32 +185,6 @@ function SearchResultsPage() {
       </div>
 
       <SiteFooter />
-    </div>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  icon: Icon,
-  positive,
-}: {
-  label: string;
-  value: string;
-  icon?: typeof TrendingUp;
-  positive?: boolean;
-}) {
-  return (
-    <div className="text-left">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div
-        className={`mt-0.5 inline-flex items-center gap-1 text-sm font-semibold ${
-          Icon ? (positive ? "text-success" : "text-destructive") : "text-foreground"
-        }`}
-      >
-        {Icon && <Icon className="h-3.5 w-3.5" />}
-        {value}
-      </div>
     </div>
   );
 }
