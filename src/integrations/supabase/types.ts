@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      company_cache: {
+        Row: {
+          data: Json
+          fetched_at: string
+          ico: string
+          updated_at: string
+        }
+        Insert: {
+          data: Json
+          fetched_at?: string
+          ico: string
+          updated_at?: string
+        }
+        Update: {
+          data?: Json
+          fetched_at?: string
+          ico?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_name: string | null
