@@ -4,9 +4,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import type { CompanyIntelligence } from "./providers/types";
+import type { CompanyIntelligence, ProviderDiagnostic } from "./providers/types";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const DEV = process.env.NODE_ENV !== "production";
 
 const icoSchema = z.object({ ico: z.string().regex(/^\d{6,8}$/, "Neplatné IČO") });
 
@@ -14,11 +15,46 @@ export type CompanyIntelligenceResponse =
   | { ok: true; data: CompanyIntelligence; source: "providers" | "cache" }
   | { ok: false; error: string; code: string };
 
+/** Best-effort cache access. Never throws — cache is optional infrastructure,
+ *  the profile must still load if Supabase env is not configured. */
+async function readCache(ico: string): Promise<CompanyIntelligence | null> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await supabaseAdmin
+      .from("company_cache")
+      .select("data, fetched_at")
+      .eq("ico", ico)
+      .maybeSingle();
+    if (!data) return null;
+    const age = Date.now() - new Date(data.fetched_at).getTime();
+    if (age > CACHE_TTL_MS) return null;
+    return data.data as unknown as CompanyIntelligence;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCache(ico: string, intel: CompanyIntelligence): Promise<void> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("company_cache").upsert(
+      {
+        ico,
+        data: intel as unknown as never,
+        fetched_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "ico" },
+    );
+  } catch {
+    // ignore — cache is best-effort
+  }
+}
+
 export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => icoSchema.parse(input))
   .handler(async ({ data }): Promise<CompanyIntelligenceResponse> => {
     const ico = data.ico;
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const {
       runCompanyProvider,
       runFinancialProvider,
@@ -29,80 +65,59 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
     } = await import("./providers/aggregate.server");
     const { finstatFetchAll } = await import("./providers/finstat.provider.server");
 
-    // 1) cache lookup
-    const { data: cached } = await supabaseAdmin
-      .from("company_cache")
-      .select("data, fetched_at")
-      .eq("ico", ico)
-      .maybeSingle();
+    const cached = await readCache(ico);
+    if (cached) return { ok: true, data: cached, source: "cache" };
 
-    if (cached) {
-      const age = Date.now() - new Date(cached.fetched_at).getTime();
-      if (age < CACHE_TTL_MS) {
-        return { ok: true, data: cached.data as unknown as CompanyIntelligence, source: "cache" };
-      }
-    }
+    const diagnostics: ProviderDiagnostic[] = [];
 
+    let finstat: Awaited<ReturnType<typeof finstatFetchAll>>;
     try {
-      // 2) fan out — Finstat runs once and its per-capability results feed
-      //    the domain providers so we don't hit it four times.
-      const finstat = await finstatFetchAll(ico);
-
-      const [company, financials, risks, people, contracts, monitoring] = await Promise.all([
-        runCompanyProvider(ico, finstat),
-        runFinancialProvider(ico, finstat),
-        runRiskProvider(ico, finstat),
-        runPeopleProvider(ico, finstat),
-        runContractsProvider(ico),
-        runMonitoringProvider(ico),
-      ]);
-
-      const sources = [
-        ...company.sources,
-        ...financials.sources,
-        ...risks.sources,
-        ...people.sources,
-        ...contracts.sources,
-        ...monitoring.sources,
-      ];
-
-      const intel: CompanyIntelligence = {
-        ico,
-        company: company.data,
-        financials: financials.data,
-        people: people.data,
-        risks: risks.data,
-        contracts: contracts.data,
-        monitoring: monitoring.data,
-        sources,
-        partial: sources.some((s) => s.state !== "ok" && s.state !== "empty"),
-        cachedAt: new Date().toISOString(),
-      };
-
-      // 3) write-through cache
-      await supabaseAdmin.from("company_cache").upsert(
-        {
-          ico,
-          data: intel as unknown as never,
-          fetched_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "ico" },
-      );
-
-      return { ok: true, data: intel, source: "providers" };
+      finstat = await finstatFetchAll(ico, DEV ? diagnostics : undefined);
     } catch (err) {
-      if (cached) {
-        return {
-          ok: true,
-          data: cached.data as unknown as CompanyIntelligence,
-          source: "cache",
-        };
-      }
+      const e = err as Error;
       return {
         ok: false,
-        error: (err as Error).message ?? "Neočakávaná chyba pri agregácii dát.",
-        code: "aggregate_failed",
+        error: e.message ?? "Neočakávaná chyba pri načítaní z Finstat.",
+        code: "finstat_failed",
       };
     }
+
+    const [company, financials, risks, people, contracts, monitoring] = await Promise.all([
+      runCompanyProvider(ico, finstat),
+      runFinancialProvider(ico, finstat),
+      runRiskProvider(ico, finstat),
+      runPeopleProvider(ico, finstat),
+      runContractsProvider(ico),
+      runMonitoringProvider(ico),
+    ]);
+
+    const sources = [
+      ...company.sources,
+      ...financials.sources,
+      ...risks.sources,
+      ...people.sources,
+      ...contracts.sources,
+      ...monitoring.sources,
+    ];
+
+    const intel: CompanyIntelligence = {
+      ico,
+      company: company.data,
+      financials: financials.data,
+      people: people.data,
+      risks: risks.data,
+      contracts: contracts.data,
+      monitoring: monitoring.data,
+      sources,
+      partial: sources.some((s) => s.state !== "ok" && s.state !== "empty"),
+      cachedAt: new Date().toISOString(),
+      diagnostics: DEV ? diagnostics : undefined,
+    };
+
+    // Only cache successful, non-empty results.
+    if (intel.company) {
+      await writeCache(ico, intel);
+    }
+
+    return { ok: true, data: intel, source: "providers" };
   });
