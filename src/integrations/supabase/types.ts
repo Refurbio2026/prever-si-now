@@ -194,6 +194,48 @@ export type Database = {
         }
         Relationships: []
       }
+      company_registry: {
+        Row: {
+          address: string | null
+          created_at: string
+          ico: string
+          id: string
+          imported_at: string
+          legal_form: string | null
+          name: string | null
+          registration_date: string | null
+          registration_number: string | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          ico: string
+          id?: string
+          imported_at?: string
+          legal_form?: string | null
+          name?: string | null
+          registration_date?: string | null
+          registration_number?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          ico?: string
+          id?: string
+          imported_at?: string
+          legal_form?: string | null
+          name?: string | null
+          registration_date?: string | null
+          registration_number?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       company_snapshots: {
         Row: {
           created_at: string
