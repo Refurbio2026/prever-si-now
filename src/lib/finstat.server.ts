@@ -12,6 +12,8 @@ import {
 import type {
   Company,
   CompanyPerson,
+  FinanceField,
+  FinanceMappingCandidate,
   CompanySearchResult,
   FieldConfidence,
   FinancialYear,
@@ -406,6 +408,110 @@ function pickRawNumber(raw: FinstatRawCompany, keys: string[]): number | undefin
   return undefined;
 }
 
+function isUsableFinancialAmount(n: number, hasPeriod: boolean): boolean {
+  if (!Number.isFinite(n)) return false;
+  if (!hasPeriod && (n === 0 || n === 1)) return false;
+  return true;
+}
+
+function readFinancialPeriod(raw: FinstatRawCompany): string | undefined {
+  return (
+    pickRawString(raw, [
+      "FinancialsYear",
+      "YearOfSales",
+      "YearOfProfit",
+      "Year",
+      "Period",
+      "AccountingPeriod",
+      "FinancialPeriod",
+    ]) ??
+    (() => {
+      const n = pickRawNumber(raw, ["FinancialsYear", "YearOfSales", "YearOfProfit", "Year"]);
+      return n != null ? String(n) : undefined;
+    })()
+  );
+}
+
+function previewFinancialValue(value: unknown): string {
+  if (value == null) return "null";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return previewValue(value);
+}
+
+const FINSTAT_TOP_LEVEL_FINANCIAL_FIELDS: Array<{ key: string; field: FinanceField }> = [
+  { key: "Sales", field: "revenue" },
+  { key: "Revenue", field: "revenue" },
+  { key: "RevenueActual", field: "revenue" },
+  { key: "Profit", field: "profit" },
+  { key: "ProfitActual", field: "profit" },
+  { key: "Assets", field: "assets" },
+  { key: "AssetsActual", field: "assets" },
+  { key: "Liabilities", field: "liabilities" },
+  { key: "LiabilitiesActual", field: "liabilities" },
+];
+
+export function buildFinstatFinanceCandidates(raw: FinstatRawCompany): FinanceMappingCandidate[] {
+  const bag = raw as Record<string, unknown>;
+  const period = readFinancialPeriod(raw);
+  const hasPeriod = !!period;
+  const out: FinanceMappingCandidate[] = [];
+
+  for (const { key, field } of FINSTAT_TOP_LEVEL_FINANCIAL_FIELDS) {
+    const rawValue = bag[key];
+    if (rawValue == null || rawValue === "") continue;
+    const numeric = typeof rawValue === "number" ? rawValue : Number(rawValue);
+    const isRawRevenueProfit = key === "Revenue" || key === "Profit";
+    let reason: string;
+    if (!Number.isFinite(numeric)) {
+      reason = "rejected: value is not numeric";
+    } else if (isRawRevenueProfit && !hasPeriod) {
+      reason = "rejected: raw Revenue/Profit has no confirmed financial period";
+    } else if (!isUsableFinancialAmount(numeric, hasPeriod)) {
+      reason = "rejected: 0/1 without a confirmed period is suspicious";
+    } else if (!hasPeriod) {
+      reason = "rejected: numeric financial amount has no confirmed period";
+    } else {
+      reason = "accepted: numeric amount has an attached period";
+    }
+    out.push({
+      source: "finstat",
+      field,
+      rawField: key,
+      rawValuePreview: previewFinancialValue(rawValue),
+      period,
+      selected: false,
+      reason,
+    });
+  }
+
+  for (const r of raw.Financials ?? []) {
+    if (typeof r.Year !== "number") continue;
+    for (const [rawField, field, rawValue] of [
+      ["Financials[].Sales", "revenue", r.Sales],
+      ["Financials[].Profit", "profit", r.Profit],
+      ["Financials[].Assets", "assets", r.Assets],
+      ["Financials[].Liabilities", "liabilities", r.Liabilities],
+    ] as const) {
+      if (rawValue == null) continue;
+      out.push({
+        source: "finstat",
+        field,
+        rawField,
+        rawValuePreview: previewFinancialValue(rawValue),
+        period: String(r.Year),
+        selected: false,
+        reason: Number.isFinite(Number(rawValue))
+          ? "accepted: Financials[] row has a year"
+          : "rejected: value is not numeric",
+      });
+    }
+  }
+
+  return out;
+}
+
 /** Real company website — never a Finstat profile URL. */
 function pickWebsite(raw: FinstatRawCompany): string | undefined {
   const bag = raw as Record<string, unknown>;
@@ -609,8 +715,8 @@ export function normalizeCompany(raw: FinstatRawCompany): Company {
     registrationDate,
     vatPayer: vat.value,
     vatPayerConfidence: vat.confidence,
-    revenue: Number(raw.Sales ?? latestFin?.revenue ?? 0),
-    profit: Number(raw.Profit ?? latestFin?.profit ?? 0),
+    revenue: latestFin?.revenue ?? 0,
+    profit: latestFin?.profit ?? 0,
     riskScore: score,
     riskLevel: riskLevelFromScore(score),
     employees,
@@ -619,14 +725,10 @@ export function normalizeCompany(raw: FinstatRawCompany): Company {
     registrationNumberText,
     skNaceCode,
     skNaceText,
-    latestAssets: latestFin?.assets ?? (raw.Assets != null ? Number(raw.Assets) : undefined),
-    latestLiabilities:
-      latestFin?.liabilities ?? (raw.Liabilities != null ? Number(raw.Liabilities) : undefined),
-    latestFinancialsYear:
-      latestFin?.year ??
-      (typeof bag.Year === "number"
-        ? (bag.Year as number)
-        : pickRawNumber(raw, ["YearOfSales", "YearOfProfit", "FinancialsYear"])),
+    latestAssets: latestFin?.assets,
+    latestLiabilities: latestFin?.liabilities,
+    latestFinancialsYear: latestFin?.year,
+    latestFinancialsSource: latestFin ? "finstat" : undefined,
     warnings: warnings.length ? warnings : undefined,
     paymentOrderWarnings: paymentOrders.length ? paymentOrders : undefined,
     debtIndicators: {
@@ -712,7 +814,10 @@ export const FINSTAT_MAPPED_FIELDS: Record<string, string> = {
   WebUrl: "website",
   Url: "(ignored — Finstat profile URL, not company website)",
   Sales: "revenue",
-  Profit: "profit",
+  Revenue: "(ignored unless tied to a confirmed financial period)",
+  RevenueActual: "revenue candidate (requires confirmed period)",
+  Profit: "(ignored unless tied to a confirmed financial period)",
+  ProfitActual: "profit candidate (requires confirmed period)",
   Assets: "latestAssets",
   Liabilities: "latestLiabilities",
   ReliableVatPayer: "vatPayer",
@@ -890,14 +995,21 @@ export function normalizeFinancials(raw: FinstatRawCompany): FinancialYear[] {
   const rows = raw.Financials ?? [];
   return rows
     .filter((r) => typeof r.Year === "number")
-    .map((r) => ({
-      year: r.Year as number,
-      revenue: Number(r.Sales ?? 0),
-      profit: Number(r.Profit ?? 0),
-      ebitda: Number(r.Ebitda ?? 0),
-      assets: Number(r.Assets ?? 0),
-      liabilities: Number(r.Liabilities ?? 0),
-    }))
+    .map((r) => {
+      const year = r.Year as number;
+      return {
+        year,
+        revenue: Number(r.Sales ?? 0),
+        profit: Number(r.Profit ?? 0),
+        ebitda: Number(r.Ebitda ?? 0),
+        assets: Number(r.Assets ?? 0),
+        liabilities: Number(r.Liabilities ?? 0),
+        source: "finstat" as const,
+      };
+    })
+    .filter((r) =>
+      [r.revenue, r.profit, r.assets, r.liabilities].some((value) => isUsableFinancialAmount(value, true)),
+    )
     .sort((a, b) => a.year - b.year);
 }
 
