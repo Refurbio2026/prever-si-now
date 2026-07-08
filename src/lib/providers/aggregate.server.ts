@@ -5,7 +5,6 @@
 import type { Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
 import type {
   FieldMergeAudit,
-  GovContract,
   MonitoringSnapshot,
   ProviderDiagnostic,
   ProviderSourceId,
@@ -16,18 +15,17 @@ import type {
 import { finstatFetchAll } from "./finstat.provider.server";
 import { orsrRegistryDetails } from "./orsr.provider.server";
 import {
-  crzContracts,
   financialAdminRisks,
   healthInsuranceRisks,
   justiceRisks,
   ruzFinancials,
   socialInsuranceRisks,
-  uvoContracts,
   enforcementRisks,
   aiRiskAnalysis,
   cadastreCompanyInfo,
 } from "./registry.server";
 import { internalMonitoring } from "./monitoring.provider.server";
+
 
 interface FinstatBundle {
   company: Awaited<ReturnType<typeof finstatFetchAll>>["company"];
