@@ -1863,6 +1863,96 @@ function RuzDiagnosticsPanel({
   );
 }
 
+function FinanceMappingInspectorPanel({
+  inspector,
+}: {
+  inspector: FinanceMappingInspector;
+}) {
+  return (
+    <Card className="rounded-2xl border-dashed border-border/70 p-6 shadow-soft">
+      <div className="mb-3 flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold">Developer — Finance Mapping Inspector</h3>
+      </div>
+      <div className="space-y-5 text-xs">
+        <div>
+          <h4 className="mb-2 font-semibold">Selected values</h4>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {inspector.selected.map((s) => (
+              <div key={s.field} className="rounded-lg border border-border/60 bg-secondary/30 p-3">
+                <div className="font-mono font-semibold">{s.field}</div>
+                <div className="mt-1">{s.value !== undefined ? formatCurrency(s.value) : "Nedostupné"}</div>
+                <div className="text-muted-foreground">{s.source ?? "—"} {s.year ?? ""}</div>
+                <div className="mt-1 text-[10px] text-muted-foreground">{s.reason}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <h4 className="mb-2 font-semibold">Raw Finstat financial candidates</h4>
+          <table className="w-full min-w-[760px] text-xs">
+            <thead>
+              <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 text-left font-medium">Field</th>
+                <th className="py-2 text-left font-medium">Raw key</th>
+                <th className="py-2 text-left font-medium">Value</th>
+                <th className="py-2 text-left font-medium">Period</th>
+                <th className="py-2 text-left font-medium">Selected</th>
+                <th className="py-2 text-left font-medium">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inspector.finstatCandidates.map((c, i) => (
+                <tr key={`${c.rawField}-${i}`} className="border-b border-border/50 align-top last:border-0">
+                  <td className="py-2 pr-3 font-mono">{c.field}</td>
+                  <td className="py-2 pr-3 font-mono">{c.rawField}</td>
+                  <td className="py-2 pr-3 font-mono">{c.rawValuePreview}</td>
+                  <td className="py-2 pr-3 font-mono">{c.period ?? "—"}</td>
+                  <td className="py-2 pr-3">{c.selected ? "✓" : "—"}</td>
+                  <td className="py-2 pr-3 text-muted-foreground">{c.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="overflow-x-auto">
+          <h4 className="mb-2 font-semibold">Raw RÚZ parsed numeric rows</h4>
+          <table className="w-full min-w-[820px] text-xs">
+            <thead>
+              <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 text-left font-medium">Statement</th>
+                <th className="py-2 text-left font-medium">Year</th>
+                <th className="py-2 text-left font-medium">Table</th>
+                <th className="py-2 text-left font-medium">Row</th>
+                <th className="py-2 text-left font-medium">Values</th>
+                <th className="py-2 text-left font-medium">Selected</th>
+                <th className="py-2 text-left font-medium">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inspector.ruzRows.map((r, i) => (
+                <tr key={`${r.statementId}-${r.rowName}-${i}`} className="border-b border-border/50 align-top last:border-0">
+                  <td className="py-2 pr-3 font-mono">{r.statementId}</td>
+                  <td className="py-2 pr-3 font-mono">{r.year}</td>
+                  <td className="py-2 pr-3">{r.tableName}</td>
+                  <td className="py-2 pr-3">{r.rowName}</td>
+                  <td className="py-2 pr-3 font-mono">{r.values.join(", ") || "—"}</td>
+                  <td className="py-2 pr-3 font-mono">
+                    {r.selectedField ? `${r.selectedField}: ${r.selectedValue}` : "—"}
+                  </td>
+                  <td className="py-2 pr-3 text-muted-foreground">{r.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function FinanceKpiSection({
   company,
   financials,
@@ -1872,18 +1962,18 @@ function FinanceKpiSection({
 }) {
   const latestFin = financials.length ? financials[financials.length - 1] : undefined;
 
-  // Prefer time-series values (they carry a real year); fall back to Company latest.
-  const revenue = latestFin?.revenue ?? company.revenue;
-  const profit = latestFin?.profit ?? company.profit;
-  const assets = latestFin?.assets ?? company.latestAssets;
-  const liabilities = latestFin?.liabilities ?? company.latestLiabilities;
+  const hasLatest = (field: FinanceField) => latestFin ? hasFinancialField(latestFin, field) : false;
+  const revenue = hasLatest("revenue") ? latestFin?.revenue : undefined;
+  const profit = hasLatest("profit") ? latestFin?.profit : undefined;
+  const assets = hasLatest("assets") ? latestFin?.assets : company.latestAssets;
+  const liabilities = hasLatest("liabilities") ? latestFin?.liabilities : company.latestLiabilities;
   const year = latestFin?.year ?? company.latestFinancialsYear;
   const period = latestFin
     ? String(latestFin.year)
     : year
       ? String(year)
-      : "Neznáme obdobie";
-  const source = financials.length > 0 ? "Finstat" : "Finstat";
+      : "Nedostupné";
+  const source = company.latestFinancialsSource === "ruz" ? "RÚZ" : financeSourceLabel(financials);
 
   const hasAnyValue =
     (typeof revenue === "number" && revenue > 0) ||
