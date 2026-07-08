@@ -2,7 +2,13 @@
 // Never import this file from client-reachable modules directly.
 // Access it from a createServerFn handler via `await import(...)`.
 
-import { createHash } from "crypto";
+import {
+  buildSignedFinstatRequest,
+  FinstatAuthError,
+  getFinstatCredentials,
+  getFinstatEnvStatus,
+  type FinstatEnvStatus,
+} from "./finstat/auth";
 
 import type {
   Company,
@@ -14,9 +20,8 @@ import type {
   RiskLevel,
 } from "./types";
 
-const DEFAULT_FINSTAT_BASE = "https://www.finstat.sk/api";
-const STATION_ID = "preversi-sk";
-const STATION_NAME = "PreverSi.sk";
+export type { FinstatEnvStatus };
+export { getFinstatEnvStatus };
 
 export class FinstatError extends Error {
   code:
@@ -44,50 +49,10 @@ export class FinstatError extends Error {
   }
 }
 
-export interface FinstatEnvStatus {
-  FINSTAT_API_KEY: boolean;
-  FINSTAT_PRIVATE_KEY: boolean;
-  FINSTAT_BASE_URL: boolean;
-  allSet: boolean;
-  baseUrl: string;
-}
-
-export function getFinstatEnvStatus(): FinstatEnvStatus {
-  const apiKey = !!process.env.FINSTAT_API_KEY;
-  const privateKey = !!process.env.FINSTAT_PRIVATE_KEY;
-  const baseUrl = !!process.env.FINSTAT_BASE_URL;
-  return {
-    FINSTAT_API_KEY: apiKey,
-    FINSTAT_PRIVATE_KEY: privateKey,
-    FINSTAT_BASE_URL: baseUrl,
-    allSet: apiKey && privateKey,
-    baseUrl: process.env.FINSTAT_BASE_URL || DEFAULT_FINSTAT_BASE,
-  };
-}
-
-function credentials() {
-  const apiKey = process.env.FINSTAT_API_KEY;
-  const privateKey = process.env.FINSTAT_PRIVATE_KEY;
-  if (!apiKey || !privateKey) {
-    throw new FinstatError(
-      "missing_credentials",
-      "Finstat API credentials are not configured on the server.",
-    );
-  }
-  return { apiKey, privateKey, baseUrl: process.env.FINSTAT_BASE_URL || DEFAULT_FINSTAT_BASE };
-}
-
-// Finstat hash: sha256 of "<ApiKey>+<PrivateKey>+<value>" (hex).
-function computeHash(value: string): string {
-  const { apiKey, privateKey } = credentials();
-  return createHash("sha256")
-    .update(`${apiKey}+${privateKey}+${value}`)
-    .digest("hex");
-}
-
 export function looksLikeIco(query: string): boolean {
   return /^\d{6,8}$/.test(query.trim());
 }
+
 
 function mapStatusFromResponse(status: number, endpoint: string, body: string): FinstatError {
   if (status === 401 || status === 403) {
