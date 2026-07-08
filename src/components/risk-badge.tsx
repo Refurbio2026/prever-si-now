@@ -16,6 +16,13 @@ export function RiskBadge({ level, className = "" }: { level: RiskLevel; classNa
   );
 }
 
+export function riskLevelFromScore(score: number | undefined): RiskLevel {
+  if (score === undefined || score === null) return "medium";
+  if (score >= 75) return "low";
+  if (score >= 50) return "medium";
+  return "high";
+}
+
 export function formatCurrency(value: number): string {
   const abs = Math.abs(value);
   if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)} mld €`;
