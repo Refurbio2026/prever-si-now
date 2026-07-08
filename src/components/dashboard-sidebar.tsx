@@ -7,6 +7,7 @@ import {
   User,
   LogOut,
   Settings,
+  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/logo";
 import { supabase } from "@/integrations/supabase/client";
+import { useRole } from "@/hooks/use-role";
 
 const items: { title: string; url: string; icon: typeof LayoutDashboard; exact?: boolean }[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, exact: true },
@@ -70,6 +72,17 @@ export function DashboardSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {useRoleGuardShown() && null}
+              {isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/admin")} className="rounded-xl">
+                    <Link to="/admin" className="flex items-center gap-3">
+                      <Shield className="h-4 w-4" />
+                      <span>Admin</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
