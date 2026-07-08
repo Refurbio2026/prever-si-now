@@ -179,6 +179,7 @@ function CompanyProfilePage() {
       sources={intel.sources}
       partial={intel.partial}
       diagnostics={intel.diagnostics}
+      registry={intel.registry}
     />
   );
 }
