@@ -131,7 +131,7 @@ export function buildSignedFinstatRequest(
   const { apiKey } = getFinstatCredentials();
   const hash = computeFinstatHash(hashInput);
   const queryParams = {
-    ico: params.ico ?? params.Ico ?? hashInput,
+    ...params,
     apikey: apiKey,
     hash,
     json: "true",
