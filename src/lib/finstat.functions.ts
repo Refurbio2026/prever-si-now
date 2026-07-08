@@ -61,8 +61,8 @@ export const searchCompaniesFn = createServerFn({ method: "POST" })
       finstatGetByIco,
       finstatSearchByName,
       normalizeCompany,
-      normalizeSearchHit,
       companyToSearchResult,
+
       mockCompanyDetail,
       getFinstatEnvStatus,
       FinstatError,
