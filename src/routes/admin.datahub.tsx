@@ -191,9 +191,10 @@ function DataHubPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">DataHub — hromadný import</h1>
+        <h1 className="text-2xl font-bold">Technická diagnostika importov</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Technický nástroj na naplnenie databázy dostupnými zdrojmi. Iba pre adminov.
+          PreverSi importuje údaje automaticky pri návšteve profilu firmy. Táto stránka
+          slúži iba na manuálne diagnostikovanie a opravu importov. Iba pre adminov.
         </p>
       </div>
 
