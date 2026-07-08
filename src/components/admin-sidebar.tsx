@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Users, Building2, Bug, Settings, LogOut, ArrowLeft, Download } from "lucide-react";
+import { LayoutDashboard, Users, Building2, Bug, Settings, LogOut, ArrowLeft, Download, Database } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -22,6 +22,7 @@ const items: { title: string; url: string; icon: typeof LayoutDashboard; exact?:
   { title: "Users", url: "/admin/users", icon: Users },
   { title: "Companies", url: "/admin/companies", icon: Building2 },
   { title: "Imports", url: "/admin/imports", icon: Download },
+  { title: "DataHub", url: "/admin/datahub", icon: Database },
   { title: "API Debug", url: "/admin/api-debug", icon: Bug },
   { title: "Settings", url: "/admin/settings", icon: Settings },
 ];
