@@ -1,13 +1,14 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BellOff, Download, Loader2 } from "lucide-react";
+import { Bell, BellOff, Download, FileDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { watchCompanyFn } from "@/lib/monitoring.functions";
+import { generateCompanyReportPdfFn } from "@/lib/company-report.functions";
 import type { Company } from "@/lib/types";
 
 interface Props {
