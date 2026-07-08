@@ -195,6 +195,7 @@ function CompanyProfileView({
   sources,
   partial,
   diagnostics,
+  registry,
 }: {
   ico: string;
   company: Company;
@@ -205,6 +206,7 @@ function CompanyProfileView({
   sources: ProviderSourceStatus[];
   partial: boolean;
   diagnostics?: ProviderDiagnostic[];
+  registry?: RegistryDetails;
 }) {
 
 
