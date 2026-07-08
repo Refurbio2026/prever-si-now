@@ -308,14 +308,20 @@ function mergeFinancials(a: FinancialYear[], b: FinancialYear[]): FinancialYear[
 }
 
 function mergeFinancialYear(prev: FinancialYear, next: FinancialYear): FinancialYear {
+  const hasNext = (field: "revenue" | "profit" | "ebitda" | "assets" | "liabilities"): boolean => {
+    if (field === "ebitda") return next.ebitda !== 0;
+    return next.availableFields?.includes(field) ?? next[field] !== 0;
+  };
+  const mergedAvailable = new Set([...(prev.availableFields ?? []), ...(next.availableFields ?? [])]);
   return {
     year: next.year,
-    revenue: next.revenue !== 0 ? next.revenue : prev.revenue,
-    profit: next.profit !== 0 ? next.profit : prev.profit,
-    ebitda: next.ebitda !== 0 ? next.ebitda : prev.ebitda,
-    assets: next.assets !== 0 ? next.assets : prev.assets,
-    liabilities: next.liabilities !== 0 ? next.liabilities : prev.liabilities,
+    revenue: hasNext("revenue") ? next.revenue : prev.revenue,
+    profit: hasNext("profit") ? next.profit : prev.profit,
+    ebitda: hasNext("ebitda") ? next.ebitda : prev.ebitda,
+    assets: hasNext("assets") ? next.assets : prev.assets,
+    liabilities: hasNext("liabilities") ? next.liabilities : prev.liabilities,
     source: next.source ?? prev.source,
+    availableFields: [...mergedAvailable],
   };
 }
 
