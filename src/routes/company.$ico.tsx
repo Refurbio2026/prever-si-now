@@ -57,7 +57,7 @@ import {
 } from "@/lib/monitoring.functions";
 
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+
 import { useAuth } from "@/hooks/use-auth";
 
 import type {
