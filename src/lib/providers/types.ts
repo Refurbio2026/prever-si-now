@@ -83,6 +83,7 @@ export interface CompanyIntelligence {
   ico: string;
   company?: Company;
   financials: FinancialYear[];
+  statements: AccountingStatement[];
   people: CompanyPerson[];
   risks: RiskIndicator[];
   contracts: GovContract[];
@@ -94,4 +95,5 @@ export interface CompanyIntelligence {
   /** Dev-mode only: detailed per-provider diagnostics. */
   diagnostics?: ProviderDiagnostic[];
 }
+
 
