@@ -165,11 +165,12 @@ function SearchResultsPage() {
                             {c.legalForm}
                           </Badge>
                         )}
-                        <span className="inline-flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {c.address}
-                          {c.city && c.city !== "—" ? `, ${c.city}` : ""}
-                        </span>
+                        {c.address && (
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {c.address}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
