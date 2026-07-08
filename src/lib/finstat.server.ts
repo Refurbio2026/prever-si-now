@@ -5,7 +5,6 @@
 import {
   buildSignedFinstatRequest,
   FinstatAuthError,
-  getFinstatCredentials,
   getFinstatEnvStatus,
   type FinstatEnvStatus,
 } from "./finstat/auth";
@@ -35,10 +34,20 @@ export class FinstatError extends Error {
   status?: number;
   rawResponse?: string;
   endpoint?: string;
+  finalUrlMasked?: string;
+  hashBaseMasked?: string;
+  generatedHash?: string;
   constructor(
     code: FinstatError["code"],
     message: string,
-    extra?: { status?: number; rawResponse?: string; endpoint?: string },
+    extra?: {
+      status?: number;
+      rawResponse?: string;
+      endpoint?: string;
+      finalUrlMasked?: string;
+      hashBaseMasked?: string;
+      generatedHash?: string;
+    },
   ) {
     super(message);
     this.code = code;
@@ -46,6 +55,9 @@ export class FinstatError extends Error {
     this.status = extra?.status;
     this.rawResponse = extra?.rawResponse;
     this.endpoint = extra?.endpoint;
+    this.finalUrlMasked = extra?.finalUrlMasked;
+    this.hashBaseMasked = extra?.hashBaseMasked;
+    this.generatedHash = extra?.generatedHash;
   }
 }
 
@@ -54,12 +66,18 @@ export function looksLikeIco(query: string): boolean {
 }
 
 
-function mapStatusFromResponse(status: number, endpoint: string, body: string): FinstatError {
+function mapStatusFromResponse(
+  status: number,
+  endpoint: string,
+  body: string,
+  signed: Pick<SignedDiagnostic, "finalUrlMasked" | "hashBaseMasked" | "generatedHash">,
+): FinstatError {
   if (status === 401 || status === 403) {
     return new FinstatError("unauthorized", "Invalid Finstat API credentials.", {
       status,
       endpoint,
       rawResponse: body,
+      ...signed,
     });
   }
   if (status === 404)
@@ -67,18 +85,27 @@ function mapStatusFromResponse(status: number, endpoint: string, body: string): 
       status,
       endpoint,
       rawResponse: body,
+      ...signed,
     });
   if (status === 429)
     return new FinstatError("rate_limit", "Finstat rate limit reached.", {
       status,
       endpoint,
       rawResponse: body,
+      ...signed,
     });
   return new FinstatError("server_error", `Finstat responded with HTTP ${status}.`, {
     status,
     endpoint,
     rawResponse: body,
+    ...signed,
   });
+}
+
+interface SignedDiagnostic {
+  finalUrlMasked: string;
+  hashBaseMasked: string;
+  generatedHash: string;
 }
 
 export interface FinstatFetchResult {
@@ -115,11 +142,22 @@ async function finstatFetchRaw(
     throw new FinstatError(
       "network_error",
       `Network error contacting Finstat: ${(err as Error).message}`,
-      { endpoint: signed.endpoint },
+      {
+        endpoint: signed.endpoint,
+        finalUrlMasked: signed.finalUrlMasked,
+        hashBaseMasked: signed.hashBaseMasked,
+        generatedHash: signed.hash,
+      },
     );
   }
   const text = await res.text();
-  if (!res.ok) throw mapStatusFromResponse(res.status, signed.endpoint, text);
+  if (!res.ok) {
+    throw mapStatusFromResponse(res.status, signed.endpoint, text, {
+      finalUrlMasked: signed.finalUrlMasked,
+      hashBaseMasked: signed.hashBaseMasked,
+      generatedHash: signed.hash,
+    });
+  }
   let parsed: unknown = null;
   if (text) {
     try {
@@ -129,6 +167,9 @@ async function finstatFetchRaw(
         status: res.status,
         endpoint: signed.endpoint,
         rawResponse: text,
+          finalUrlMasked: signed.finalUrlMasked,
+          hashBaseMasked: signed.hashBaseMasked,
+          generatedHash: signed.hash,
       });
     }
   }
@@ -206,7 +247,7 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
   const envStatus = getFinstatEnvStatus();
   if (!envStatus.allSet) {
     return {
-      usingMock: true,
+      usingMock: false,
       envStatus,
       endpoint: null,
       hashBaseMasked: null,
@@ -265,9 +306,9 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
       usingMock: false,
       envStatus,
       endpoint: fe.endpoint ?? null,
-      hashBaseMasked: null,
-      generatedHash: null,
-      finalRequestUrlMasked: null,
+      hashBaseMasked: fe.hashBaseMasked ?? null,
+      generatedHash: fe.generatedHash ?? null,
+      finalRequestUrlMasked: fe.finalUrlMasked ?? null,
       httpStatus: fe.status ?? null,
       rawResponse: fe.rawResponse ?? null,
       rawResponsePreview: fe.rawResponse ? fe.rawResponse.slice(0, 500) : null,
