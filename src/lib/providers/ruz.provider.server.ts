@@ -5,7 +5,7 @@
 //   3) /uctovna-zavierka?id=<id>   → per-statement metadata
 // We cap fan-out to the N most recent statements to keep latency bounded.
 
-import type { AccountingStatement } from "@/lib/types";
+import type { AccountingStatement, FinanceField, FinanceMappingRuzRow, FinancialYear } from "@/lib/types";
 import { empty, ok, unavailable, type ProviderResult } from "./base.server";
 import type { ProviderDiagnostic } from "./types";
 
@@ -129,6 +129,136 @@ function countNumericCells(vykaz: RuzVykaz | undefined): number {
   return n;
 }
 
+function parseNumberCell(value: string | undefined): number | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim().replace(/\s+/g, "").replace(",", ".");
+  if (!normalized) return undefined;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function firstNumeric(data: string[]): number | undefined {
+  for (const cell of data) {
+    const n = parseNumberCell(cell);
+    if (n !== undefined) return n;
+  }
+  return undefined;
+}
+
+function lastCurrentPeriodNumeric(data: string[]): number | undefined {
+  for (let i = data.length - 1; i >= 0; i -= 1) {
+    if (i % 2 !== 0) continue;
+    const n = parseNumberCell(data[i]);
+    if (n !== undefined) return n;
+  }
+  for (let i = data.length - 1; i >= 0; i -= 1) {
+    const n = parseNumberCell(data[i]);
+    if (n !== undefined) return n;
+  }
+  return undefined;
+}
+
+function valuesPreview(data: string[]): number[] {
+  return data
+    .map(parseNumberCell)
+    .filter((n): n is number => n !== undefined)
+    .slice(0, 8);
+}
+
+function tableName(table: RuzTabulka): string {
+  return table.nazov?.sk ?? table.nazov?.en ?? "Neznáma tabuľka";
+}
+
+function extractRuzNumericRows(
+  statement: RuzStatement,
+  vykaz: RuzVykaz | undefined,
+  year: number,
+): FinanceMappingRuzRow[] {
+  const rows: FinanceMappingRuzRow[] = [];
+  if (!vykaz?.obsah?.tabulky) return rows;
+  const statementId = statement.id != null ? String(statement.id) : "—";
+  const reportId = vykaz.id != null ? String(vykaz.id) : undefined;
+
+  for (const table of vykaz.obsah.tabulky) {
+    const name = tableName(table);
+    const data = table.data ?? [];
+    const lower = name.toLowerCase();
+
+    const pushRow = (
+      rowName: string,
+      selectedField: FinanceField,
+      selectedValue: number | undefined,
+      reason: string,
+    ) => {
+      rows.push({
+        statementId,
+        reportId,
+        year,
+        tableName: name,
+        rowName,
+        values: valuesPreview(data),
+        selectedField: selectedValue !== undefined ? selectedField : undefined,
+        selectedValue,
+        reason,
+      });
+    };
+
+    if (lower.includes("aktív") || lower.includes("asset")) {
+      pushRow(
+        "Aktíva spolu",
+        "assets",
+        firstNumeric(data),
+        "selected first numeric current-period value from assets table",
+      );
+    }
+
+    if (lower.includes("pasív") || lower.includes("liabil")) {
+      pushRow(
+        "Pasíva spolu",
+        "liabilities",
+        firstNumeric(data),
+        "selected first numeric current-period value from liabilities table",
+      );
+    }
+
+    if (lower.includes("zisk") || lower.includes("income")) {
+      pushRow(
+        "Tržby z predaja tovaru / vlastných výrobkov / služieb",
+        "revenue",
+        firstNumeric(data),
+        "selected first numeric current-period value from income statement as revenue/sales total",
+      );
+      pushRow(
+        "Výsledok hospodárenia za účtovné obdobie",
+        "profit",
+        lastCurrentPeriodNumeric(data),
+        "selected last current-period numeric value from income statement as accounting result",
+      );
+    }
+  }
+
+  return rows;
+}
+
+function financialYearFromRows(year: number, rows: FinanceMappingRuzRow[]): FinancialYear | null {
+  const pick = (field: FinanceField): number | undefined =>
+    rows.find((row) => row.selectedField === field && row.selectedValue !== undefined)?.selectedValue;
+  const revenue = pick("revenue");
+  const profit = pick("profit");
+  const assets = pick("assets");
+  const liabilities = pick("liabilities");
+  if ([revenue, profit, assets, liabilities].every((v) => v === undefined)) return null;
+  return {
+    year,
+    revenue: revenue ?? 0,
+    profit: profit ?? 0,
+    ebitda: 0,
+    assets: assets ?? 0,
+    liabilities: liabilities ?? 0,
+    source: "ruz",
+  };
+}
+
 function pickBestPdf(prilohy: RuzPriloha[] | undefined): RuzPriloha | undefined {
   if (!prilohy) return undefined;
   return prilohy.find(
@@ -202,7 +332,58 @@ function normalizeStatement(
     sourceUrl: detailUrl,
     attachments: attachments.length ? attachments : undefined,
     parsedNumericRowsCount: countNumericCells(vykaz),
+    parsedNumericRows: extractRuzNumericRows(raw, vykaz, year),
   };
+}
+
+async function fetchStatementRecords(
+  ico: string,
+  diagnostics?: ProviderDiagnostic[],
+): Promise<Array<{ statement: RuzStatement; vykaz?: RuzVykaz }>> {
+  const list = await ruzFetch<RuzUnitList>(
+    `/uctovne-jednotky?zmenene-od=1900-01-01&ico=${encodeURIComponent(ico)}`,
+  );
+  const unitId = list.id?.[0];
+  if (unitId == null) return [];
+
+  const unit = await ruzFetch<RuzUnit>(`/uctovna-jednotka?id=${unitId}`);
+  const ids = (unit.idUctovnychZavierok ?? []).slice(0, MAX_STATEMENTS);
+  if (ids.length === 0) return [];
+
+  const settled = await Promise.allSettled(
+    ids.map((id) => ruzFetch<RuzStatement>(`/uctovna-zavierka?id=${id}`)),
+  );
+
+  const statementRecords: Array<{ statement: RuzStatement; vykaz?: RuzVykaz }> = [];
+  const vykazFetches: Promise<void>[] = [];
+  for (const s of settled) {
+    if (s.status !== "fulfilled") continue;
+    const record: { statement: RuzStatement; vykaz?: RuzVykaz } = { statement: s.value };
+    statementRecords.push(record);
+    const vykazId = s.value.idUctovnychVykazov?.[0];
+    if (vykazId != null) {
+      vykazFetches.push(
+        ruzFetch<RuzVykaz>(`/uctovny-vykaz?id=${vykazId}`)
+          .then((v) => {
+            record.vykaz = v;
+          })
+          .catch((err: unknown) => {
+            const e = err as RuzError;
+            diagnostics?.push({
+              source: "ruz",
+              capability: "statements",
+              endpoint: e.endpoint,
+              httpStatus: e.status,
+              errorCode: e.code ?? "unknown",
+              rawError: e.rawResponse,
+              normalizedError: `Chyba pri načítaní výkazu ${vykazId}: ${e.message}`,
+            });
+          }),
+      );
+    }
+  }
+  await Promise.all(vykazFetches);
+  return statementRecords;
 }
 
 export async function ruzStatements(
@@ -210,55 +391,10 @@ export async function ruzStatements(
   diagnostics?: ProviderDiagnostic[],
 ): Promise<ProviderResult<AccountingStatement[]>> {
   try {
-    const list = await ruzFetch<RuzUnitList>(
-      `/uctovne-jednotky?zmenene-od=1900-01-01&ico=${encodeURIComponent(ico)}`,
-    );
-    const unitId = list.id?.[0];
-    if (unitId == null) {
+    const statementRecords = await fetchStatementRecords(ico, diagnostics);
+    if (statementRecords.length === 0) {
       return empty("ruz", "statements", [], "V RÚZ neexistuje žiadna účtovná jednotka.");
     }
-
-    const unit = await ruzFetch<RuzUnit>(`/uctovna-jednotka?id=${unitId}`);
-    const ids = (unit.idUctovnychZavierok ?? []).slice(0, MAX_STATEMENTS);
-    if (ids.length === 0) {
-      return empty("ruz", "statements", [], "V RÚZ neboli nájdené žiadne účtovné závierky.");
-    }
-
-    const settled = await Promise.allSettled(
-      ids.map((id) => ruzFetch<RuzStatement>(`/uctovna-zavierka?id=${id}`)),
-    );
-
-    // For each successful statement, fetch the primary report (first výkaz) to
-    // discover attachments and structured tables.
-    const statementRecords: Array<{ statement: RuzStatement; vykaz?: RuzVykaz }> = [];
-    const vykazFetches: Promise<void>[] = [];
-    for (const s of settled) {
-      if (s.status !== "fulfilled") continue;
-      const record: { statement: RuzStatement; vykaz?: RuzVykaz } = { statement: s.value };
-      statementRecords.push(record);
-      const vykazId = s.value.idUctovnychVykazov?.[0];
-      if (vykazId != null) {
-        vykazFetches.push(
-          ruzFetch<RuzVykaz>(`/uctovny-vykaz?id=${vykazId}`)
-            .then((v) => {
-              record.vykaz = v;
-            })
-            .catch((err: unknown) => {
-              const e = err as RuzError;
-              diagnostics?.push({
-                source: "ruz",
-                capability: "statements",
-                endpoint: e.endpoint,
-                httpStatus: e.status,
-                errorCode: e.code ?? "unknown",
-                rawError: e.rawResponse,
-                normalizedError: `Chyba pri načítaní výkazu ${vykazId}: ${e.message}`,
-              });
-            }),
-        );
-      }
-    }
-    await Promise.all(vykazFetches);
 
     const statements: AccountingStatement[] = [];
     for (const r of statementRecords) {
@@ -287,6 +423,54 @@ export async function ruzStatements(
     return unavailable(
       "ruz",
       "statements",
+      [],
+      "unavailable",
+      e.message ?? "Chyba pri komunikácii s RÚZ.",
+    );
+  }
+}
+
+export async function ruzFinancials(
+  ico: string,
+  diagnostics?: ProviderDiagnostic[],
+): Promise<ProviderResult<FinancialYear[]>> {
+  try {
+    const statementRecords = await fetchStatementRecords(ico, diagnostics);
+    if (statementRecords.length === 0) {
+      return empty("ruz", "financials", [], "V RÚZ neexistuje žiadna účtovná jednotka.");
+    }
+
+    const byYear = new Map<number, FinancialYear>();
+    for (const r of statementRecords) {
+      const yearSrc =
+        r.statement.datumZostaveniaK ?? r.statement.obdobieDo ?? r.statement.datumZostavenia ?? r.statement.datumPodania;
+      const yearMatch = yearSrc?.match(/^(\d{4})/);
+      if (!yearMatch) continue;
+      const year = Number(yearMatch[1]);
+      const rows = extractRuzNumericRows(r.statement, r.vykaz, year);
+      const fin = financialYearFromRows(year, rows);
+      if (fin) byYear.set(year, fin);
+    }
+
+    const data = [...byYear.values()].sort((a, b) => a.year - b.year);
+    if (data.length === 0) {
+      return empty("ruz", "financials", [], "RÚZ nevrátil strojovo čitateľné finančné hodnoty.");
+    }
+    return ok("ruz", "financials", data);
+  } catch (err) {
+    const e = err as RuzError;
+    diagnostics?.push({
+      source: "ruz",
+      capability: "financials",
+      endpoint: e.endpoint,
+      httpStatus: e.status,
+      errorCode: e.code ?? "unknown",
+      rawError: e.rawResponse,
+      normalizedError: e.message,
+    });
+    return unavailable(
+      "ruz",
+      "financials",
       [],
       "unavailable",
       e.message ?? "Chyba pri komunikácii s RÚZ.",
