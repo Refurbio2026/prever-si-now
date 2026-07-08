@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
   MapPin,
@@ -24,6 +24,7 @@ import {
   FileText,
   Download,
   FileSpreadsheet,
+  RefreshCw,
 } from "lucide-react";
 
 import {
@@ -49,6 +50,14 @@ import { CompanyActions } from "@/components/company-actions";
 import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
 import { AiReportCard } from "@/components/ai-report-card";
+import { SeverityBadge } from "@/components/severity-badge";
+import {
+  detectCompanyChangesFn,
+  getCompanyChangesFn,
+} from "@/lib/monitoring.functions";
+
+import { toast } from "sonner";
+
 import { useAuth } from "@/hooks/use-auth";
 
 import type {
@@ -649,54 +658,7 @@ function CompanyProfileView({
 
           {/* MONITORING */}
           <TabsContent value="monitoring" className="space-y-6">
-            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-primary">
-                    <Bell className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <div className="font-semibold">Táto firma nie je sledovaná</div>
-                    <div className="text-xs text-muted-foreground">
-                      Zapnite monitoring a dostávajte notifikácie o zmenách e-mailom.
-                    </div>
-                  </div>
-                </div>
-                <Button className="rounded-xl shadow-soft">
-                  <Bell className="mr-1.5 h-4 w-4" /> Zapnúť monitoring
-                </Button>
-              </div>
-            </Card>
-
-            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-              <h3 className="mb-4 text-lg font-semibold">Najnovšie upozornenia</h3>
-              <div className="space-y-3">
-                {mockAlerts.map((a) => (
-                  <div key={a.id} className="rounded-xl border border-border/60 bg-background p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium">{a.title}</div>
-                        <div className="mt-1 text-sm text-muted-foreground">{a.description}</div>
-                      </div>
-                      <Badge
-                        variant="secondary"
-                        className={`rounded-full ${
-                          a.severity === "critical"
-                            ? "bg-destructive/15 text-destructive"
-                            : a.severity === "warning"
-                            ? "bg-warning/20 text-warning-foreground"
-                            : a.severity === "success"
-                            ? "bg-success/15 text-success"
-                            : "bg-primary/10 text-primary"
-                        }`}
-                      >
-                        {new Date(a.date).toLocaleDateString("sk-SK")}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
+            <MonitoringTab ico={ico} isAuthenticated={isAuthenticated} />
           </TabsContent>
         </Tabs>
       </div>
@@ -1562,6 +1524,123 @@ function RpvsStatusCard({
     </Card>
   );
 }
+
+function MonitoringTab({ ico, isAuthenticated }: { ico: string; isAuthenticated: boolean }) {
+  const queryClient = useQueryClient();
+  const fetchChanges = useServerFn(getCompanyChangesFn);
+  const detect = useServerFn(detectCompanyChangesFn);
+
+  const changesQuery = useQuery({
+    queryKey: ["company-changes", ico],
+    queryFn: () => fetchChanges({ data: { ico, limit: 50 } }),
+    enabled: isAuthenticated,
+  });
+
+  const detectMutation = useMutation({
+    mutationFn: () => detect({ data: { ico } }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["company-changes", ico] });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      if (res.source === "initial") toast.success("Prvotný snapshot uložený");
+      else if (res.created === 0) toast.success("Žiadne nové zmeny");
+      else toast.success(`Zaznamenaných ${res.created} zmien`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  if (!isAuthenticated) {
+    return (
+      <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-primary">
+              <Bell className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="font-semibold">Monitoring vyžaduje prihlásenie</div>
+              <div className="text-xs text-muted-foreground">
+                Sledujte zmeny v profile firmy — názov, sídlo, KUV, verejné zmluvy.
+              </div>
+            </div>
+          </div>
+          <Button asChild className="rounded-xl shadow-soft">
+            <Link to="/login">Prihlásiť sa</Link>
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-primary">
+              <Bell className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="font-semibold">Detekcia zmien</div>
+              <div className="text-xs text-muted-foreground">
+                Porovnáme aktuálne údaje s posledným snapshotom a zaznamenáme rozdiely.
+              </div>
+            </div>
+          </div>
+          <Button
+            className="rounded-xl shadow-soft"
+            disabled={detectMutation.isPending}
+            onClick={() => detectMutation.mutate()}
+          >
+            {detectMutation.isPending ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+            )}
+            Skontrolovať zmeny
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+        <h3 className="mb-4 text-lg font-semibold">Zaznamenané zmeny</h3>
+        {changesQuery.isLoading ? (
+          <div className="text-sm text-muted-foreground">Načítavam…</div>
+        ) : changesQuery.isError ? (
+          <div className="text-sm text-destructive">Nepodarilo sa načítať zmeny.</div>
+        ) : (changesQuery.data?.length ?? 0) === 0 ? (
+          <div className="text-sm text-muted-foreground">
+            Zatiaľ neboli detegované žiadne zmeny. Kliknite na „Skontrolovať zmeny" pre prvé porovnanie.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {changesQuery.data!.map((c) => (
+              <div key={c.id} className="rounded-xl border border-border/60 bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{c.title}</div>
+                    {c.description && (
+                      <div className="mt-1 text-sm text-muted-foreground">{c.description}</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <SeverityBadge severity={c.severity} />
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(c.detectedAt).toLocaleString("sk-SK")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </>
+  );
+}
+
 
 
 

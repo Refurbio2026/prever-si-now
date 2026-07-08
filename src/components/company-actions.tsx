@@ -1,4 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, BellOff, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -6,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { watchCompanyFn } from "@/lib/monitoring.functions";
 import type { Company } from "@/lib/types";
 
 interface Props {
@@ -33,6 +35,8 @@ export function CompanyActions({ company }: Props) {
 
   const watched = !!watchQuery.data;
 
+  const watchFn = useServerFn(watchCompanyFn);
+
   const toggleWatch = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Nie ste prihlásený");
@@ -44,13 +48,13 @@ export function CompanyActions({ company }: Props) {
         if (error) throw error;
         return "removed" as const;
       }
-      const { error } = await supabase.from("watched_companies").insert({
-        user_id: user.id,
-        ico: company.ico,
-        company_name: company.name,
-        risk_score: company.riskScore,
+      await watchFn({
+        data: {
+          ico: company.ico,
+          companyName: company.name,
+          riskScore: company.riskScore,
+        },
       });
-      if (error) throw error;
       return "added" as const;
     },
     onSuccess: (result) => {
