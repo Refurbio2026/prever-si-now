@@ -394,24 +394,25 @@ function CompanyProfileView({
             <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
               <h3 className="mb-5 text-lg font-semibold">Základné informácie</h3>
               <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-                <InfoField label="Odvetvie" value={na(company.industry)} />
-                <InfoField label="Počet zamestnancov" value={na(company.employees ? String(company.employees) : undefined)} />
-                <InfoField label="Web" value={na(company.website)} />
-                <InfoField label="Tržby" value={company.revenue ? formatCurrency(company.revenue) : "Nedostupné"} />
-                <InfoField label="Zisk" value={company.profit ? formatCurrency(company.profit) : "Nedostupné"} />
-                <InfoField label="Právna forma" value={na(company.legalForm)} />
-                <InfoField label="Aktíva" value={company.latestAssets ? formatCurrency(company.latestAssets) : "Nedostupné"} />
-                <InfoField label="Pasíva" value={company.latestLiabilities ? formatCurrency(company.latestLiabilities) : "Nedostupné"} />
-                <InfoField label="Platiteľ DPH" value={company.vatPayer ? "Áno" : "Nie"} />
-                <InfoField label="Reg. číslo" value={na(company.registrationNumberText)} />
-                <InfoField label="SK NACE kód" value={na(company.skNaceCode)} />
-                <InfoField label="SK NACE popis" value={na(company.skNaceText)} />
+                <InfoField label="Odvetvie" value={na(company.industry)} source={fieldSources?.industry} />
+                <InfoField label="Počet zamestnancov" value={na(company.employees ? String(company.employees) : undefined)} source={fieldSources?.employees} />
+                <InfoField label="Web" value={na(company.website)} source={fieldSources?.website} />
+                <InfoField label="Tržby" value={company.revenue ? formatCurrency(company.revenue) : "Nedostupné"} source={fieldSources?.revenue} />
+                <InfoField label="Zisk" value={company.profit ? formatCurrency(company.profit) : "Nedostupné"} source={fieldSources?.profit} />
+                <InfoField label="Právna forma" value={na(company.legalForm)} source={fieldSources?.legalForm} />
+                <InfoField label="Aktíva" value={company.latestAssets ? formatCurrency(company.latestAssets) : "Nedostupné"} source={fieldSources?.latestAssets} />
+                <InfoField label="Pasíva" value={company.latestLiabilities ? formatCurrency(company.latestLiabilities) : "Nedostupné"} source={fieldSources?.latestLiabilities} />
+                <InfoField label="Platiteľ DPH" value={company.vatPayer ? "Áno" : "Nie"} source={fieldSources?.vatPayer} />
+                <InfoField label="Reg. číslo" value={na(company.registrationNumberText)} source={fieldSources?.registrationNumberText} />
+                <InfoField label="SK NACE kód" value={na(company.skNaceCode)} source={fieldSources?.skNaceCode} />
+                <InfoField label="SK NACE popis" value={na(company.skNaceText)} source={fieldSources?.skNaceText} />
               </div>
             </Card>
 
-            <RegistryCard registry={registry} company={company} />
+            <RegistryCard registry={registry} company={company} fieldSources={fieldSources} />
 
             <ProviderStatusSection ico={ico} sources={sources} diagnostics={diagnostics} />
+            {fieldAudit && fieldAudit.length > 0 && <DevDebugPanel audit={fieldAudit} />
           </TabsContent>
 
 
