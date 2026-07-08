@@ -1086,7 +1086,16 @@ function AccountingStatementsCard({ statements }: { statements: AccountingStatem
                 <td className="py-3 text-muted-foreground">
                   {formatPeriod(s.periodFrom, s.periodTo)}
                 </td>
-                <td className="py-3 text-muted-foreground">{formatDate(s.submittedAt)}</td>
+                <td className="py-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-muted-foreground">{formatDate(s.submittedAt)}</span>
+                    <div className="flex flex-wrap gap-1">
+                      <AvailabilityBadge label="Detail" available={!!s.detailUrl} />
+                      <AvailabilityBadge label="PDF" available={!!s.pdfUrl} />
+                      <AvailabilityBadge label="Excel" available={!!s.excelUrl} />
+                    </div>
+                  </div>
+                </td>
                 <td className="py-3">
                   <div className="flex justify-end gap-1">
                     <StatementLinkButton
