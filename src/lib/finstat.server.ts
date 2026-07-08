@@ -215,7 +215,7 @@ export interface FinstatDiagnostic {
   endpoint: string | null;
   httpStatus: number | null;
   rawResponsePreview: string | null;
-  normalizedPreview: unknown;
+  normalizedPreview: Company | null;
   errorMessage: string | null;
   errorCode: string | null;
 }
