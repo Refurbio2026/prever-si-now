@@ -183,7 +183,9 @@ export const getAiReportFn = createServerFn({ method: "POST" })
       `Dátum vzniku: ${c.registrationDate}`,
       c.industry ? `Odvetvie: ${c.industry}` : null,
       typeof c.employees === "number" ? `Zamestnanci: ${c.employees}` : null,
-      `Platca DPH: ${c.vatPayer ? "áno" : "nie"}`,
+      c.vatPayerConfidence === "confirmed" && c.vatPayer === true
+        ? "Platca DPH: áno (potvrdené)"
+        : "Platca DPH: Stav DPH nie je možné jednoznačne potvrdiť z dostupných údajov.",
       yearsSummary ? `Finančné roky — ${yearsSummary}` : null,
       contractCount > 0
         ? `Verejné zmluvy (CRZ): ${contractCount}, spolu ${Math.round(contractValue)} €`
