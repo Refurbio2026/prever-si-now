@@ -1012,8 +1012,13 @@ function DiagRow({ label, value }: { label: string; value: string }) {
 function AccountingStatementsCard({ statements }: { statements: AccountingStatement[] }) {
   if (statements.length === 0) {
     return (
-      <Card className="rounded-2xl border-dashed p-8 text-center text-sm text-muted-foreground">
-        Účtovné závierky nie sú k dispozícii.
+      <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+        <div className="mb-3 flex items-center gap-2">
+          <FileText className="h-4 w-4 text-primary" />
+          <h3 className="text-lg font-semibold">Účtovné závierky</h3>
+          <SectionSourceBadge label="RÚZ" />
+        </div>
+        <p className="text-sm text-muted-foreground">Nedostupné</p>
       </Card>
     );
   }
@@ -1025,7 +1030,9 @@ function AccountingStatementsCard({ statements }: { statements: AccountingStatem
         <Badge variant="secondary" className="rounded-full">
           {statements.length}
         </Badge>
+        <SectionSourceBadge label="RÚZ" />
       </div>
+
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
           <thead>
