@@ -290,6 +290,48 @@ export type Database = {
         }
         Relationships: []
       }
+      import_queue: {
+        Row: {
+          attempts: number
+          created_at: string
+          finished_at: string | null
+          force_refresh: boolean
+          ico: string
+          id: string
+          last_error: string | null
+          priority: number
+          source: string
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          finished_at?: string | null
+          force_refresh?: boolean
+          ico: string
+          id?: string
+          last_error?: string | null
+          priority?: number
+          source: string
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          finished_at?: string | null
+          force_refresh?: boolean
+          ico?: string
+          id?: string
+          last_error?: string | null
+          priority?: number
+          source?: string
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_name: string | null
