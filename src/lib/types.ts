@@ -110,6 +110,10 @@ export type CompanyRisk = RiskIndicator;
 /** A single accounting statement (účtovná závierka) as filed in RÚZ. */
 export interface AccountingStatement {
   id: string;
+  /** RÚZ statement (závierka) id. */
+  statementId: string;
+  /** RÚZ report (výkaz) id — used for the detail page and generated PDF. */
+  vykazId?: string;
   year: number;
   /** Typ závierky — e.g. "Riadna", "Mimoriadna", "Priebežná". */
   type: string;
@@ -119,6 +123,8 @@ export interface AccountingStatement {
   periodTo?: string;
   /** Date filed with RÚZ (YYYY-MM-DD). */
   submittedAt?: string;
+  /** Alias of submittedAt for spec compatibility. */
+  submittedDate?: string;
   /** Date of preparation (YYYY-MM-DD). */
   preparedAt?: string;
   /** Date of approval (YYYY-MM-DD). */
@@ -126,7 +132,24 @@ export interface AccountingStatement {
   consolidated?: boolean;
   /** Public link to the statement on registeruz.sk. */
   detailUrl?: string;
+  /** Direct PDF (uploaded attachment or generated visualization). */
+  pdfUrl?: string;
+  /** Direct XLS/XLSX if published by RÚZ (currently rare). */
+  excelUrl?: string;
+  /** Canonical RÚZ source URL for the statement. */
+  sourceUrl?: string;
+  /** Dev-only: raw attachment list for the report. */
+  attachments?: Array<{
+    id: string;
+    name: string;
+    mimeType: string;
+    url: string;
+    sizeBytes?: number;
+  }>;
+  /** Dev-only: how many numeric cells were parsed from the structured tables. */
+  parsedNumericRowsCount?: number;
 }
+
 
 // ==============================
 // UnifiedCompany — single, provider-tagged view the UI reads from.

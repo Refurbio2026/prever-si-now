@@ -478,99 +478,113 @@ function CompanyProfileView({
                   positiveOnly
                 />
               </div>
+            ) : null}
+
+            {hasFinancials ? (
+              <>
+                <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+                  <h3 className="mb-4 text-lg font-semibold">Vývoj tržieb</h3>
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
+                        <defs>
+                          <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0.35} />
+                            <stop offset="100%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
+                        <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
+                        <YAxis
+                          stroke="oklch(0.5 0.03 255)"
+                          fontSize={12}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                        />
+                        <RTooltip
+                          contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
+                          formatter={(v: number) => formatCurrency(v)}
+                        />
+                        <Area type="monotone" dataKey="revenue" stroke="oklch(0.55 0.2 258)" strokeWidth={2} fill="url(#revGrad)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+
+                <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+                  <h3 className="mb-4 text-lg font-semibold">Zisk vs. EBITDA</h3>
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
+                        <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
+                        <YAxis
+                          stroke="oklch(0.5 0.03 255)"
+                          fontSize={12}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                        />
+                        <RTooltip
+                          contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
+                          formatter={(v: number) => formatCurrency(v)}
+                        />
+                        <Bar dataKey="profit" fill="oklch(0.55 0.2 258)" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey="ebitda" fill="oklch(0.72 0.16 245)" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              </>
             ) : (
               <Card className="rounded-2xl border-dashed p-8 text-center text-sm text-muted-foreground">
-                Finančné údaje nie sú k dispozícii.
+                Finančné hodnoty nie sú dostupné v strojovo čitateľnej forme.
               </Card>
             )}
 
-
-            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-              <h3 className="mb-4 text-lg font-semibold">Vývoj tržieb</h3>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
-                    <defs>
-                      <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
-                    <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
-                    <YAxis
-                      stroke="oklch(0.5 0.03 255)"
-                      fontSize={12}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
-                    />
-                    <RTooltip
-                      contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
-                      formatter={(v: number) => formatCurrency(v)}
-                    />
-                    <Area type="monotone" dataKey="revenue" stroke="oklch(0.55 0.2 258)" strokeWidth={2} fill="url(#revGrad)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-
-            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-              <h3 className="mb-4 text-lg font-semibold">Zisk vs. EBITDA</h3>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
-                    <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
-                    <YAxis
-                      stroke="oklch(0.5 0.03 255)"
-                      fontSize={12}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
-                    />
-                    <RTooltip
-                      contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
-                      formatter={(v: number) => formatCurrency(v)}
-                    />
-                    <Bar dataKey="profit" fill="oklch(0.55 0.2 258)" radius={[6, 6, 0, 0]} />
-                    <Bar dataKey="ebitda" fill="oklch(0.72 0.16 245)" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-
-            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-              <h3 className="mb-4 text-lg font-semibold">Aktíva a pasíva</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="py-3 text-left font-medium">Rok</th>
-                      <th className="py-3 text-right font-medium">Tržby</th>
-                      <th className="py-3 text-right font-medium">Zisk</th>
-                      <th className="py-3 text-right font-medium">EBITDA</th>
-                      <th className="py-3 text-right font-medium">Aktíva</th>
-                      <th className="py-3 text-right font-medium">Pasíva</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...financials].reverse().map((f) => (
-                      <tr key={f.year} className="border-b border-border/50 last:border-0">
-                        <td className="py-3 font-medium">{f.year}</td>
-                        <td className="py-3 text-right">{formatCurrency(f.revenue)}</td>
-                        <td className="py-3 text-right">{formatCurrency(f.profit)}</td>
-                        <td className="py-3 text-right">{formatCurrency(f.ebitda)}</td>
-                        <td className="py-3 text-right">{formatCurrency(f.assets)}</td>
-                        <td className="py-3 text-right">{formatCurrency(f.liabilities)}</td>
+            {financials.some(
+              (f) => f.assets > 0 || f.liabilities > 0 || f.revenue > 0 || f.profit > 0,
+            ) ? (
+              <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+                <h3 className="mb-4 text-lg font-semibold">Aktíva a pasíva</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[560px] text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="py-3 text-left font-medium">Rok</th>
+                        <th className="py-3 text-right font-medium">Tržby</th>
+                        <th className="py-3 text-right font-medium">Zisk</th>
+                        <th className="py-3 text-right font-medium">EBITDA</th>
+                        <th className="py-3 text-right font-medium">Aktíva</th>
+                        <th className="py-3 text-right font-medium">Pasíva</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+                    </thead>
+                    <tbody>
+                      {[...financials].reverse().map((f) => (
+                        <tr key={f.year} className="border-b border-border/50 last:border-0">
+                          <td className="py-3 font-medium">{f.year}</td>
+                          <td className="py-3 text-right">{formatCurrency(f.revenue)}</td>
+                          <td className="py-3 text-right">{formatCurrency(f.profit)}</td>
+                          <td className="py-3 text-right">{formatCurrency(f.ebitda)}</td>
+                          <td className="py-3 text-right">{formatCurrency(f.assets)}</td>
+                          <td className="py-3 text-right">{formatCurrency(f.liabilities)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            ) : (
+              <Card className="rounded-2xl border-dashed p-6 text-center text-sm text-muted-foreground">
+                Detailné finančné hodnoty nie sú dostupné.
+              </Card>
+            )}
 
             <AccountingStatementsCard statements={statements} />
+            {import.meta.env.DEV && statements.length > 0 && (
+              <RuzDiagnosticsPanel statements={statements} />
+            )}
             <ContractsCard contracts={contracts} state={unified.contracts.state} />
             <ProcurementCard procurement={procurement} state={unified.procurement.state} />
 
@@ -1077,40 +1091,21 @@ function AccountingStatementsCard({ statements }: { statements: AccountingStatem
                 <td className="py-3 text-muted-foreground">{formatDate(s.submittedAt)}</td>
                 <td className="py-3">
                   <div className="flex justify-end gap-1">
-                    {s.detailUrl ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        asChild
-                        className="rounded-lg text-xs"
-                      >
-                        <a href={s.detailUrl} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="mr-1 h-3.5 w-3.5" /> Detail
-                        </a>
-                      </Button>
-                    ) : (
-                      <Button variant="ghost" size="sm" disabled className="rounded-lg text-xs">
-                        <ExternalLink className="mr-1 h-3.5 w-3.5" /> Detail
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-lg text-xs"
-                      title="Stiahnuť PDF (čoskoro)"
-                      onClick={() => alert("Export do PDF bude čoskoro k dispozícii.")}
-                    >
-                      <Download className="mr-1 h-3.5 w-3.5" /> PDF
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-lg text-xs"
-                      title="Export do Excelu (čoskoro)"
-                      onClick={() => alert("Export do Excelu bude čoskoro k dispozícii.")}
-                    >
-                      <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Excel
-                    </Button>
+                    <StatementLinkButton
+                      href={s.detailUrl}
+                      icon={<ExternalLink className="mr-1 h-3.5 w-3.5" />}
+                      label="Detail"
+                    />
+                    <StatementLinkButton
+                      href={s.pdfUrl}
+                      icon={<Download className="mr-1 h-3.5 w-3.5" />}
+                      label="PDF"
+                    />
+                    <StatementLinkButton
+                      href={s.excelUrl}
+                      icon={<FileSpreadsheet className="mr-1 h-3.5 w-3.5" />}
+                      label="Excel"
+                    />
                   </div>
                 </td>
               </tr>
@@ -1727,6 +1722,97 @@ function FinstatRawInspector({
                 </td>
                 <td className="py-2 pr-3 font-mono text-[10px]">
                   {r.target ?? <span className="text-muted-foreground italic">unmapped</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function StatementLinkButton({
+  href,
+  icon,
+  label,
+}: {
+  href: string | undefined;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  if (href) {
+    return (
+      <Button variant="ghost" size="sm" asChild className="rounded-lg text-xs">
+        <a href={href} target="_blank" rel="noopener noreferrer">
+          {icon} {label}
+        </a>
+      </Button>
+    );
+  }
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="rounded-lg text-xs opacity-60"
+      onClick={() => toast.info("Dokument nie je dostupný.")}
+    >
+      {icon} {label}
+    </Button>
+  );
+}
+
+function RuzDiagnosticsPanel({
+  statements,
+}: {
+  statements: AccountingStatement[];
+}) {
+  return (
+    <Card className="rounded-2xl border-dashed border-border/70 p-6 shadow-soft">
+      <div className="mb-3 flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold">Developer — RÚZ diagnostika</h3>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-xs">
+          <thead>
+            <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+              <th className="py-2 text-left font-medium">Statement ID</th>
+              <th className="py-2 text-left font-medium">Detail endpoint</th>
+              <th className="py-2 text-left font-medium">Prílohy</th>
+              <th className="py-2 text-right font-medium">Numerické bunky</th>
+            </tr>
+          </thead>
+          <tbody>
+            {statements.map((s) => (
+              <tr key={s.id} className="border-b border-border/50 align-top last:border-0">
+                <td className="py-2 pr-3 font-mono">{s.statementId}</td>
+                <td className="py-2 pr-3 font-mono text-[10px] text-muted-foreground break-all">
+                  {s.detailUrl ?? "—"}
+                </td>
+                <td className="py-2 pr-3">
+                  {s.attachments && s.attachments.length > 0 ? (
+                    <ul className="space-y-1">
+                      {s.attachments.map((a) => (
+                        <li key={a.id} className="font-mono text-[10px]">
+                          <a
+                            href={a.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline"
+                          >
+                            {a.name}
+                          </a>{" "}
+                          <span className="text-muted-foreground">({a.mimeType})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="text-muted-foreground">žiadne</span>
+                  )}
+                </td>
+                <td className="py-2 pr-3 text-right font-mono">
+                  {s.parsedNumericRowsCount ?? 0}
                 </td>
               </tr>
             ))}
