@@ -984,7 +984,7 @@ function DbHistoryCard({
         </div>
       ) : sorted.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          História zmien zatiaľ nie je dostupná.
+          Dáta zatiaľ neboli importované.
         </p>
       ) : (
         <ol className="relative border-l border-border pl-6">
