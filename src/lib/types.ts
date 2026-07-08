@@ -18,6 +18,20 @@ export interface Company {
   industry?: string;
   website?: string;
   aiSummary?: string;
+  // Extended real Finstat fields
+  registrationNumberText?: string;
+  skNaceCode?: string;
+  skNaceText?: string;
+  latestAssets?: number;
+  latestLiabilities?: number;
+  warnings?: string[];
+  paymentOrderWarnings?: string[];
+  debtIndicators?: {
+    taxDebt?: number;
+    socialDebt?: number;
+    healthDebt?: number;
+    judicialDebt?: number;
+  };
 }
 
 export interface FinancialYear {
