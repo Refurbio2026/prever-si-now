@@ -13,7 +13,6 @@ import type { ProviderDiagnostic, RegistryDetails } from "./types";
 
 const RPO_BASE = "https://api.statistics.sk/rpo/v2";
 const REQUEST_TIMEOUT_MS = 8000;
-const ALLOW_MOCK = process.env.NODE_ENV !== "production";
 
 export type OrsrRegistryDetails = RegistryDetails & { source: "orsr" };
 

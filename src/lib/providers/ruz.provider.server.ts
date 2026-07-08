@@ -12,7 +12,6 @@ import type { ProviderDiagnostic } from "./types";
 const RUZ_BASE = "https://www.registeruz.sk/cruz-public/api";
 const REQUEST_TIMEOUT_MS = 8000;
 const MAX_STATEMENTS = 12;
-const ALLOW_MOCK = process.env.NODE_ENV !== "production";
 
 interface RuzUnitList {
   id?: number[];
