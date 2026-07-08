@@ -278,9 +278,6 @@ function CompanyProfileView({
   const beneficials = owners.filter((o) => o.role === "beneficial_owner");
   const partnersOwners = owners.filter((o) => o.role === "owner");
   const criticalRisks = risks.filter((r) => r.status !== "clear");
-  const hasFinancials = financials.length > 0;
-  const latestFin = hasFinancials ? financials[financials.length - 1] : undefined;
-  const prevFin = hasFinancials && financials.length > 1 ? financials[financials.length - 2] : latestFin;
   const okSources = sources.filter((s) => s.state === "ok").length;
 
 
