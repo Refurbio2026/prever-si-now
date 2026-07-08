@@ -39,20 +39,42 @@ async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
 export async function runCompanyProvider(
   ico: string,
   finstat: FinstatBundle,
-): Promise<{ data: Company | undefined; sources: ProviderSourceStatus[] }> {
-  const orsr = await safe(orsrCompanyInfo(ico), {
-    data: undefined,
+  diagnostics?: ProviderDiagnostic[],
+): Promise<{
+  data: Company | undefined;
+  registry?: RegistryDetails;
+  sources: ProviderSourceStatus[];
+}> {
+  const orsr = await safe(orsrRegistryDetails(ico, diagnostics), {
+    data: undefined as RegistryDetails | undefined,
     status: { source: "orsr" as const, capability: "company" as const, state: "error" as const },
   });
   const cadastre = await safe(cadastreCompanyInfo(ico), {
     data: undefined,
     status: { source: "cadastre" as const, capability: "company" as const, state: "error" as const },
   });
+
+  // ORSR is the primary source for registry/legal fields; Finstat is fallback.
+  const base = finstat.company.data;
+  let merged: Company | undefined = base;
+  if (base && orsr.data) {
+    merged = {
+      ...base,
+      legalForm: orsr.data.legalForm || base.legalForm,
+      address: orsr.data.registeredAddress || base.address,
+      registrationDate: orsr.data.registrationDate || base.registrationDate,
+      registrationNumberText:
+        orsr.data.registrationNumber || base.registrationNumberText,
+    };
+  }
+
   return {
-    data: finstat.company.data,
+    data: merged,
+    registry: orsr.data,
     sources: [finstat.company.status, orsr.status, cadastre.status],
   };
 }
+
 
 export async function runFinancialProvider(
   ico: string,
