@@ -472,81 +472,84 @@ function CompanyProfileView({
               financials={financials}
             />
 
-            {financials.length >= 2 ? (
-              <>
-                <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-                  <div className="mb-4 flex items-center gap-2">
-                    <h3 className="text-lg font-semibold">Vývoj tržieb</h3>
-                    <SectionSourceBadge label="Finstat" />
-                  </div>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
-                        <defs>
-                          <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0.35} />
-                            <stop offset="100%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
-                        <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
-                        <YAxis
-                          stroke="oklch(0.5 0.03 255)"
-                          fontSize={12}
-                          axisLine={false}
-                          tickLine={false}
-                          tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
-                        />
-                        <RTooltip
-                          contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
-                          formatter={(v: number) => formatCurrency(v)}
-                        />
-                        <Area type="monotone" dataKey="revenue" stroke="oklch(0.55 0.2 258)" strokeWidth={2} fill="url(#revGrad)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
+            {hasChartableSeries(financials, "revenue") ? (
+              <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+                <div className="mb-4 flex items-center gap-2">
+                  <h3 className="text-lg font-semibold">Vývoj tržieb</h3>
+                  <SectionSourceBadge label={financeSourceLabel(financials)} />
+                </div>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={financials.filter((f) => hasFinancialField(f, "revenue"))} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
+                      <defs>
+                        <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
+                      <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
+                      <YAxis
+                        stroke="oklch(0.5 0.03 255)"
+                        fontSize={12}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                      />
+                      <RTooltip
+                        contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
+                        formatter={(v: number) => formatCurrency(v)}
+                      />
+                      <Area type="monotone" dataKey="revenue" stroke="oklch(0.55 0.2 258)" strokeWidth={2} fill="url(#revGrad)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            ) : null}
 
-                <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-                  <div className="mb-4 flex items-center gap-2">
-                    <h3 className="text-lg font-semibold">Zisk vs. EBITDA</h3>
-                    <SectionSourceBadge label="Finstat" />
-                  </div>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
-                        <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
-                        <YAxis
-                          stroke="oklch(0.5 0.03 255)"
-                          fontSize={12}
-                          axisLine={false}
-                          tickLine={false}
-                          tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
-                        />
-                        <RTooltip
-                          contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
-                          formatter={(v: number) => formatCurrency(v)}
-                        />
-                        <Bar dataKey="profit" fill="oklch(0.55 0.2 258)" radius={[6, 6, 0, 0]} />
-                        <Bar dataKey="ebitda" fill="oklch(0.72 0.16 245)" radius={[6, 6, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
-              </>
-            ) : (
+            {hasChartableSeries(financials, "profit") ? (
+              <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+                <div className="mb-4 flex items-center gap-2">
+                  <h3 className="text-lg font-semibold">Zisk vs. EBITDA</h3>
+                  <SectionSourceBadge label={financeSourceLabel(financials)} />
+                </div>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={financials.filter((f) => hasFinancialField(f, "profit"))} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
+                      <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
+                      <YAxis
+                        stroke="oklch(0.5 0.03 255)"
+                        fontSize={12}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                      />
+                      <RTooltip
+                        contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
+                        formatter={(v: number) => formatCurrency(v)}
+                      />
+                      <Bar dataKey="profit" fill="oklch(0.55 0.2 258)" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="ebitda" fill="oklch(0.72 0.16 245)" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            ) : null}
+
+            {!hasChartableSeries(financials, "revenue") && !hasChartableSeries(financials, "profit") ? (
               <Card className="rounded-2xl border-dashed p-6 text-center text-sm text-muted-foreground">
                 Detailný časový rad finančných údajov nie je dostupný.
               </Card>
-            )}
+            ) : null}
 
 
-            {financials.some(
-              (f) => f.assets > 0 || f.liabilities > 0 || f.revenue > 0 || f.profit > 0,
-            ) ? (
+            {financials.some(hasAnyFinancialField) ? (
               <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-                <h3 className="mb-4 text-lg font-semibold">Aktíva a pasíva</h3>
+                <div className="mb-4 flex items-center gap-2">
+                  <h3 className="text-lg font-semibold">Aktíva a pasíva</h3>
+                  <SectionSourceBadge label={financeSourceLabel(financials)} />
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[560px] text-sm">
                     <thead>
@@ -560,14 +563,14 @@ function CompanyProfileView({
                       </tr>
                     </thead>
                     <tbody>
-                      {[...financials].reverse().map((f) => (
+                      {[...financials].reverse().filter(hasAnyFinancialField).map((f) => (
                         <tr key={f.year} className="border-b border-border/50 last:border-0">
                           <td className="py-3 font-medium">{f.year}</td>
-                          <td className="py-3 text-right">{formatCurrency(f.revenue)}</td>
-                          <td className="py-3 text-right">{formatCurrency(f.profit)}</td>
-                          <td className="py-3 text-right">{formatCurrency(f.ebitda)}</td>
-                          <td className="py-3 text-right">{formatCurrency(f.assets)}</td>
-                          <td className="py-3 text-right">{formatCurrency(f.liabilities)}</td>
+                          <td className="py-3 text-right">{formatFinancialCell(f, "revenue")}</td>
+                          <td className="py-3 text-right">{formatFinancialCell(f, "profit")}</td>
+                          <td className="py-3 text-right">{f.ebitda !== 0 ? formatCurrency(f.ebitda) : "Nedostupné"}</td>
+                          <td className="py-3 text-right">{formatFinancialCell(f, "assets")}</td>
+                          <td className="py-3 text-right">{formatFinancialCell(f, "liabilities")}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -581,6 +584,9 @@ function CompanyProfileView({
             )}
 
             <AccountingStatementsCard statements={statements} />
+            {import.meta.env.DEV && financeMappingInspector && (
+              <FinanceMappingInspectorPanel inspector={financeMappingInspector} />
+            )}
             {import.meta.env.DEV && statements.length > 0 && (
               <RuzDiagnosticsPanel statements={statements} />
             )}
