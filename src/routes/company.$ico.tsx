@@ -204,16 +204,34 @@ function CompanyProfileView({
                   )}
                 </div>
                 <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
-                  <InfoRow icon={Receipt} label="IČO" value={company.ico} />
-                  {company.dic && <InfoRow icon={Receipt} label="DIČ" value={company.dic} />}
-                  {company.icDph && <InfoRow icon={Receipt} label="IČ DPH" value={company.icDph} />}
-                  <InfoRow icon={MapPin} label="Adresa" value={`${company.address}, ${company.city}`} />
-                  <InfoRow icon={Building2} label="Právna forma" value={company.legalForm} />
+                  <InfoRow icon={Receipt} label="IČO" value={na(company.ico)} />
+                  <InfoRow icon={Receipt} label="DIČ" value={na(company.dic)} />
+                  <InfoRow icon={Receipt} label="IČ DPH" value={na(company.icDph)} />
+                  <InfoRow
+                    icon={MapPin}
+                    label="Adresa"
+                    value={na([company.address, company.city].filter((v) => v && v !== "—").join(", "))}
+                  />
+                  <InfoRow icon={Building2} label="Právna forma" value={na(company.legalForm)} />
                   <InfoRow
                     icon={Calendar}
                     label="Registrácia"
-                    value={new Date(company.registrationDate).toLocaleDateString("sk-SK")}
+                    value={
+                      company.registrationDate
+                        ? new Date(company.registrationDate).toLocaleDateString("sk-SK")
+                        : "Nedostupné"
+                    }
                   />
+                  {company.registrationNumberText && (
+                    <InfoRow icon={Receipt} label="Reg. číslo" value={company.registrationNumberText} />
+                  )}
+                  {(company.skNaceCode || company.skNaceText) && (
+                    <InfoRow
+                      icon={Building2}
+                      label="SK NACE"
+                      value={[company.skNaceCode, company.skNaceText].filter(Boolean).join(" – ")}
+                    />
+                  )}
                 </div>
               </div>
             </div>
