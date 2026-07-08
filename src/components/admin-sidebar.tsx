@@ -21,6 +21,7 @@ const items: { title: string; url: string; icon: typeof LayoutDashboard; exact?:
   { title: "Dashboard", url: "/admin", icon: LayoutDashboard, exact: true },
   { title: "Users", url: "/admin/users", icon: Users },
   { title: "Companies", url: "/admin/companies", icon: Building2 },
+  { title: "Imports", url: "/admin/imports", icon: Download },
   { title: "API Debug", url: "/admin/api-debug", icon: Bug },
   { title: "Settings", url: "/admin/settings", icon: Settings },
 ];
