@@ -1,14 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import {
-  LayoutDashboard,
-  Search,
-  Bell,
-  FileText,
-  User,
-  LogOut,
-  Settings,
-  Shield,
-} from "lucide-react";
+import { LayoutDashboard, Users, Building2, Bug, Settings, LogOut, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -25,20 +16,18 @@ import {
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/logo";
 import { supabase } from "@/integrations/supabase/client";
-import { useRole } from "@/hooks/use-role";
 
 const items: { title: string; url: string; icon: typeof LayoutDashboard; exact?: boolean }[] = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, exact: true },
-  { title: "Vyhľadávanie", url: "/dashboard/search", icon: Search },
-  { title: "Monitoring", url: "/dashboard/monitoring", icon: Bell },
-  { title: "Reporty", url: "/dashboard/reports", icon: FileText },
-  { title: "Profil", url: "/dashboard/profile", icon: User },
+  { title: "Dashboard", url: "/admin", icon: LayoutDashboard, exact: true },
+  { title: "Users", url: "/admin/users", icon: Users },
+  { title: "Companies", url: "/admin/companies", icon: Building2 },
+  { title: "API Debug", url: "/admin/api-debug", icon: Bug },
+  { title: "Settings", url: "/admin/settings", icon: Settings },
 ];
 
-export function DashboardSidebar() {
+export function AdminSidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const navigate = useNavigate();
-  const { isAdmin } = useRole();
 
   const isActive = (url: string, exact?: boolean) =>
     exact ? pathname === url : pathname === url || pathname.startsWith(url + "/");
@@ -60,7 +49,7 @@ export function DashboardSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Prehľad</SidebarGroupLabel>
+          <SidebarGroupLabel>Admin</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (
@@ -73,17 +62,6 @@ export function DashboardSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              
-              {isAdmin && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive("/admin")} className="rounded-xl">
-                    <Link to="/admin" className="flex items-center gap-3">
-                      <Shield className="h-4 w-4" />
-                      <span>Admin</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -91,9 +69,11 @@ export function DashboardSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton className="rounded-xl">
-              <Settings className="h-4 w-4" />
-              <span>Nastavenia</span>
+            <SidebarMenuButton asChild className="rounded-xl">
+              <Link to="/dashboard" className="flex items-center gap-3">
+                <ArrowLeft className="h-4 w-4" />
+                <span>Späť do aplikácie</span>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
