@@ -1680,3 +1680,59 @@ function MonitoringTab({ ico, isAuthenticated }: { ico: string; isAuthenticated:
 
 
 
+
+// ---------- Dev-only: Finstat raw field inspector ----------
+
+function FinstatRawInspector({
+  rows,
+}: {
+  rows: Array<{ key: string; valuePreview: string; mapped: boolean; target?: string }>;
+}) {
+  const mapped = rows.filter((r) => r.mapped).length;
+  return (
+    <Card className="rounded-2xl border-dashed border-border/70 p-6 shadow-soft">
+      <div className="mb-3 flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold">
+          Developer — Finstat raw field inspector ({mapped}/{rows.length} mapped)
+        </h3>
+      </div>
+      <p className="mb-3 text-[11px] text-muted-foreground">
+        Zoznam všetkých kľúčov z Finstat /Detail. Nezmapované polia zobrazujeme,
+        aby sme rýchlo videli, čo ešte môžeme doplniť do normalizéra.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-xs">
+          <thead>
+            <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+              <th className="py-2 text-left font-medium">Kľúč</th>
+              <th className="py-2 text-left font-medium">Hodnota</th>
+              <th className="py-2 text-left font-medium">Mapped</th>
+              <th className="py-2 text-left font-medium">Target</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-b border-border/50 align-top last:border-0">
+                <td className="py-2 pr-3 font-mono font-medium">{r.key}</td>
+                <td className="py-2 pr-3 font-mono text-[10px] text-muted-foreground">
+                  {r.valuePreview}
+                </td>
+                <td className="py-2 pr-3">
+                  {r.mapped ? (
+                    <span className="text-emerald-600">✓</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
+                <td className="py-2 pr-3 font-mono text-[10px]">
+                  {r.target ?? <span className="text-muted-foreground italic">unmapped</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
