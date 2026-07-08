@@ -90,7 +90,9 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<CompanyReportPdfResponse> => {
     const ico = data.ico;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+    const { PDFDocument, rgb } = await import("pdf-lib");
+    const fontkit = (await import("@pdf-lib/fontkit")).default;
+
 
     // Fetch everything in parallel.
     const [
