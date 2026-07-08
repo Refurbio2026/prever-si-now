@@ -255,7 +255,7 @@ function collectHistory(ico: string, detail: Record<string, unknown>): HistoryRo
   return events;
 }
 
-export async function importOrsrPeople(ico: string): Promise<{ imported: number }> {
+export async function importCompanyPeople(ico: string): Promise<{ imported: number }> {
   const detail = await fetchRpoDetail(ico);
   if (!detail) return { imported: 0 };
   const rows = collectPeople(ico, detail);
@@ -267,7 +267,7 @@ export async function importOrsrPeople(ico: string): Promise<{ imported: number 
   return { imported: rows.length };
 }
 
-export async function importOrsrHistory(ico: string): Promise<{ imported: number }> {
+export async function importCompanyHistory(ico: string): Promise<{ imported: number }> {
   const detail = await fetchRpoDetail(ico);
   if (!detail) return { imported: 0 };
   const rows = collectHistory(ico, detail);
@@ -277,3 +277,70 @@ export async function importOrsrHistory(ico: string): Promise<{ imported: number
   if (error) throw new Error(error.message);
   return { imported: rows.length };
 }
+
+export async function importCompanyRegistry(ico: string): Promise<{ imported: number }> {
+  const detail = await fetchRpoDetail(ico);
+  if (!detail) return { imported: 0 };
+
+  const name =
+    asString(asRecord(asArray(detail.fullNames).find((e) => {
+      const r = asRecord(e);
+      return r && (r.validTo == null || r.validTo === "");
+    }) ?? asArray(detail.fullNames)[0])?.value) ??
+    asString(detail.name);
+
+  const legalForm = asString(
+    asRecord(asArray(detail.legalForms)[0])?.value ?? detail.legalForm,
+  );
+
+  const addressEntry =
+    asArray(detail.addresses).find((e) => {
+      const r = asRecord(e);
+      return r && (r.validTo == null || r.validTo === "");
+    }) ?? asArray(detail.addresses)[0];
+  const addressRec = asRecord(addressEntry);
+  const address =
+    asString(addressRec?.formatedAddress) ??
+    asString(addressRec?.formattedAddress) ??
+    asString(addressRec?.value);
+
+  const registrationDate =
+    asDate(detail.establishment) ??
+    asDate(detail.dateOfEstablishment) ??
+    asDate(asRecord(asArray(detail.fullNames)[0])?.validFrom);
+
+  let registrationNumber: string | null = null;
+  for (const o of asArray(detail.registerOffices ?? detail.registrationOffices)) {
+    const r = asRecord(o);
+    if (!r) continue;
+    const reg =
+      asRecord(r.registrationNumber)?.value ??
+      r.registrationNumber ??
+      r.number ??
+      r.value;
+    const val = asString(reg);
+    if (val) {
+      registrationNumber = val;
+      break;
+    }
+  }
+  if (!registrationNumber) registrationNumber = asString(detail.registrationNumber) ?? null;
+
+  const row = {
+    ico,
+    name: name ?? null,
+    legal_form: legalForm ?? null,
+    address: address ?? null,
+    registration_date: registrationDate,
+    registration_number: registrationNumber,
+    source: "ORSR",
+    imported_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabaseAdmin
+    .from("company_registry")
+    .upsert(row, { onConflict: "ico,source" });
+  if (error) throw new Error(error.message);
+  return { imported: 1 };
+}
+

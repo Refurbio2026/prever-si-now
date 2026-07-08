@@ -1,13 +1,23 @@
-// Client-safe module — only server-fn declarations and pure types.
-// Reads normalized `company_people` / `company_history` from Supabase and,
-// if stale/empty, runs an ORSR import inside the handler. The UI never
-// calls ORSR directly.
+// Client-safe module — server-fn declarations only. Reads normalized
+// registry data from Supabase. Imports are triggered manually from the
+// admin panel; the UI never calls ORSR directly.
 
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const icoSchema = z.object({ ico: z.string().regex(/^\d{6,8}$/, "Neplatné IČO") });
-const FRESH_TTL_MS = 24 * 60 * 60 * 1000;
+
+export interface CompanyRegistryRecord {
+  id: string;
+  ico: string;
+  name: string | null;
+  legalForm: string | null;
+  address: string | null;
+  registrationDate: string | null;
+  registrationNumber: string | null;
+  source: string;
+  importedAt: string;
+}
 
 export interface CompanyPersonRecord {
   id: string;
@@ -32,9 +42,15 @@ export interface CompanyHistoryRecord {
 }
 
 export interface CompanyRecordsResponse {
+  registry: CompanyRegistryRecord | null;
   people: CompanyPersonRecord[];
   history: CompanyHistoryRecord[];
-  importedAt: string | null;
+}
+
+export interface ImportJobResult {
+  ok: boolean;
+  imported: number;
+  error?: string;
 }
 
 export const getCompanyRecordsFn = createServerFn({ method: "POST" })
@@ -43,49 +59,41 @@ export const getCompanyRecordsFn = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const ico = data.ico;
 
-    const readAll = async () => {
-      const [{ data: people }, { data: history }] = await Promise.all([
-        supabaseAdmin
-          .from("company_people")
-          .select("*")
-          .eq("ico", ico)
-          .order("valid_from", { ascending: false, nullsFirst: false }),
-        supabaseAdmin
-          .from("company_history")
-          .select("*")
-          .eq("ico", ico)
-          .order("event_date", { ascending: false, nullsFirst: false }),
-      ]);
-      return { people: people ?? [], history: history ?? [] };
-    };
-
-    let { people, history } = await readAll();
-
-    const latestImport = [
-      ...people.map((p) => p.imported_at),
-      ...history.map((h) => h.imported_at),
-    ]
-      .filter((v): v is string => Boolean(v))
-      .sort()
-      .at(-1);
-
-    const stale =
-      !latestImport ||
-      Date.now() - new Date(latestImport).getTime() > FRESH_TTL_MS ||
-      (people.length === 0 && history.length === 0);
-
-    if (stale) {
-      const { importOrsrPeople, importOrsrHistory } = await import("./imports.server");
-      try {
-        await Promise.all([importOrsrPeople(ico), importOrsrHistory(ico)]);
-        ({ people, history } = await readAll());
-      } catch {
-        // best-effort import — return whatever the DB already has
-      }
-    }
+    const [{ data: registryRow }, { data: people }, { data: history }] = await Promise.all([
+      supabaseAdmin
+        .from("company_registry")
+        .select("*")
+        .eq("ico", ico)
+        .order("imported_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("company_people")
+        .select("*")
+        .eq("ico", ico)
+        .order("valid_from", { ascending: false, nullsFirst: false }),
+      supabaseAdmin
+        .from("company_history")
+        .select("*")
+        .eq("ico", ico)
+        .order("event_date", { ascending: false, nullsFirst: false }),
+    ]);
 
     return {
-      people: people.map((p) => ({
+      registry: registryRow
+        ? {
+            id: registryRow.id,
+            ico: registryRow.ico,
+            name: registryRow.name,
+            legalForm: registryRow.legal_form,
+            address: registryRow.address,
+            registrationDate: registryRow.registration_date,
+            registrationNumber: registryRow.registration_number,
+            source: registryRow.source,
+            importedAt: registryRow.imported_at,
+          }
+        : null,
+      people: (people ?? []).map((p) => ({
         id: p.id,
         ico: p.ico,
         personName: p.person_name,
@@ -95,7 +103,7 @@ export const getCompanyRecordsFn = createServerFn({ method: "POST" })
         source: p.source,
         importedAt: p.imported_at,
       })),
-      history: history.map((h) => ({
+      history: (history ?? []).map((h) => ({
         id: h.id,
         ico: h.ico,
         eventType: h.event_type,
@@ -105,20 +113,42 @@ export const getCompanyRecordsFn = createServerFn({ method: "POST" })
         source: h.source,
         importedAt: h.imported_at,
       })),
-      importedAt: latestImport ?? null,
     };
   });
 
-export const importOrsrPeopleFn = createServerFn({ method: "POST" })
+async function runImport(
+  ico: string,
+  fn: (ico: string) => Promise<{ imported: number }>,
+): Promise<ImportJobResult> {
+  try {
+    const res = await fn(ico);
+    return { ok: true, imported: res.imported };
+  } catch (err) {
+    return {
+      ok: false,
+      imported: 0,
+      error: (err as Error).message ?? "Neznáma chyba pri importe.",
+    };
+  }
+}
+
+export const importCompanyRegistryFn = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => icoSchema.parse(input))
-  .handler(async ({ data }): Promise<{ imported: number }> => {
-    const { importOrsrPeople } = await import("./imports.server");
-    return importOrsrPeople(data.ico);
+  .handler(async ({ data }): Promise<ImportJobResult> => {
+    const { importCompanyRegistry } = await import("./imports.server");
+    return runImport(data.ico, importCompanyRegistry);
   });
 
-export const importOrsrHistoryFn = createServerFn({ method: "POST" })
+export const importCompanyPeopleFn = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => icoSchema.parse(input))
-  .handler(async ({ data }): Promise<{ imported: number }> => {
-    const { importOrsrHistory } = await import("./imports.server");
-    return importOrsrHistory(data.ico);
+  .handler(async ({ data }): Promise<ImportJobResult> => {
+    const { importCompanyPeople } = await import("./imports.server");
+    return runImport(data.ico, importCompanyPeople);
+  });
+
+export const importCompanyHistoryFn = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => icoSchema.parse(input))
+  .handler(async ({ data }): Promise<ImportJobResult> => {
+    const { importCompanyHistory } = await import("./imports.server");
+    return runImport(data.ico, importCompanyHistory);
   });
