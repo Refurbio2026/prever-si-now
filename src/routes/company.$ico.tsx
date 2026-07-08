@@ -795,14 +795,15 @@ function PeopleCard({
   icon: Icon,
   people,
   showShare,
-  sourceBadge,
+  sourceLabel,
 }: {
   title: string;
   icon: typeof Users;
   people: CompanyPerson[];
   showShare?: boolean;
-  sourceBadge?: string;
+  sourceLabel?: string;
 }) {
+  const sourceBadge = sourceLabel;
   return (
     <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
       <div className="mb-5 flex items-center gap-2">
