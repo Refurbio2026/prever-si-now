@@ -272,8 +272,15 @@ function CompanyProfileView({
   const { user } = useAuth();
   const isAuthenticated = !!user;
 
-
-
+  const fetchRecords = useServerFn(getCompanyRecordsFn);
+  const recordsQuery = useQuery({
+    queryKey: ["company-records", ico],
+    queryFn: () => fetchRecords({ data: { ico } }),
+    staleTime: 5 * 60_000,
+  });
+  const dbPeople: CompanyPersonRecord[] = recordsQuery.data?.people ?? [];
+  const dbHistory: CompanyHistoryRecord[] = recordsQuery.data?.history ?? [];
+  const recordsLoading = recordsQuery.isLoading;
 
   // All section data comes from the unified structure — never directly from
   // ORSR / Finstat / RÚZ / RPVS / CRZ / ÚVO shapes.
@@ -284,11 +291,16 @@ function CompanyProfileView({
   const contracts: PublicContract[] = unified.contracts.data;
   const procurement: ProcurementRecord[] = unified.procurement.data;
 
-  const executives = people.filter((p) => p.role === "executive");
+  const dbExecutives = dbPeople.filter((p) => categorizeDbRole(p.role) === "executive");
+  const dbOwners = dbPeople.filter((p) => categorizeDbRole(p.role) === "owner");
+  const dbBeneficials = dbPeople.filter((p) => categorizeDbRole(p.role) === "beneficial_owner");
+  const dbAuthorized = dbPeople.filter((p) => categorizeDbRole(p.role) === "authorized");
+
   const beneficials = owners.filter((o) => o.role === "beneficial_owner");
   const partnersOwners = owners.filter((o) => o.role === "owner");
   const criticalRisks = risks.filter((r) => r.status !== "clear");
   const okSources = sources.filter((s) => s.state === "ok").length;
+
 
 
   return (
