@@ -869,6 +869,31 @@ function na(value: string | number | undefined | null): string {
   return s;
 }
 
+function hasFinancialField(row: FinancialYear, field: FinanceField): boolean {
+  return row.availableFields?.includes(field) ?? row[field] !== 0;
+}
+
+function hasAnyFinancialField(row: FinancialYear): boolean {
+  return (["revenue", "profit", "assets", "liabilities"] as const).some((field) =>
+    hasFinancialField(row, field),
+  );
+}
+
+function hasChartableSeries(financials: FinancialYear[], field: FinanceField): boolean {
+  return financials.filter((row) => hasFinancialField(row, field)).length >= 2;
+}
+
+function formatFinancialCell(row: FinancialYear, field: FinanceField): string {
+  return hasFinancialField(row, field) ? formatCurrency(row[field]) : "Nedostupné";
+}
+
+function financeSourceLabel(financials: FinancialYear[]): string {
+  const sources = new Set(financials.map((row) => row.source).filter(Boolean));
+  if (sources.has("finstat") && sources.has("ruz")) return "Finstat / RÚZ";
+  if (sources.has("ruz")) return "RÚZ";
+  return "Finstat";
+}
+
 function initials(name: string): string {
   return name
     .replace(/[.,]/g, "")
