@@ -18,6 +18,8 @@ export interface CompanySearchResult {
 }
 
 
+export type FieldConfidence = "confirmed" | "inferred" | "unknown";
+
 export interface Company {
   ico: string;
   dic?: string;
@@ -27,7 +29,10 @@ export interface Company {
   address: string;
   city: string;
   registrationDate: string;
-  vatPayer: boolean;
+  /** undefined = unknown (renders as "Nedostupné"). */
+  vatPayer?: boolean;
+  /** How confident we are in `vatPayer`. Default "unknown" when absent. */
+  vatPayerConfidence?: FieldConfidence;
   revenue: number;
   profit: number;
   riskScore: number; // 0-100 (higher = healthier)
@@ -141,6 +146,7 @@ export interface BasicCompanyInfo {
   registrationDate?: string;
   registrationNumberText?: string;
   vatPayer?: boolean;
+  vatPayerConfidence?: FieldConfidence;
   skNaceCode?: string;
   skNaceText?: string;
   employees?: number;
@@ -256,6 +262,13 @@ export interface FinstatRawCompany {
   DistrainmentsInfo?: { Distrainments?: unknown[] } | null;
   UnreliableVatPayer?: boolean | null;
   ReliableVatPayer?: boolean | null;
+  // Additional VAT-related fields Finstat may return (defensive mapping).
+  Icdph?: string | null;
+  IcDPH?: string | null;
+  VatPayer?: boolean | string | null;
+  VatRegistration?: string | boolean | null;
+  Dph?: string | boolean | null;
+  TaxReliability?: string | null;
   Persons?: Array<{ Name?: string; Function?: string; From?: string }>;
   Owners?: Array<{ Name?: string; Share?: number; From?: string }>;
   KUVs?: Array<{ Name?: string; Share?: number; From?: string }>;

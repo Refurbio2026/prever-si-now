@@ -13,6 +13,7 @@ import type {
   Company,
   CompanyPerson,
   CompanySearchResult,
+  FieldConfidence,
   FinancialYear,
   FinstatRawCompany,
   FinstatSearchHit,
@@ -368,6 +369,112 @@ function joinAddress(raw: FinstatRawCompany): { address: string; city: string } 
   return { address: address || "—", city: city || "—" };
 }
 
+// ---------- Defensive VAT resolution ----------
+
+export interface VatCandidate {
+  field: string;
+  rawValue: string | number | boolean | null;
+  normalized: boolean | null;
+  confidence: FieldConfidence;
+}
+
+export interface VatResolution {
+  value?: boolean;
+  confidence: FieldConfidence;
+  chosen?: VatCandidate;
+  candidates: VatCandidate[];
+}
+
+function nonEmptyString(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t.length > 0 ? t : null;
+}
+
+function parseBoolLike(v: unknown): boolean | null {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (["true", "1", "yes", "y", "ano", "áno"].includes(s)) return true;
+    if (["false", "0", "no", "n", "nie"].includes(s)) return false;
+  }
+  return null;
+}
+
+/**
+ * Resolve VAT-payer status from a raw Finstat payload defensively.
+ *
+ * Rules:
+ * - Explicit IC DPH string ⇒ confirmed payer.
+ * - Explicit ReliableVatPayer / UnreliableVatPayer boolean ⇒ confirmed payer.
+ * - Explicit VatPayer / VatRegistration / Dph boolean ⇒ confirmed.
+ * - Otherwise ⇒ unknown (renders as "Nedostupné"). Never guess "Nie".
+ */
+export function resolveVatStatus(raw: FinstatRawCompany): VatResolution {
+  const candidates: VatCandidate[] = [];
+
+  const icdph = nonEmptyString(raw.IcDph) ?? nonEmptyString(raw.IcDPH) ?? nonEmptyString(raw.Icdph);
+  if (raw.IcDph !== undefined || raw.IcDPH !== undefined || raw.Icdph !== undefined) {
+    candidates.push({
+      field: "IcDph",
+      rawValue: (raw.IcDph ?? raw.IcDPH ?? raw.Icdph ?? null) as string | null,
+      normalized: icdph ? true : null,
+      confidence: icdph ? "confirmed" : "unknown",
+    });
+  }
+
+  if (raw.ReliableVatPayer != null) {
+    candidates.push({
+      field: "ReliableVatPayer",
+      rawValue: raw.ReliableVatPayer,
+      normalized: raw.ReliableVatPayer === true ? true : null,
+      confidence: raw.ReliableVatPayer === true ? "confirmed" : "unknown",
+    });
+  }
+  if (raw.UnreliableVatPayer != null) {
+    // Unreliable = still a payer, just flagged as unreliable.
+    candidates.push({
+      field: "UnreliableVatPayer",
+      rawValue: raw.UnreliableVatPayer,
+      normalized: raw.UnreliableVatPayer === true ? true : null,
+      confidence: raw.UnreliableVatPayer === true ? "confirmed" : "unknown",
+    });
+  }
+
+  for (const field of ["VatPayer", "VatRegistration", "Dph"] as const) {
+    const v = raw[field];
+    if (v == null) continue;
+    const parsed = parseBoolLike(v);
+    candidates.push({
+      field,
+      rawValue: (typeof v === "string" || typeof v === "boolean" || typeof v === "number") ? v : null,
+      normalized: parsed,
+      // Only true confirms payer status. False without ICDPH does not disprove it.
+      confidence: parsed === true ? "confirmed" : "unknown",
+    });
+  }
+
+  if (raw.TaxReliability != null) {
+    const s = nonEmptyString(raw.TaxReliability);
+    candidates.push({
+      field: "TaxReliability",
+      rawValue: s,
+      normalized: null,
+      confidence: "inferred",
+    });
+  }
+
+  const confirmedTrue = candidates.find((c) => c.confidence === "confirmed" && c.normalized === true);
+  if (confirmedTrue) {
+    return { value: true, confidence: "confirmed", chosen: confirmedTrue, candidates };
+  }
+  // No explicit confirmation ⇒ unknown (never infer "Nie").
+  return { value: undefined, confidence: "unknown", candidates };
+}
+
+
+
 export function normalizeCompany(raw: FinstatRawCompany): Company {
   const { address, city } = joinAddress(raw);
   const score = computeRiskScore(raw);
@@ -378,16 +485,18 @@ export function normalizeCompany(raw: FinstatRawCompany): Company {
     raw.PaymentOrderInfo?.PaymentOrders ?? raw.PaymentOrders ?? undefined,
     raw.PaymentOrder ?? undefined,
   );
+  const vat = resolveVatStatus(raw);
   return {
     ico: String(raw.Ico ?? ""),
     dic: raw.Dic || undefined,
-    icDph: raw.IcDph || undefined,
+    icDph: nonEmptyString(raw.IcDph) ?? nonEmptyString(raw.IcDPH) ?? nonEmptyString(raw.Icdph) ?? undefined,
     name: raw.Name ?? "Neznáma firma",
     legalForm: raw.LegalForm ?? "—",
     address,
     city,
     registrationDate: raw.Created ?? "",
-    vatPayer: !!raw.IcDph || !!raw.ReliableVatPayer,
+    vatPayer: vat.value,
+    vatPayerConfidence: vat.confidence,
     revenue: Number(raw.Sales ?? latestFin?.revenue ?? 0),
     profit: Number(raw.Profit ?? latestFin?.profit ?? 0),
     riskScore: score,
@@ -600,16 +709,19 @@ export function normalizeRisks(raw: FinstatRawCompany): RiskIndicator[] {
       status: executions > 0 ? "critical" : "clear",
       detail: executions > 0 ? `${executions} aktívnych konaní` : "Bez konaní",
     },
-    {
-      key: "vat_reliability",
-      label: "Spoľahlivosť platiteľa DPH",
-      status: unreliable ? "warning" : "clear",
-      detail: unreliable
-        ? "Nespoľahlivý platiteľ DPH"
-        : raw.IcDph
-        ? "Spoľahlivý platiteľ"
-        : "Nie je platiteľom DPH",
-    },
+    (() => {
+      const vat = resolveVatStatus(raw);
+      let detail: string;
+      if (unreliable) detail = "Nespoľahlivý platiteľ DPH";
+      else if (vat.confidence === "confirmed" && vat.value === true) detail = "Spoľahlivý platiteľ";
+      else detail = "Stav DPH nedostupný";
+      return {
+        key: "vat_reliability" as const,
+        label: "Spoľahlivosť platiteľa DPH",
+        status: (unreliable ? "warning" : "clear") as "warning" | "clear",
+        detail,
+      };
+    })(),
   ];
 }
 

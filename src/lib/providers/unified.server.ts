@@ -35,6 +35,7 @@ function toBasicInfo(
     registrationNumberText:
       registry?.registrationNumber ?? company.registrationNumberText ?? undefined,
     vatPayer: company.vatPayer,
+    vatPayerConfidence: company.vatPayerConfidence,
     skNaceCode: company.skNaceCode,
     skNaceText: company.skNaceText,
     employees: company.employees,

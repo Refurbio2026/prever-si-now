@@ -119,7 +119,6 @@ export async function runCompanyProvider(
       "dic",
       "icDph",
       "city",
-      "vatPayer",
       "revenue",
       "profit",
       "employees",
@@ -134,6 +133,30 @@ export async function runCompanyProvider(
       const v = base[f as keyof Company];
       if (v != null && v !== "") fieldSources[f] = "finstat";
     }
+    // VAT payer status — record source & confidence-aware audit.
+    if (base.vatPayer !== undefined || base.vatPayerConfidence) {
+      fieldSources["vatPayer"] = "finstat";
+    }
+    const vatConfidence = base.vatPayerConfidence ?? "unknown";
+    audit?.push({
+      field: "vatPayer",
+      chosenSource: base.vatPayer !== undefined ? "finstat" : null,
+      chosenValue: base.vatPayer === undefined ? null : base.vatPayer,
+      confidence: vatConfidence,
+      decision:
+        vatConfidence === "confirmed"
+          ? "finstat confirmed VAT-payer status (IcDph / ReliableVatPayer / VatPayer)"
+          : "no source confirmed VAT-payer status — rendered as Nedostupné",
+      candidates: [
+        {
+          source: "finstat",
+          value: base.vatPayer === undefined ? null : base.vatPayer,
+          rawField: "IcDph|ReliableVatPayer|VatPayer|VatRegistration|Dph|TaxReliability",
+          rawValue: base.icDph ?? null,
+          confidence: vatConfidence,
+        },
+      ],
+    });
   }
 
   return {

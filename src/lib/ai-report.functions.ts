@@ -183,7 +183,9 @@ export const getAiReportFn = createServerFn({ method: "POST" })
       `Dátum vzniku: ${c.registrationDate}`,
       c.industry ? `Odvetvie: ${c.industry}` : null,
       typeof c.employees === "number" ? `Zamestnanci: ${c.employees}` : null,
-      `Platca DPH: ${c.vatPayer ? "áno" : "nie"}`,
+      c.vatPayerConfidence === "confirmed" && c.vatPayer === true
+        ? "Platca DPH: áno (potvrdené)"
+        : "Platca DPH: Stav DPH nie je možné jednoznačne potvrdiť z dostupných údajov.",
       yearsSummary ? `Finančné roky — ${yearsSummary}` : null,
       contractCount > 0
         ? `Verejné zmluvy (CRZ): ${contractCount}, spolu ${Math.round(contractValue)} €`
@@ -198,7 +200,8 @@ export const getAiReportFn = createServerFn({ method: "POST" })
 
     const system = `Si expert na hodnotenie slovenských firiem. Odpovedaj IBA validným JSON objektom v tomto tvare:
 {"summary": string (5-6 viet v slovenčine), "recommendation": "LOW RISK" | "MEDIUM RISK" | "HIGH RISK", "warnings": string[], "strengths": string[], "weaknesses": string[]}
-Bez markdownu, bez kódových blokov. Zhrnutie píš prirodzenou slovenčinou pre biznis publikum.`;
+Bez markdownu, bez kódových blokov. Zhrnutie píš prirodzenou slovenčinou pre biznis publikum.
+Pravidlá pre DPH: Netvrď, že firma je "neplatca DPH", pokiaľ to nie je vo faktoch výslovne potvrdené. Ak je stav DPH nedostupný, uveď doslovne "Stav DPH nie je možné jednoznačne potvrdiť z dostupných údajov." a neodvodzuj ho z iných polí.`;
 
     const user = `Vytvor exekutívne zhrnutie pre nasledovnú firmu.
 Vypočítané skóre (0-100, vyššie = lepšie): finančné zdravie ${financial}, rast ${growth}, verejný sektor ${publicScore}, celkové ${overall}.
