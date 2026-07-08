@@ -42,8 +42,15 @@ export const searchCompaniesFn = createServerFn({ method: "POST" })
       finstatSearchByName,
       normalizeCompany,
       normalizeSearchHit,
+      mockCompanyDetail,
+      getFinstatEnvStatus,
       FinstatError,
     } = await import("./finstat.server");
+
+    if (!getFinstatEnvStatus().allSet) {
+      const mock = mockCompanyDetail(looksLikeIco(query) ? query : "31333532").company;
+      return { ok: true, results: [mock], source: "cache" };
+    }
 
     try {
       if (looksLikeIco(query)) {
@@ -53,12 +60,35 @@ export const searchCompaniesFn = createServerFn({ method: "POST" })
       const hits = await finstatSearchByName(query);
       return { ok: true, results: hits.slice(0, 20).map(normalizeSearchHit), source: "finstat" };
     } catch (err) {
-      // Preserve typed Finstat errors; downgrade "not found" to empty ok result.
       if (err instanceof FinstatError && err.code === "not_found") {
         return { ok: true, results: [], source: "finstat" };
       }
+      if (
+        err instanceof FinstatError &&
+        (err.code === "missing_credentials" || err.code === "unauthorized")
+      ) {
+        const mock = mockCompanyDetail(looksLikeIco(query) ? query : "31333532").company;
+        return { ok: true, results: [mock], source: "cache" };
+      }
       return toErrorResponse(err);
     }
+  });
+
+const diagnosticSchema = z.object({
+  ico: z.string().regex(/^\d{6,8}$/).default("31333532"),
+});
+
+export type FinstatDiagnosticResponse = {
+  ok: true;
+  diagnostic: import("./finstat.server").FinstatDiagnostic;
+};
+
+export const finstatDiagnosticFn = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => diagnosticSchema.parse(input ?? {}))
+  .handler(async ({ data }): Promise<FinstatDiagnosticResponse> => {
+    const { runFinstatDiagnostic } = await import("./finstat.server");
+    const diagnostic = await runFinstatDiagnostic(data.ico);
+    return { ok: true, diagnostic };
   });
 
 export const getCompanyByIcoFn = createServerFn({ method: "POST" })

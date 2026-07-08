@@ -19,6 +19,7 @@ import { Route as DashboardSearchRouteImport } from './routes/dashboard.search'
 import { Route as DashboardReportsRouteImport } from './routes/dashboard.reports'
 import { Route as DashboardProfileRouteImport } from './routes/dashboard.profile'
 import { Route as DashboardMonitoringRouteImport } from './routes/dashboard.monitoring'
+import { Route as DashboardApiDebugRouteImport } from './routes/dashboard.api-debug'
 import { Route as CompanyIcoRouteImport } from './routes/company.$ico'
 
 const SearchRoute = SearchRouteImport.update({
@@ -71,6 +72,11 @@ const DashboardMonitoringRoute = DashboardMonitoringRouteImport.update({
   path: '/monitoring',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardApiDebugRoute = DashboardApiDebugRouteImport.update({
+  id: '/api-debug',
+  path: '/api-debug',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const CompanyIcoRoute = CompanyIcoRouteImport.update({
   id: '/company/$ico',
   path: '/company/$ico',
@@ -84,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/search': typeof SearchRoute
   '/company/$ico': typeof CompanyIcoRoute
+  '/dashboard/api-debug': typeof DashboardApiDebugRoute
   '/dashboard/monitoring': typeof DashboardMonitoringRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reports': typeof DashboardReportsRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/search': typeof SearchRoute
   '/company/$ico': typeof CompanyIcoRoute
+  '/dashboard/api-debug': typeof DashboardApiDebugRoute
   '/dashboard/monitoring': typeof DashboardMonitoringRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reports': typeof DashboardReportsRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/search': typeof SearchRoute
   '/company/$ico': typeof CompanyIcoRoute
+  '/dashboard/api-debug': typeof DashboardApiDebugRoute
   '/dashboard/monitoring': typeof DashboardMonitoringRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/reports': typeof DashboardReportsRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/search'
     | '/company/$ico'
+    | '/dashboard/api-debug'
     | '/dashboard/monitoring'
     | '/dashboard/profile'
     | '/dashboard/reports'
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/search'
     | '/company/$ico'
+    | '/dashboard/api-debug'
     | '/dashboard/monitoring'
     | '/dashboard/profile'
     | '/dashboard/reports'
@@ -150,6 +161,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/search'
     | '/company/$ico'
+    | '/dashboard/api-debug'
     | '/dashboard/monitoring'
     | '/dashboard/profile'
     | '/dashboard/reports'
@@ -238,6 +250,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardMonitoringRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/api-debug': {
+      id: '/dashboard/api-debug'
+      path: '/api-debug'
+      fullPath: '/dashboard/api-debug'
+      preLoaderRoute: typeof DashboardApiDebugRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/company/$ico': {
       id: '/company/$ico'
       path: '/company/$ico'
@@ -249,6 +268,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface DashboardRouteChildren {
+  DashboardApiDebugRoute: typeof DashboardApiDebugRoute
   DashboardMonitoringRoute: typeof DashboardMonitoringRoute
   DashboardProfileRoute: typeof DashboardProfileRoute
   DashboardReportsRoute: typeof DashboardReportsRoute
@@ -257,6 +277,7 @@ interface DashboardRouteChildren {
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardApiDebugRoute: DashboardApiDebugRoute,
   DashboardMonitoringRoute: DashboardMonitoringRoute,
   DashboardProfileRoute: DashboardProfileRoute,
   DashboardReportsRoute: DashboardReportsRoute,
