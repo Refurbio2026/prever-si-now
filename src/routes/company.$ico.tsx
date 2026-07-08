@@ -45,7 +45,9 @@ import { CompanyActions } from "@/components/company-actions";
 import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
 import type { Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
-import type { ProviderSourceStatus } from "@/lib/providers/types";
+import type { ProviderSourceStatus, ProviderDiagnostic } from "@/lib/providers/types";
+import { PROVIDER_META, IMPLEMENTED_SOURCES } from "@/lib/providers/registry-labels";
+
 
 export const Route = createFileRoute("/company/$ico")({
   component: CompanyProfilePage,
