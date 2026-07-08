@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      company_ai_reports: {
+        Row: {
+          created_at: string
+          financial_score: number
+          generated_at: string
+          growth_score: number
+          ico: string
+          id: string
+          overall_score: number
+          public_score: number
+          recommendation: string
+          strengths: Json
+          summary: string
+          updated_at: string
+          warnings: Json
+          weaknesses: Json
+        }
+        Insert: {
+          created_at?: string
+          financial_score: number
+          generated_at?: string
+          growth_score: number
+          ico: string
+          id?: string
+          overall_score: number
+          public_score: number
+          recommendation: string
+          strengths?: Json
+          summary: string
+          updated_at?: string
+          warnings?: Json
+          weaknesses?: Json
+        }
+        Update: {
+          created_at?: string
+          financial_score?: number
+          generated_at?: string
+          growth_score?: number
+          ico?: string
+          id?: string
+          overall_score?: number
+          public_score?: number
+          recommendation?: string
+          strengths?: Json
+          summary?: string
+          updated_at?: string
+          warnings?: Json
+          weaknesses?: Json
+        }
+        Relationships: []
+      }
       company_cache: {
         Row: {
           data: Json

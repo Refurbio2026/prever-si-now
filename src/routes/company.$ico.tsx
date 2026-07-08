@@ -48,6 +48,7 @@ import { RiskBadge, formatCurrency } from "@/components/risk-badge";
 import { CompanyActions } from "@/components/company-actions";
 import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
+import { AiReportCard } from "@/components/ai-report-card";
 import { useAuth } from "@/hooks/use-auth";
 
 import type {
@@ -378,19 +379,7 @@ function CompanyProfileView({
 
           {/* OVERVIEW */}
           <TabsContent value="overview" className="space-y-6">
-            {company.aiSummary && (
-              <Card className="overflow-hidden rounded-2xl border-primary/20 shadow-soft">
-                <div className="bg-[image:var(--gradient-primary)] px-6 py-4">
-                  <div className="flex items-center gap-2 text-primary-foreground">
-                    <Sparkles className="h-4 w-4" />
-                    <span className="text-sm font-semibold">AI zhrnutie</span>
-                  </div>
-                </div>
-                <div className="p-6">
-                  <p className="text-sm leading-relaxed text-foreground">{company.aiSummary}</p>
-                </div>
-              </Card>
-            )}
+            <AiReportCard ico={ico} />
 
             {criticalRisks.length > 0 && (
               <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
