@@ -252,8 +252,7 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
 }
 
 export async function finstatSearchByName(query: string): Promise<FinstatSearchHit[]> {
-  const hash = computeHash(query);
-  const data = (await finstatFetch("/autocomplete-ext", { Query: query, Hash: hash })) as
+  const data = (await finstatFetch("/autocomplete-ext", { Query: query }, query)) as
     | { Results?: FinstatSearchHit[] }
     | FinstatSearchHit[]
     | null;
@@ -263,11 +262,11 @@ export async function finstatSearchByName(query: string): Promise<FinstatSearchH
 }
 
 export async function finstatGetByIco(ico: string): Promise<FinstatRawCompany> {
-  const hash = computeHash(ico);
-  const data = (await finstatFetch("/detail", { Ico: ico, Hash: hash })) as FinstatRawCompany | null;
+  const data = (await finstatFetch("/detail", { Ico: ico }, ico)) as FinstatRawCompany | null;
   if (!data || !data.Ico) throw new FinstatError("not_found", `Company with IČO ${ico} not found.`);
   return data;
 }
+
 
 // ---------- Normalization ----------
 
