@@ -48,13 +48,23 @@ import { RiskBadge, formatCurrency } from "@/components/risk-badge";
 import { CompanyActions } from "@/components/company-actions";
 import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
-import type { AccountingStatement, Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
+import type {
+  AccountingStatement,
+  BasicCompanyInfo,
+  Company,
+  CompanyOwner,
+  CompanyPerson,
+  FinancialYear,
+  ProcurementRecord,
+  PublicContract,
+  RiskIndicator,
+  UnifiedCompany,
+} from "@/lib/types";
 import type {
   FieldMergeAudit,
   ProviderSourceStatus,
   ProviderDiagnostic,
   ProviderSourceId,
-  RegistryDetails,
 } from "@/lib/providers/types";
 import { PROVIDER_META, IMPLEMENTED_SOURCES, providerMeta } from "@/lib/providers/registry-labels";
 
