@@ -8,7 +8,18 @@ import type {
   FinancialYear,
   RiskIndicator,
 } from "@/lib/types";
-import type { OrsrRegistryDetails } from "./orsr.provider.server";
+
+/** Registry (ORSR / RPO) detail bundle. Kept here so client code can render
+ *  it without importing any `.server.ts` module. */
+export interface RegistryDetails {
+  source: ProviderSourceId;
+  registrationNumber?: string;
+  legalForm?: string;
+  registeredAddress?: string;
+  registrationDate?: string;
+  status?: string;
+  statutoryRepresentatives: CompanyPerson[];
+}
 
 
 export type ProviderSourceId =
