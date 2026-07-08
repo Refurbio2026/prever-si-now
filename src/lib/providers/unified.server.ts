@@ -44,15 +44,18 @@ function toBasicInfo(
 }
 
 function toOwners(people: CompanyPerson[]): CompanyOwner[] {
-  return people
-    .filter((p) => p.role === "owner" || p.role === "beneficial_owner")
-    .map((p) => ({
+  const owners: CompanyOwner[] = [];
+  for (const p of people) {
+    if (p.role !== "owner" && p.role !== "beneficial_owner") continue;
+    owners.push({
       name: p.name,
       share: p.share,
       since: p.since,
       address: p.address,
       role: p.role,
-    }));
+    });
+  }
+  return owners;
 }
 
 function toContracts(all: GovContract[]): PublicContract[] {
