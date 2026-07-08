@@ -25,6 +25,7 @@ import { Route as DashboardApiDebugRouteImport } from './routes/dashboard.api-de
 import { Route as CompanyIcoRouteImport } from './routes/company.$ico'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminImportsRouteImport } from './routes/admin.imports'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
 import { Route as AdminApiDebugRouteImport } from './routes/admin.api-debug'
 
@@ -108,6 +109,11 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminImportsRoute = AdminImportsRouteImport.update({
+  id: '/imports',
+  path: '/imports',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminCompaniesRoute = AdminCompaniesRouteImport.update({
   id: '/companies',
   path: '/companies',
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/search': typeof SearchRoute
   '/admin/api-debug': typeof AdminApiDebugRoute
   '/admin/companies': typeof AdminCompaniesRoute
+  '/admin/imports': typeof AdminImportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/company/$ico': typeof CompanyIcoRoute
@@ -146,6 +153,7 @@ export interface FileRoutesByTo {
   '/search': typeof SearchRoute
   '/admin/api-debug': typeof AdminApiDebugRoute
   '/admin/companies': typeof AdminCompaniesRoute
+  '/admin/imports': typeof AdminImportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/company/$ico': typeof CompanyIcoRoute
@@ -167,6 +175,7 @@ export interface FileRoutesById {
   '/search': typeof SearchRoute
   '/admin/api-debug': typeof AdminApiDebugRoute
   '/admin/companies': typeof AdminCompaniesRoute
+  '/admin/imports': typeof AdminImportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/company/$ico': typeof CompanyIcoRoute
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/admin/api-debug'
     | '/admin/companies'
+    | '/admin/imports'
     | '/admin/settings'
     | '/admin/users'
     | '/company/$ico'
@@ -207,6 +217,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/admin/api-debug'
     | '/admin/companies'
+    | '/admin/imports'
     | '/admin/settings'
     | '/admin/users'
     | '/company/$ico'
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/admin/api-debug'
     | '/admin/companies'
+    | '/admin/imports'
     | '/admin/settings'
     | '/admin/users'
     | '/company/$ico'
@@ -363,6 +375,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/imports': {
+      id: '/admin/imports'
+      path: '/imports'
+      fullPath: '/admin/imports'
+      preLoaderRoute: typeof AdminImportsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/companies': {
       id: '/admin/companies'
       path: '/companies'
@@ -383,6 +402,7 @@ declare module '@tanstack/react-router' {
 interface AdminRouteChildren {
   AdminApiDebugRoute: typeof AdminApiDebugRoute
   AdminCompaniesRoute: typeof AdminCompaniesRoute
+  AdminImportsRoute: typeof AdminImportsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -391,6 +411,7 @@ interface AdminRouteChildren {
 const AdminRouteChildren: AdminRouteChildren = {
   AdminApiDebugRoute: AdminApiDebugRoute,
   AdminCompaniesRoute: AdminCompaniesRoute,
+  AdminImportsRoute: AdminImportsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
