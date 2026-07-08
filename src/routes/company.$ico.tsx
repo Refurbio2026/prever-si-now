@@ -385,7 +385,10 @@ function CompanyProfileView({
                 <InfoField label="SK NACE popis" value={na(company.skNaceText)} />
               </div>
             </Card>
+
+            <ProviderStatusSection ico={ico} sources={sources} diagnostics={diagnostics} />
           </TabsContent>
+
 
           {/* FINANCIALS */}
           <TabsContent value="financials" className="space-y-6">
