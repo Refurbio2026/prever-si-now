@@ -51,12 +51,17 @@ import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
 import {
   getCompanyRecordsFn,
-  importCompanyRegistryFn,
-  importCompanyPeopleFn,
-  importCompanyHistoryFn,
   type CompanyHistoryRecord,
   type CompanyPersonRecord,
 } from "@/lib/company-records.functions";
+import {
+  ensureCompanyDataFn,
+  getCompanyDataStatusFn,
+  runDataHubWorkerFn,
+  AUTO_SOURCES,
+  type AutoSource,
+  type SourceProgress,
+} from "@/lib/datahub-auto.functions";
 import { AiReportCard } from "@/components/ai-report-card";
 import { SeverityBadge } from "@/components/severity-badge";
 import {

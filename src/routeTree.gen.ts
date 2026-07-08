@@ -29,6 +29,7 @@ import { Route as AdminImportsRouteImport } from './routes/admin.imports'
 import { Route as AdminDatahubRouteImport } from './routes/admin.datahub'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
 import { Route as AdminApiDebugRouteImport } from './routes/admin.api-debug'
+import { Route as ApiPublicHooksDatahubWorkerRouteImport } from './routes/api/public/hooks/datahub-worker'
 
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
@@ -130,6 +131,12 @@ const AdminApiDebugRoute = AdminApiDebugRouteImport.update({
   path: '/api-debug',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApiPublicHooksDatahubWorkerRoute =
+  ApiPublicHooksDatahubWorkerRouteImport.update({
+    id: '/api/public/hooks/datahub-worker',
+    path: '/api/public/hooks/datahub-worker',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/search': typeof DashboardSearchRoute
   '/admin/': typeof AdminIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -172,6 +180,7 @@ export interface FileRoutesByTo {
   '/dashboard/search': typeof DashboardSearchRoute
   '/admin': typeof AdminIndexRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -195,6 +204,7 @@ export interface FileRoutesById {
   '/dashboard/search': typeof DashboardSearchRoute
   '/admin/': typeof AdminIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/dashboard/search'
     | '/admin/'
     | '/dashboard/'
+    | '/api/public/hooks/datahub-worker'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -239,6 +250,7 @@ export interface FileRouteTypes {
     | '/dashboard/search'
     | '/admin'
     | '/dashboard'
+    | '/api/public/hooks/datahub-worker'
   id:
     | '__root__'
     | '/'
@@ -261,6 +273,7 @@ export interface FileRouteTypes {
     | '/dashboard/search'
     | '/admin/'
     | '/dashboard/'
+    | '/api/public/hooks/datahub-worker'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -271,6 +284,7 @@ export interface RootRouteChildren {
   RegisterRoute: typeof RegisterRoute
   SearchRoute: typeof SearchRoute
   CompanyIcoRoute: typeof CompanyIcoRoute
+  ApiPublicHooksDatahubWorkerRoute: typeof ApiPublicHooksDatahubWorkerRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -415,6 +429,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminApiDebugRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/api/public/hooks/datahub-worker': {
+      id: '/api/public/hooks/datahub-worker'
+      path: '/api/public/hooks/datahub-worker'
+      fullPath: '/api/public/hooks/datahub-worker'
+      preLoaderRoute: typeof ApiPublicHooksDatahubWorkerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -470,6 +491,7 @@ const rootRouteChildren: RootRouteChildren = {
   RegisterRoute: RegisterRoute,
   SearchRoute: SearchRoute,
   CompanyIcoRoute: CompanyIcoRoute,
+  ApiPublicHooksDatahubWorkerRoute: ApiPublicHooksDatahubWorkerRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
