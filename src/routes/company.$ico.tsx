@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -51,12 +52,16 @@ import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
 import {
   getCompanyRecordsFn,
-  importCompanyRegistryFn,
-  importCompanyPeopleFn,
-  importCompanyHistoryFn,
   type CompanyHistoryRecord,
   type CompanyPersonRecord,
 } from "@/lib/company-records.functions";
+import {
+  ensureCompanyDataFn,
+  getCompanyDataStatusFn,
+  runDataHubWorkerFn,
+  type AutoSource,
+  type SourceProgress,
+} from "@/lib/datahub-auto.functions";
 import { AiReportCard } from "@/components/ai-report-card";
 import { SeverityBadge } from "@/components/severity-badge";
 import {
@@ -287,47 +292,50 @@ function CompanyProfileView({
   const recordsLoading = recordsQuery.isLoading;
 
   const qc = useQueryClient();
-  const runRegistry = useServerFn(importCompanyRegistryFn);
-  const runPeople = useServerFn(importCompanyPeopleFn);
-  const runHistory = useServerFn(importCompanyHistoryFn);
-  const autoImport = useMutation({
-    mutationFn: async () => {
-      const results = await Promise.all([
-        runRegistry({ data: { ico } }),
-        runPeople({ data: { ico } }),
-        runHistory({ data: { ico } }),
-      ]);
-      const failed = results.filter((r) => !r.ok);
-      if (failed.length === results.length) {
-        throw new Error(failed[0]?.error ?? "Import zlyhal.");
-      }
-      return {
-        imported: results.reduce((s, r) => s + r.imported, 0),
-        partial: failed.length > 0,
-        firstError: failed[0]?.error,
-      };
-    },
-    onSuccess: (res) => {
-      if (res.partial) {
-        toast.warning("Import čiastočne úspešný", {
-          description: res.firstError ?? "Niektoré zdroje zlyhali.",
-        });
-      } else {
-        toast.success("Verejné registre boli načítané", {
-          description: `Importovaných ${res.imported} záznamov.`,
-        });
-      }
-      qc.invalidateQueries({ queryKey: ["company-records", ico] });
-      qc.invalidateQueries({ queryKey: ["import-logs"] });
-    },
-    onError: (err) => {
-      toast.error("Import zlyhal", { description: (err as Error).message });
-    },
-  });
+  const ensureFn = useServerFn(ensureCompanyDataFn);
+  const statusFn = useServerFn(getCompanyDataStatusFn);
+  const workerFn = useServerFn(runDataHubWorkerFn);
 
-  const hasAnyDbData =
-    !!dbRegistry || dbPeople.length > 0 || dbHistory.length > 0;
-  const showImportBanner = !recordsLoading && !hasAnyDbData;
+  // Automatically enqueue any missing/stale sources on mount. Runs once per IČO.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ensureFn({ data: { ico } });
+        if (cancelled) return;
+        if (res.enqueued.length > 0) {
+          // Kick the worker immediately so users don't wait for cron.
+          void workerFn().catch(() => undefined);
+          qc.invalidateQueries({ queryKey: ["company-data-status", ico] });
+        }
+      } catch {
+        // Silent — the profile still renders whatever data exists.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ico, ensureFn, workerFn, qc]);
+
+  const statusQuery = useQuery({
+    queryKey: ["company-data-status", ico],
+    queryFn: () => statusFn({ data: { ico } }),
+    refetchInterval: (q) => (q.state.data?.loading ? 10_000 : false),
+  });
+  const status = statusQuery.data;
+  const previousLoadingRef = useRef<boolean>(false);
+  useEffect(() => {
+    const currentlyLoading = status?.loading ?? false;
+    if (previousLoadingRef.current && !currentlyLoading) {
+      // Just finished — refresh company + records queries.
+      qc.invalidateQueries({ queryKey: ["company-intel", ico] });
+      qc.invalidateQueries({ queryKey: ["company-records", ico] });
+    }
+    previousLoadingRef.current = currentlyLoading;
+  }, [status?.loading, ico, qc]);
+
+  const showProgressCard = !!status && (status.loading || status.anyFailed);
+
 
 
   // All section data comes from the unified structure — never directly from
@@ -445,12 +453,8 @@ function CompanyProfileView({
       </div>
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        {showImportBanner && (
-          <ImportRegistriesBanner
-            isAuthenticated={isAuthenticated}
-            isPending={autoImport.isPending}
-            onImport={() => autoImport.mutate()}
-          />
+        {showProgressCard && status && (
+          <DataIngestionProgressCard status={status} />
         )}
         <Tabs defaultValue="overview">
           <TabsList className="mb-6 flex h-auto w-full flex-wrap justify-start gap-1 rounded-2xl bg-secondary/60 p-1">
@@ -1010,45 +1014,107 @@ function DbPeopleCard({
   );
 }
 
-function ImportRegistriesBanner({
-  isAuthenticated,
-  isPending,
-  onImport,
+const SOURCE_DISPLAY: Record<AutoSource, string> = {
+  finstat: "Finstat",
+  ruz: "RÚZ",
+  rpvs: "RPVS",
+  crz: "CRZ",
+  registry: "Register",
+  people: "Osoby",
+  history: "História",
+  ai: "AI",
+};
+
+function sourceBadge(p: SourceProgress): { label: string; className: string } {
+  if (p.queueStatus === "running")
+    return {
+      label: "Načítavam…",
+      className: "bg-primary/10 text-primary border-primary/30",
+    };
+  if (p.queueStatus === "pending")
+    return {
+      label: "V rade",
+      className: "bg-muted text-muted-foreground border-border",
+    };
+  if (p.queueStatus === "failed")
+    return {
+      label: "Zlyhalo",
+      className: "bg-destructive/10 text-destructive border-destructive/30",
+    };
+  if (p.freshness === "fresh")
+    return {
+      label: "Aktuálne",
+      className: "bg-success/10 text-success-foreground border-success/30",
+    };
+  if (p.freshness === "stale")
+    return {
+      label: "Zastarané",
+      className: "bg-warning/10 text-warning-foreground border-warning/30",
+    };
+  return {
+    label: "Chýba",
+    className: "bg-muted text-muted-foreground border-border",
+  };
+}
+
+function DataIngestionProgressCard({
+  status,
 }: {
-  isAuthenticated: boolean;
-  isPending: boolean;
-  onImport: () => void;
+  status: {
+    loading: boolean;
+    anyFailed: boolean;
+    sources: SourceProgress[];
+  };
 }) {
+  const done = status.sources.filter(
+    (s) => s.freshness === "fresh" || s.queueStatus === "success",
+  ).length;
+  const total = status.sources.length;
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   return (
     <Card className="mb-6 rounded-2xl border-border/70 p-5 shadow-soft">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="font-semibold">Verejné registre zatiaľ neboli načítané</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {isAuthenticated
-              ? "Načítať údaje z ORSR / RPO pre osoby, históriu a základné údaje."
-              : "Pre načítanie verejných registrov sa prihláste."}
-          </p>
-        </div>
-        {isAuthenticated ? (
-          <Button onClick={onImport} disabled={isPending} className="rounded-xl">
-            {isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Načítavam…
-              </>
-            ) : (
-              "Načítať verejné registre"
-            )}
-          </Button>
+      <div className="mb-3 flex items-center gap-2">
+        {status.loading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        ) : status.anyFailed ? (
+          <AlertTriangle className="h-4 w-4 text-warning-foreground" />
         ) : (
-          <Button asChild variant="outline" className="rounded-xl">
-            <Link to="/auth">Prihlásiť sa</Link>
-          </Button>
+          <CheckCircle2 className="h-4 w-4 text-success-foreground" />
         )}
+        <h3 className="font-semibold">
+          {status.loading
+            ? "Načítavame údaje z verejných registrov…"
+            : status.anyFailed
+              ? "Niektoré zdroje sa nepodarilo načítať. Skúsime ich obnoviť automaticky."
+              : "Údaje sú aktuálne"}
+        </h3>
+      </div>
+      <Progress value={pct} className="mb-4 h-1.5" />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {status.sources.map((s) => {
+          const b = sourceBadge(s);
+          return (
+            <div
+              key={s.source}
+              className="flex items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-2"
+            >
+              <span className="text-sm font-medium">
+                {SOURCE_DISPLAY[s.source]}
+              </span>
+              <Badge
+                variant="outline"
+                className={`text-[10px] font-normal ${b.className}`}
+              >
+                {b.label}
+              </Badge>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );
 }
+
 
 function DbHistoryCard({
   history,

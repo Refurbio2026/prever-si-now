@@ -10,7 +10,8 @@ export type ImportSource =
   | "crz"
   | "registry"
   | "people"
-  | "history";
+  | "history"
+  | "ai";
 
 export const SUPPORTED_SOURCES: readonly ImportSource[] = [
   "finstat",
@@ -20,7 +21,32 @@ export const SUPPORTED_SOURCES: readonly ImportSource[] = [
   "registry",
   "people",
   "history",
+  "ai",
 ] as const;
+
+/** Record success/failure of a source run against public.data_freshness. */
+async function recordFreshness(
+  ico: string,
+  source: ImportSource,
+  ok: boolean,
+  message?: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await supabaseAdmin
+    .from("data_freshness")
+    .upsert(
+      {
+        ico,
+        source,
+        last_attempt_at: now,
+        last_success_at: ok ? now : undefined,
+        status: ok ? "success" : "failed",
+        error_message: ok ? null : (message ?? "Neznáma chyba"),
+        updated_at: now,
+      },
+      { onConflict: "ico,source" },
+    );
+}
 
 const FINSTAT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -153,6 +179,19 @@ async function runHistory(ico: string): Promise<SourceRunResult> {
   return { imported: res.imported, skipped: false };
 }
 
+async function runAi(ico: string): Promise<SourceRunResult> {
+  const { getAiReportFn } = await import("./ai-report.functions");
+  const res = await getAiReportFn({ data: { ico } });
+  if (!res.ok) {
+    return { imported: 0, skipped: true, message: res.error };
+  }
+  return {
+    imported: 1,
+    skipped: res.source === "cache",
+    message: res.source === "cache" ? "cache hit" : undefined,
+  };
+}
+
 /** Run one source for one IČO. Writes import_logs (except for registry/people/history
  *  which log internally via imports.server withLog). */
 export async function runSourceForIco(
@@ -160,21 +199,43 @@ export async function runSourceForIco(
   source: ImportSource,
   force: boolean,
 ): Promise<SourceRunResult> {
-  switch (source) {
-    case "finstat":
-      return writeLog(ico, "FINSTAT:detail", () => runFinstat(ico, force));
-    case "ruz":
-      return writeLog(ico, "RUZ:statements", () => runRuz(ico));
-    case "rpvs":
-      return writeLog(ico, "RPVS:partners", () => runRpvs(ico));
-    case "crz":
-      return writeLog(ico, "CRZ:contracts", () => runCrz(ico));
-    case "registry":
-      return runRegistry(ico);
-    case "people":
-      return runPeople(ico);
-    case "history":
-      return runHistory(ico);
+  let res: SourceRunResult;
+  let ok = false;
+  try {
+    switch (source) {
+      case "finstat":
+        res = await writeLog(ico, "FINSTAT:detail", () => runFinstat(ico, force));
+        break;
+      case "ruz":
+        res = await writeLog(ico, "RUZ:statements", () => runRuz(ico));
+        break;
+      case "rpvs":
+        res = await writeLog(ico, "RPVS:partners", () => runRpvs(ico));
+        break;
+      case "crz":
+        res = await writeLog(ico, "CRZ:contracts", () => runCrz(ico));
+        break;
+      case "registry":
+        res = await runRegistry(ico);
+        break;
+      case "people":
+        res = await runPeople(ico);
+        break;
+      case "history":
+        res = await runHistory(ico);
+        break;
+      case "ai":
+        res = await writeLog(ico, "AI:report", () => runAi(ico));
+        break;
+    }
+    ok = true;
+    await recordFreshness(ico, source, true, res.message);
+    return res;
+  } catch (err) {
+    if (!ok) {
+      await recordFreshness(ico, source, false, (err as Error).message);
+    }
+    throw err;
   }
 }
 

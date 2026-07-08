@@ -13,6 +13,7 @@ const SOURCE_ENUM = z.enum([
   "registry",
   "people",
   "history",
+  "ai",
 ]);
 
 export type ImportSourceId = z.infer<typeof SOURCE_ENUM>;
@@ -25,6 +26,7 @@ export const ALL_SOURCES: readonly ImportSourceId[] = [
   "registry",
   "people",
   "history",
+  "ai",
 ] as const;
 
 async function assertAdmin(

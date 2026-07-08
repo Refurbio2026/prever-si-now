@@ -257,6 +257,42 @@ export type Database = {
         }
         Relationships: []
       }
+      data_freshness: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          ico: string
+          id: string
+          last_attempt_at: string | null
+          last_success_at: string | null
+          source: string
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          ico: string
+          id?: string
+          last_attempt_at?: string | null
+          last_success_at?: string | null
+          source: string
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          ico?: string
+          id?: string
+          last_attempt_at?: string | null
+          last_success_at?: string | null
+          source?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       import_logs: {
         Row: {
           error_message: string | null
