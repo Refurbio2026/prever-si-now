@@ -544,11 +544,22 @@ function CompanyProfileView({
               title="Štatutárny orgán / Konatelia"
               icon={Users}
               people={executives}
-              sourceBadge={registry?.statutoryRepresentatives?.length ? "ORSR" : undefined}
+              sourceLabel="ORSR"
             />
-            <PeopleCard title="Spoločníci" icon={Crown} people={owners} showShare />
-            <PeopleCard title="Koneční užívatelia výhod (KUV)" icon={ShieldCheck} people={beneficials} showShare />
+            <OwnersCard
+              title="Spoločníci"
+              icon={Crown}
+              owners={partnersOwners}
+              sourceLabel="RPVS"
+            />
+            <OwnersCard
+              title="Koneční užívatelia výhod (KUV)"
+              icon={ShieldCheck}
+              owners={beneficials}
+              sourceLabel="RPVS"
+            />
           </TabsContent>
+
 
           {/* RISKS */}
           <TabsContent value="risks" className="space-y-3">
