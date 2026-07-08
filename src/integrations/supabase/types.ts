@@ -86,6 +86,57 @@ export type Database = {
         }
         Relationships: []
       }
+      company_changes: {
+        Row: {
+          change_type: string
+          description: string | null
+          detected_at: string
+          ico: string
+          id: string
+          severity: string
+          title: string
+        }
+        Insert: {
+          change_type: string
+          description?: string | null
+          detected_at?: string
+          ico: string
+          id?: string
+          severity?: string
+          title: string
+        }
+        Update: {
+          change_type?: string
+          description?: string | null
+          detected_at?: string
+          ico?: string
+          id?: string
+          severity?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      company_snapshots: {
+        Row: {
+          created_at: string
+          data: Json
+          ico: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          ico: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          ico?: string
+          id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_name: string | null
