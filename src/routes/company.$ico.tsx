@@ -445,6 +445,13 @@ function CompanyProfileView({
       </div>
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+        {showImportBanner && (
+          <ImportRegistriesBanner
+            isAuthenticated={isAuthenticated}
+            isPending={autoImport.isPending}
+            onImport={() => autoImport.mutate()}
+          />
+        )}
         <Tabs defaultValue="overview">
           <TabsList className="mb-6 flex h-auto w-full flex-wrap justify-start gap-1 rounded-2xl bg-secondary/60 p-1">
             {[
