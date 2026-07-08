@@ -1,5 +1,23 @@
 export type RiskLevel = "low" | "medium" | "high";
 
+/**
+ * Normalized shape returned by search endpoints. Not every field is
+ * available for every result — name-based searches return only the light
+ * fields the autocomplete endpoint exposes.
+ */
+export interface CompanySearchResult {
+  name: string;
+  ico: string;
+  dic?: string;
+  address?: string;
+  legalForm?: string;
+  riskScore?: number;
+  revenue?: number;
+  profit?: number;
+  warningIndicators?: string[];
+}
+
+
 export interface Company {
   ico: string;
   dic?: string;
