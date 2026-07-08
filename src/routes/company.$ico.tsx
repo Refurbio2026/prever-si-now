@@ -563,6 +563,11 @@ function CompanyProfileView({
 
           {/* PEOPLE */}
           <TabsContent value="people" className="space-y-6">
+            <RpvsStatusCard
+              status={rpvsStatus}
+              registrationDate={rpvsRegistrationDate}
+              authorizedPerson={authorizedPerson}
+            />
             <PeopleCard
               title="Štatutárny orgán / Konatelia"
               icon={Users}
@@ -582,6 +587,7 @@ function CompanyProfileView({
               sourceLabel="RPVS"
             />
           </TabsContent>
+
 
 
           {/* RISKS */}
