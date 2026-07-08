@@ -397,6 +397,8 @@ function CompanyProfileView({
               </div>
             </Card>
 
+            <RegistryCard registry={registry} company={company} />
+
             <ProviderStatusSection ico={ico} sources={sources} diagnostics={diagnostics} />
           </TabsContent>
 
