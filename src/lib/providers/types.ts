@@ -106,8 +106,21 @@ export interface CompanyIntelligence {
   /** true if any source ended in `unavailable`/`error`/`not_configured` */
   partial: boolean;
   cachedAt: string;
+  /** Per-field provenance map: which provider each displayed field came from. */
+  fieldSources?: Record<string, ProviderSourceId>;
   /** Dev-mode only: detailed per-provider diagnostics. */
   diagnostics?: ProviderDiagnostic[];
+  /** Dev-mode only: per-field merge audit (raw candidate values + decision). */
+  fieldAudit?: FieldMergeAudit[];
+}
+
+/** Dev-mode audit entry: full merge trace for one field. */
+export interface FieldMergeAudit {
+  field: string;
+  chosenSource: ProviderSourceId | null;
+  chosenValue: string | number | boolean | null;
+  decision: string;
+  candidates: Array<{ source: ProviderSourceId; value: unknown }>;
 }
 
 
