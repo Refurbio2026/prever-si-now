@@ -515,7 +515,12 @@ function CompanyProfileView({
 
           {/* PEOPLE */}
           <TabsContent value="people" className="space-y-6">
-            <PeopleCard title="Konatelia" icon={Users} people={executives} />
+            <PeopleCard
+              title="Štatutárny orgán / Konatelia"
+              icon={Users}
+              people={executives}
+              sourceBadge={registry?.statutoryRepresentatives?.length ? "ORSR" : undefined}
+            />
             <PeopleCard title="Spoločníci" icon={Crown} people={owners} showShare />
             <PeopleCard title="Koneční užívatelia výhod (KUV)" icon={ShieldCheck} people={beneficials} showShare />
           </TabsContent>
