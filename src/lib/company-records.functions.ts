@@ -53,6 +53,18 @@ export interface ImportJobResult {
   error?: string;
 }
 
+export interface ImportLogEntry {
+  id: string;
+  ico: string;
+  source: string;
+  status: string;
+  recordsCount: number;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+
 export const getCompanyRecordsFn = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => icoSchema.parse(input))
   .handler(async ({ data }): Promise<CompanyRecordsResponse> => {
