@@ -126,6 +126,12 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       procurementState: contracts.procurement.state,
     });
 
+    let finstatRawInspector: CompanyIntelligence["finstatRawInspector"];
+    if (DEV && finstat.raw) {
+      const { buildFinstatRawInspector } = await import("./finstat.server");
+      finstatRawInspector = buildFinstatRawInspector(finstat.raw);
+    }
+
     const intel: CompanyIntelligence = {
       ico,
       company: company.data,
@@ -146,6 +152,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       fieldSources: company.fieldSources,
       diagnostics: DEV ? diagnostics : undefined,
       fieldAudit: DEV ? audit : undefined,
+      finstatRawInspector,
       unified,
     };
 
