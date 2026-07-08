@@ -146,6 +146,7 @@ export interface BasicCompanyInfo {
   registrationDate?: string;
   registrationNumberText?: string;
   vatPayer?: boolean;
+  vatPayerConfidence?: FieldConfidence;
   skNaceCode?: string;
   skNaceText?: string;
   employees?: number;
