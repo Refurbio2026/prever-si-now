@@ -43,8 +43,9 @@ import { Progress } from "@/components/ui/progress";
 import { RiskBadge, formatCurrency } from "@/components/risk-badge";
 import { CompanyActions } from "@/components/company-actions";
 import { mockAlerts, mockHistory } from "@/lib/mock-data";
-import { getCompanyByIcoFn } from "@/lib/finstat.functions";
+import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
 import type { Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
+import type { ProviderSourceStatus } from "@/lib/providers/types";
 
 export const Route = createFileRoute("/company/$ico")({
   component: CompanyProfilePage,
@@ -61,9 +62,9 @@ export const Route = createFileRoute("/company/$ico")({
 
 function CompanyProfilePage() {
   const { ico } = Route.useParams();
-  const fetchCompany = useServerFn(getCompanyByIcoFn);
+  const fetchCompany = useServerFn(getCompanyIntelligenceFn);
   const query = useQuery({
-    queryKey: ["finstat-company", ico],
+    queryKey: ["company-intel", ico],
     queryFn: () => fetchCompany({ data: { ico } }),
     staleTime: 5 * 60_000,
   });
@@ -75,7 +76,7 @@ function CompanyProfilePage() {
         <div className="mx-auto flex max-w-6xl items-center justify-center px-4 py-24">
           <div className="flex items-center gap-3 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm">Načítavam profil firmy z Finstat…</span>
+            <span className="text-sm">Načítavam údaje z verejných registrov…</span>
           </div>
         </div>
         <SiteFooter />
@@ -111,8 +112,30 @@ function CompanyProfilePage() {
 
   if (!query.data || !query.data.ok) return null;
 
-  const { company, financials, people, risks } = query.data.data;
-  return <CompanyProfileView company={company} financials={financials} people={people} risks={risks} />;
+  const intel = query.data.data;
+  if (!intel.company) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader />
+        <div className="mx-auto max-w-xl px-4 py-24 text-center">
+          <AlertCircle className="mx-auto h-8 w-8 text-warning-foreground" />
+          <h1 className="mt-3 text-2xl font-bold">Firma sa nenašla</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Pre IČO {ico} sme nenašli žiadne údaje.</p>
+        </div>
+        <SiteFooter />
+      </div>
+    );
+  }
+  return (
+    <CompanyProfileView
+      company={intel.company}
+      financials={intel.financials}
+      people={intel.people}
+      risks={intel.risks}
+      sources={intel.sources}
+      partial={intel.partial}
+    />
+  );
 }
 
 function CompanyProfileView({
@@ -120,11 +143,15 @@ function CompanyProfileView({
   financials,
   people,
   risks,
+  sources,
+  partial,
 }: {
   company: Company;
   financials: FinancialYear[];
   people: CompanyPerson[];
   risks: RiskIndicator[];
+  sources: ProviderSourceStatus[];
+  partial: boolean;
 }) {
   const executives = people.filter((p) => p.role === "executive");
   const owners = people.filter((p) => p.role === "owner");
@@ -133,11 +160,24 @@ function CompanyProfileView({
   const hasFinancials = financials.length > 0;
   const latestFin = hasFinancials ? financials[financials.length - 1] : undefined;
   const prevFin = hasFinancials && financials.length > 1 ? financials[financials.length - 2] : latestFin;
+  const okSources = sources.filter((s) => s.state === "ok").length;
 
 
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
+
+      {partial && (
+        <div className="border-b border-warning/30 bg-warning/10">
+          <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 text-sm text-warning-foreground sm:px-6">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <span>
+              Niektoré údaje sú momentálne nedostupné. Overených zdrojov:{" "}
+              <strong>{okSources}</strong> / {sources.length}.
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="border-b border-border/60 bg-secondary/30">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
