@@ -203,12 +203,13 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
     };
   }
 
-  const hash = computeHash(ico);
   try {
-    const { endpoint, status, rawResponse, parsed } = await finstatFetchRaw("/detail", {
-      Ico: ico,
-      Hash: hash,
-    });
+    const { endpoint, status, rawResponse, parsed } = await finstatFetchRaw(
+      "/detail",
+      { Ico: ico },
+      ico,
+    );
+
     const raw = parsed as FinstatRawCompany | null;
     if (!raw || !raw.Ico) {
       return {
