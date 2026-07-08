@@ -2,11 +2,13 @@
 // The UI never sees which provider returned which field.
 
 import type {
+  AccountingStatement,
   Company,
   CompanyPerson,
   FinancialYear,
   RiskIndicator,
 } from "@/lib/types";
+
 
 export type ProviderSourceId =
   | "finstat"
