@@ -123,6 +123,78 @@ export interface AccountingStatement {
   detailUrl?: string;
 }
 
+// ==============================
+// UnifiedCompany — single, provider-tagged view the UI reads from.
+// UI components MUST NOT read directly from ORSR / Finstat / RÚZ / RPVS /
+// CRZ / ÚVO shapes. They read only from UnifiedCompany.
+// ==============================
+
+/** Basic registry-level facts about a company. Sourced from ORSR. */
+export interface BasicCompanyInfo {
+  ico: string;
+  dic?: string;
+  icDph?: string;
+  name: string;
+  legalForm?: string;
+  address?: string;
+  city?: string;
+  registrationDate?: string;
+  registrationNumberText?: string;
+  vatPayer?: boolean;
+  skNaceCode?: string;
+  skNaceText?: string;
+  employees?: number;
+  industry?: string;
+  website?: string;
+  status?: string;
+}
+
+/** Beneficial owner / partner listed in RPVS. */
+export interface CompanyOwner {
+  name: string;
+  share?: number;
+  since?: string;
+  address?: string;
+  role: "owner" | "beneficial_owner";
+}
+
+/** A single public contract filed in CRZ. */
+export interface PublicContract {
+  id: string;
+  title: string;
+  counterparty: string;
+  value?: number;
+  currency?: string;
+  signedAt?: string;
+  url?: string;
+}
+
+/** A single public procurement record from ÚVO. */
+export interface ProcurementRecord {
+  id: string;
+  title: string;
+  counterparty: string;
+  value?: number;
+  currency?: string;
+  signedAt?: string;
+  url?: string;
+}
+
+/**
+ * The single unified shape the UI consumes. Each section is tagged with the
+ * primary provider it comes from — when no data is available, `data` is
+ * empty/undefined and the UI shows "Nedostupné".
+ */
+export interface UnifiedCompany {
+  basicInfo: { provider: "orsr"; data?: BasicCompanyInfo };
+  financials: { provider: "finstat"; data: FinancialYear[] };
+  owners: { provider: "rpvs"; data: CompanyOwner[] };
+  accounting: { provider: "ruz"; data: AccountingStatement[] };
+  contracts: { provider: "crz"; data: PublicContract[] };
+  procurement: { provider: "uvo"; data: ProcurementRecord[] };
+}
+
+
 
 // Loose shape of a raw Finstat detail payload. Finstat returns many
 // optional fields depending on plan/company; we only pin the ones we map.
