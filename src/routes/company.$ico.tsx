@@ -466,24 +466,18 @@ function CompanyProfileView({
 
           {/* FINANCIALS */}
           <TabsContent value="financials" className="space-y-6">
-            {hasFinancials && latestFin && prevFin ? (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <TrendCard label={`Tržby (${latestFin.year})`} value={latestFin.revenue} prev={prevFin.revenue} />
-                <TrendCard label={`Zisk (${latestFin.year})`} value={latestFin.profit} prev={prevFin.profit} />
-                <TrendCard label="EBITDA" value={latestFin.ebitda} prev={prevFin.ebitda} />
-                <TrendCard
-                  label="Aktíva / Pasíva"
-                  value={latestFin.assets - latestFin.liabilities}
-                  prev={prevFin.assets - prevFin.liabilities}
-                  positiveOnly
-                />
-              </div>
-            ) : null}
+            <FinanceKpiSection
+              company={company}
+              financials={financials}
+            />
 
-            {hasFinancials ? (
+            {financials.length >= 2 ? (
               <>
                 <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-                  <h3 className="mb-4 text-lg font-semibold">Vývoj tržieb</h3>
+                  <div className="mb-4 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold">Vývoj tržieb</h3>
+                    <SectionSourceBadge label="Finstat" />
+                  </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
@@ -513,7 +507,10 @@ function CompanyProfileView({
                 </Card>
 
                 <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-                  <h3 className="mb-4 text-lg font-semibold">Zisk vs. EBITDA</h3>
+                  <div className="mb-4 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold">Zisk vs. EBITDA</h3>
+                    <SectionSourceBadge label="Finstat" />
+                  </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
@@ -538,10 +535,11 @@ function CompanyProfileView({
                 </Card>
               </>
             ) : (
-              <Card className="rounded-2xl border-dashed p-8 text-center text-sm text-muted-foreground">
-                Finančné hodnoty nie sú dostupné v strojovo čitateľnej forme.
+              <Card className="rounded-2xl border-dashed p-6 text-center text-sm text-muted-foreground">
+                Detailný časový rad finančných údajov nie je dostupný.
               </Card>
             )}
+
 
             {financials.some(
               (f) => f.assets > 0 || f.liabilities > 0 || f.revenue > 0 || f.profit > 0,
