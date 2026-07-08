@@ -48,6 +48,7 @@ import { RiskBadge, formatCurrency } from "@/components/risk-badge";
 import { CompanyActions } from "@/components/company-actions";
 import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
+import { AiReportCard } from "@/components/ai-report-card";
 import { useAuth } from "@/hooks/use-auth";
 
 import type {
