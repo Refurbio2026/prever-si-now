@@ -109,31 +109,8 @@ function normalizeStatement(raw: RuzStatement): AccountingStatement | null {
   };
 }
 
-function mockStatements(): AccountingStatement[] {
-  const now = new Date().getFullYear();
-  return [
-    {
-      id: "mock-1",
-      year: now - 1,
-      type: "Riadna",
-      periodFrom: `${now - 1}-01`,
-      periodTo: `${now - 1}-12`,
-      submittedAt: `${now}-06-30`,
-      preparedAt: `${now}-04-15`,
-      approvedAt: `${now}-06-01`,
-      consolidated: false,
-    },
-    {
-      id: "mock-2",
-      year: now - 2,
-      type: "Riadna",
-      periodFrom: `${now - 2}-01`,
-      periodTo: `${now - 2}-12`,
-      submittedAt: `${now - 1}-07-01`,
-      consolidated: false,
-    },
-  ];
-}
+// Mock data removed — RÚZ never returns placeholder statements.
+
 
 export async function ruzStatements(
   ico: string,
