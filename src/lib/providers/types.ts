@@ -135,8 +135,14 @@ export interface CompanyIntelligence {
   diagnostics?: ProviderDiagnostic[];
 
   /** Dev-mode only: per-field merge audit (raw candidate values + decision). */
-  /** Dev-mode only: per-field merge audit (raw candidate values + decision). */
   fieldAudit?: FieldMergeAudit[];
+  /** Dev-mode only: every raw key returned by Finstat + whether we map it. */
+  finstatRawInspector?: Array<{
+    key: string;
+    valuePreview: string;
+    mapped: boolean;
+    target?: string;
+  }>;
   /** Unified, provider-tagged view the UI reads from. */
   unified: UnifiedCompany;
 }
