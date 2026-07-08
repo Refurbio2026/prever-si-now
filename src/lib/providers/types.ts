@@ -103,6 +103,20 @@ export interface CompanyIntelligence {
   monitoring?: MonitoringSnapshot;
   /** Registry (ORSR) details — primary source for legal/registry fields. */
   registry?: RegistryDetails;
+  /** RPVS beneficial owners (KUV), currently valid entries only. */
+  beneficialOwners: CompanyPerson[];
+  /** RPVS registration status ("aktívny" / "neaktívny" / "nezaregistrovaný"). */
+  rpvsStatus?: "aktívny" | "neaktívny" | "nezaregistrovaný";
+  /** RPVS authorized person (oprávnená osoba). */
+  authorizedPerson?: {
+    name: string;
+    ico?: string;
+    address?: string;
+    validFrom?: string;
+    validTo?: string;
+  };
+  /** RPVS date of registration (ISO). */
+  rpvsRegistrationDate?: string;
   sources: ProviderSourceStatus[];
   /** true if any source ended in `unavailable`/`error`/`not_configured` */
   partial: boolean;
@@ -111,6 +125,7 @@ export interface CompanyIntelligence {
   fieldSources?: Record<string, ProviderSourceId>;
   /** Dev-mode only: detailed per-provider diagnostics. */
   diagnostics?: ProviderDiagnostic[];
+
   /** Dev-mode only: per-field merge audit (raw candidate values + decision). */
   /** Dev-mode only: per-field merge audit (raw candidate values + decision). */
   fieldAudit?: FieldMergeAudit[];

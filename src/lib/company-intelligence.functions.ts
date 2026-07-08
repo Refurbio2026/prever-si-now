@@ -100,6 +100,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       ico,
       finstat,
       company.registry?.statutoryRepresentatives ?? [],
+      DEV ? diagnostics : undefined,
     );
 
     const sources = [
@@ -132,6 +133,10 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       contracts: contracts.data,
       monitoring: monitoring.data,
       registry: company.registry,
+      beneficialOwners: people.rpvs?.beneficialOwners ?? [],
+      rpvsStatus: people.rpvs?.status,
+      authorizedPerson: people.rpvs?.authorizedPerson,
+      rpvsRegistrationDate: people.rpvs?.registrationDate,
       sources,
       partial: sources.some((s) => s.state !== "ok" && s.state !== "empty"),
       cachedAt: new Date().toISOString(),
@@ -140,6 +145,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       fieldAudit: DEV ? audit : undefined,
       unified,
     };
+
 
 
     // Only cache successful, non-empty results.

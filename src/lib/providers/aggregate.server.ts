@@ -20,7 +20,6 @@ import {
   financialAdminRisks,
   healthInsuranceRisks,
   justiceRisks,
-  rpvsBeneficialOwners,
   ruzFinancials,
   socialInsuranceRisks,
   uvoContracts,
@@ -206,17 +205,25 @@ export async function runPeopleProvider(
   ico: string,
   finstat: FinstatBundle,
   orsrPeople: CompanyPerson[] = [],
-): Promise<{ data: CompanyPerson[]; sources: ProviderSourceStatus[] }> {
-  const rpvs = await safe(rpvsBeneficialOwners(ico), {
-    data: [] as CompanyPerson[],
-    status: err("rpvs"),
+  diagnostics?: ProviderDiagnostic[],
+): Promise<{
+  data: CompanyPerson[];
+  rpvs?: import("./rpvs.provider.server").RpvsBundle;
+  sources: ProviderSourceStatus[];
+}> {
+  const { rpvsPartnerBundle } = await import("./rpvs.provider.server");
+  const rpvs = await safe(rpvsPartnerBundle(ico, diagnostics), {
+    data: undefined as import("./rpvs.provider.server").RpvsBundle | undefined,
+    status: err("rpvs", "people"),
   });
-  // ORSR statutory reps take priority over Finstat's executives.
+  const rpvsPeople = rpvs.data?.beneficialOwners ?? [];
   return {
-    data: mergePeople(orsrPeople, finstat.people.data, rpvs.data),
+    data: mergePeople(orsrPeople, finstat.people.data, rpvsPeople),
+    rpvs: rpvs.data,
     sources: [finstat.people.status, rpvs.status],
   };
 }
+
 
 export async function runContractsProvider(
   ico: string,
