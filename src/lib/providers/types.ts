@@ -7,6 +7,7 @@ import type {
   CompanyPerson,
   FinancialYear,
   RiskIndicator,
+  UnifiedCompany,
 } from "@/lib/types";
 
 /** Registry (ORSR / RPO) detail bundle. Kept here so client code can render
