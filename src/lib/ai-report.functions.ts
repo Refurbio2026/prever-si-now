@@ -186,7 +186,9 @@ export const getAiReportFn = createServerFn({ method: "POST" })
       c.vatPayerConfidence === "confirmed" && c.vatPayer === true
         ? "Platca DPH: áno (potvrdené)"
         : "Platca DPH: Stav DPH nie je možné jednoznačne potvrdiť z dostupných údajov.",
-      yearsSummary ? `Finančné roky — ${yearsSummary}` : null,
+      fins.length >= 2
+        ? `Finančné roky — ${yearsSummary}`
+        : "Finančný časový rad: Detailný časový rad finančných údajov nie je dostupný.",
       contractCount > 0
         ? `Verejné zmluvy (CRZ): ${contractCount}, spolu ${Math.round(contractValue)} €`
         : "Verejné zmluvy: žiadne",
