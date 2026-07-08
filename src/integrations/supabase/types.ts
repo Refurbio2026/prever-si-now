@@ -116,6 +116,84 @@ export type Database = {
         }
         Relationships: []
       }
+      company_history: {
+        Row: {
+          created_at: string
+          description: string | null
+          event_date: string | null
+          event_type: string
+          ico: string
+          id: string
+          imported_at: string
+          source: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          event_date?: string | null
+          event_type: string
+          ico: string
+          id?: string
+          imported_at?: string
+          source?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          event_date?: string | null
+          event_type?: string
+          ico?: string
+          id?: string
+          imported_at?: string
+          source?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      company_people: {
+        Row: {
+          created_at: string
+          ico: string
+          id: string
+          imported_at: string
+          person_name: string
+          role: string
+          source: string
+          updated_at: string
+          valid_from: string | null
+          valid_to: string | null
+        }
+        Insert: {
+          created_at?: string
+          ico: string
+          id?: string
+          imported_at?: string
+          person_name: string
+          role: string
+          source?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_to?: string | null
+        }
+        Update: {
+          created_at?: string
+          ico?: string
+          id?: string
+          imported_at?: string
+          person_name?: string
+          role?: string
+          source?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_to?: string | null
+        }
+        Relationships: []
+      }
       company_snapshots: {
         Row: {
           created_at: string

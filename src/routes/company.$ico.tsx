@@ -49,6 +49,11 @@ import { RiskBadge, formatCurrency } from "@/components/risk-badge";
 import { CompanyActions } from "@/components/company-actions";
 import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
+import {
+  getCompanyRecordsFn,
+  type CompanyHistoryRecord,
+  type CompanyPersonRecord,
+} from "@/lib/company-records.functions";
 import { AiReportCard } from "@/components/ai-report-card";
 import { SeverityBadge } from "@/components/severity-badge";
 import {
@@ -267,8 +272,15 @@ function CompanyProfileView({
   const { user } = useAuth();
   const isAuthenticated = !!user;
 
-
-
+  const fetchRecords = useServerFn(getCompanyRecordsFn);
+  const recordsQuery = useQuery({
+    queryKey: ["company-records", ico],
+    queryFn: () => fetchRecords({ data: { ico } }),
+    staleTime: 5 * 60_000,
+  });
+  const dbPeople: CompanyPersonRecord[] = recordsQuery.data?.people ?? [];
+  const dbHistory: CompanyHistoryRecord[] = recordsQuery.data?.history ?? [];
+  const recordsLoading = recordsQuery.isLoading;
 
   // All section data comes from the unified structure — never directly from
   // ORSR / Finstat / RÚZ / RPVS / CRZ / ÚVO shapes.
@@ -279,11 +291,16 @@ function CompanyProfileView({
   const contracts: PublicContract[] = unified.contracts.data;
   const procurement: ProcurementRecord[] = unified.procurement.data;
 
-  const executives = people.filter((p) => p.role === "executive");
+  const dbExecutives = dbPeople.filter((p) => categorizeDbRole(p.role) === "executive");
+  const dbOwners = dbPeople.filter((p) => categorizeDbRole(p.role) === "owner");
+  const dbBeneficials = dbPeople.filter((p) => categorizeDbRole(p.role) === "beneficial_owner");
+  const dbAuthorized = dbPeople.filter((p) => categorizeDbRole(p.role) === "authorized");
+
   const beneficials = owners.filter((o) => o.role === "beneficial_owner");
   const partnersOwners = owners.filter((o) => o.role === "owner");
   const criticalRisks = risks.filter((r) => r.status !== "clear");
   const okSources = sources.filter((s) => s.state === "ok").length;
+
 
 
   return (
@@ -605,24 +622,51 @@ function CompanyProfileView({
               registrationDate={rpvsRegistrationDate}
               authorizedPerson={authorizedPerson}
             />
-            <PeopleCard
+            <DbPeopleCard
               title="Štatutárny orgán / Konatelia"
               icon={Users}
-              people={executives}
-              sourceLabel="ORSR"
+              people={dbExecutives}
+              loading={recordsLoading}
+              emptyText="Žiadni štatutári nie sú evidovaní."
             />
-            <OwnersCard
+            <DbPeopleCard
               title="Spoločníci"
               icon={Crown}
-              owners={partnersOwners}
-              sourceLabel="RPVS"
+              people={dbOwners}
+              loading={recordsLoading}
+              emptyText="Žiadni spoločníci nie sú evidovaní."
             />
-            <OwnersCard
+            <DbPeopleCard
               title="Koneční užívatelia výhod (KUV)"
               icon={ShieldCheck}
-              owners={beneficials}
-              sourceLabel="RPVS"
+              people={dbBeneficials}
+              loading={recordsLoading}
+              emptyText="Žiadni koneční užívatelia výhod nie sú evidovaní."
             />
+            <DbPeopleCard
+              title="Oprávnená osoba"
+              icon={ShieldCheck}
+              people={dbAuthorized}
+              loading={recordsLoading}
+              emptyText="Žiadna oprávnená osoba nie je evidovaná."
+            />
+            {/* Legacy fallback: RPVS-sourced owners/beneficial owners from aggregation */}
+            {(partnersOwners.length > 0 || beneficials.length > 0) && (
+              <>
+                <OwnersCard
+                  title="Spoločníci (RPVS)"
+                  icon={Crown}
+                  owners={partnersOwners}
+                  sourceLabel="RPVS"
+                />
+                <OwnersCard
+                  title="Koneční užívatelia výhod (RPVS)"
+                  icon={ShieldCheck}
+                  owners={beneficials}
+                  sourceLabel="RPVS"
+                />
+              </>
+            )}
           </TabsContent>
 
 
@@ -659,33 +703,9 @@ function CompanyProfileView({
 
           {/* HISTORY */}
           <TabsContent value="history">
-            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-              <h3 className="mb-6 text-lg font-semibold">Časová os zmien</h3>
-              <ol className="relative border-l border-border pl-6">
-                {mockHistory.map((h, i) => (
-                  <li key={i} className="relative mb-6 last:mb-0">
-                    <span
-                      className={`absolute -left-[29px] flex h-4 w-4 items-center justify-center rounded-full ring-4 ring-background ${
-                        h.severity === "critical"
-                          ? "bg-destructive"
-                          : h.severity === "warning"
-                          ? "bg-warning"
-                          : h.severity === "success"
-                          ? "bg-success"
-                          : "bg-primary"
-                      }`}
-                    />
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {new Date(h.date).toLocaleDateString("sk-SK")}
-                    </div>
-                    <div className="mt-1 text-sm font-semibold">{h.type}</div>
-                    <div className="text-sm text-muted-foreground">{h.description}</div>
-                  </li>
-                ))}
-              </ol>
-            </Card>
+            <DbHistoryCard history={dbHistory} loading={recordsLoading} />
           </TabsContent>
+
 
           {/* MONITORING */}
           <TabsContent value="monitoring" className="space-y-6">
@@ -860,6 +880,156 @@ function PeopleCard({
       </div>
     </Card>
   );
+}
+
+type DbRoleCategory = "executive" | "owner" | "beneficial_owner" | "authorized";
+
+function categorizeDbRole(role: string): DbRoleCategory {
+  const r = role.toLowerCase();
+  if (r.includes("konečný") || r.includes("konecny") || r.includes("kuv") || r.includes("beneficial")) {
+    return "beneficial_owner";
+  }
+  if (r.includes("spoločník") || r.includes("spolocnik") || r.includes("owner") || r.includes("akcionár")) {
+    return "owner";
+  }
+  if (r.includes("oprávnen") || r.includes("opravnen") || r.includes("authorized")) {
+    return "authorized";
+  }
+  return "executive";
+}
+
+function DbPeopleCard({
+  title,
+  icon: Icon,
+  people,
+  loading,
+  emptyText,
+}: {
+  title: string;
+  icon: typeof Users;
+  people: CompanyPersonRecord[];
+  loading: boolean;
+  emptyText: string;
+}) {
+  const sources = Array.from(new Set(people.map((p) => p.source))).filter(Boolean);
+  return (
+    <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+      <div className="mb-5 flex items-center gap-2">
+        <Icon className="h-4 w-4 text-primary" />
+        <h3 className="text-lg font-semibold">{title}</h3>
+        <Badge variant="secondary" className="rounded-full">
+          {people.length}
+        </Badge>
+        {sources.map((s) => (
+          <Badge key={s} variant="outline" className="rounded-full text-[10px]">
+            Zdroj: {s}
+          </Badge>
+        ))}
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Načítavam z internej databázy…
+        </div>
+      ) : people.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{emptyText}</p>
+      ) : (
+        <div className="divide-y divide-border/60">
+          {people.map((p) => (
+            <div key={p.id} className="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
+              <div className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-primary">
+                {initials(p.personName)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">{p.personName}</div>
+                <div className="text-xs text-muted-foreground">
+                  {p.role}
+                  {p.validFrom && ` · od ${new Date(p.validFrom).toLocaleDateString("sk-SK")}`}
+                  {p.validTo && ` · do ${new Date(p.validTo).toLocaleDateString("sk-SK")}`}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function DbHistoryCard({
+  history,
+  loading,
+}: {
+  history: CompanyHistoryRecord[];
+  loading: boolean;
+}) {
+  const sources = Array.from(new Set(history.map((h) => h.source))).filter(Boolean);
+  const sorted = [...history].sort((a, b) => {
+    const ad = a.eventDate ?? "";
+    const bd = b.eventDate ?? "";
+    return bd.localeCompare(ad);
+  });
+  return (
+    <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <h3 className="text-lg font-semibold">Časová os zmien</h3>
+        {sources.map((s) => (
+          <Badge key={s} variant="outline" className="rounded-full text-[10px]">
+            Zdroj: {s}
+          </Badge>
+        ))}
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Načítavam z internej databázy…
+        </div>
+      ) : sorted.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          História zmien zatiaľ nie je dostupná.
+        </p>
+      ) : (
+        <ol className="relative border-l border-border pl-6">
+          {sorted.map((h) => {
+            const color = eventDotColor(h.eventType);
+            return (
+              <li key={h.id} className="relative mb-6 last:mb-0">
+                <span
+                  className={`absolute -left-[29px] flex h-4 w-4 items-center justify-center rounded-full ring-4 ring-background ${color}`}
+                />
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  {h.eventDate
+                    ? new Date(h.eventDate).toLocaleDateString("sk-SK")
+                    : "Neuvedený dátum"}
+                </div>
+                <div className="mt-1 text-sm font-semibold">{h.title}</div>
+                {h.description && (
+                  <div className="text-sm text-muted-foreground">{h.description}</div>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </Card>
+  );
+}
+
+function eventDotColor(eventType: string): string {
+  switch (eventType) {
+    case "incorporation":
+      return "bg-success";
+    case "termination":
+      return "bg-destructive";
+    case "statutory_added":
+    case "statutory_removed":
+      return "bg-primary";
+    case "address_changed":
+    case "name_changed":
+    case "activity_changed":
+      return "bg-warning";
+    default:
+      return "bg-primary";
+  }
 }
 
 function na(value: string | number | undefined | null): string {
