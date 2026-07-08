@@ -208,6 +208,7 @@ function CompanyProfilePage() {
       diagnostics={intel.diagnostics}
       fieldSources={intel.fieldSources}
       fieldAudit={intel.fieldAudit}
+      finstatRawInspector={intel.finstatRawInspector}
       rpvsStatus={intel.rpvsStatus}
       rpvsRegistrationDate={intel.rpvsRegistrationDate}
       authorizedPerson={intel.authorizedPerson}
