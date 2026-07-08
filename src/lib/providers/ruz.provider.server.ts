@@ -31,6 +31,23 @@ interface RuzStatement {
   datumZostavenia?: string;
   datumSchvalenia?: string;
   datumZostaveniaK?: string;
+  idUctovnychVykazov?: number[];
+}
+interface RuzPriloha {
+  id?: number;
+  meno?: string;
+  mimeType?: string;
+  velkostPrilohy?: number;
+}
+interface RuzTabulka {
+  nazov?: { sk?: string; en?: string };
+  data?: string[];
+}
+interface RuzVykaz {
+  id?: number;
+  idUctovnejZavierky?: number;
+  prilohy?: RuzPriloha[];
+  obsah?: { tabulky?: RuzTabulka[] };
 }
 
 class RuzError extends Error {
@@ -88,28 +105,105 @@ async function ruzFetch<T>(path: string): Promise<T> {
   }
 }
 
-function normalizeStatement(raw: RuzStatement): AccountingStatement | null {
+const PUBLIC_BASE = "https://www.registeruz.sk/cruz-public";
+
+function attachmentUrl(prilohaId: number): string {
+  return `${PUBLIC_BASE}/domain/financialreport/attachment/${prilohaId}`;
+}
+function reportDetailUrl(vykazId: number): string {
+  return `${PUBLIC_BASE}/domain/financialreport/show/${vykazId}`;
+}
+function reportPdfUrl(vykazId: number): string {
+  return `${PUBLIC_BASE}/domain/financialreport/pdf/${vykazId}`;
+}
+
+function countNumericCells(vykaz: RuzVykaz | undefined): number {
+  if (!vykaz?.obsah?.tabulky) return 0;
+  let n = 0;
+  for (const t of vykaz.obsah.tabulky) {
+    if (!t.data) continue;
+    for (const cell of t.data) {
+      if (typeof cell === "string" && cell.trim() !== "" && Number.isFinite(Number(cell))) n++;
+    }
+  }
+  return n;
+}
+
+function pickBestPdf(prilohy: RuzPriloha[] | undefined): RuzPriloha | undefined {
+  if (!prilohy) return undefined;
+  return prilohy.find(
+    (p) => p.mimeType?.toLowerCase().includes("pdf") && p.id != null,
+  );
+}
+
+function pickBestExcel(prilohy: RuzPriloha[] | undefined): RuzPriloha | undefined {
+  if (!prilohy) return undefined;
+  return prilohy.find((p) => {
+    const mt = p.mimeType?.toLowerCase() ?? "";
+    const name = p.meno?.toLowerCase() ?? "";
+    return (
+      mt.includes("spreadsheet") ||
+      mt.includes("excel") ||
+      name.endsWith(".xls") ||
+      name.endsWith(".xlsx")
+    );
+  });
+}
+
+function normalizeStatement(
+  raw: RuzStatement,
+  vykaz: RuzVykaz | undefined,
+): AccountingStatement | null {
   if (raw.id == null) return null;
   const yearSrc =
     raw.datumZostaveniaK ?? raw.obdobieDo ?? raw.datumZostavenia ?? raw.datumPodania;
   const yearMatch = yearSrc?.match(/^(\d{4})/);
   const year = yearMatch ? Number(yearMatch[1]) : new Date().getFullYear();
+
+  const pdfPriloha = pickBestPdf(vykaz?.prilohy);
+  const xlsPriloha = pickBestExcel(vykaz?.prilohy);
+  const vykazId = vykaz?.id;
+
+  const detailUrl = vykazId != null ? reportDetailUrl(vykazId) : undefined;
+  const pdfUrl =
+    pdfPriloha?.id != null
+      ? attachmentUrl(pdfPriloha.id)
+      : vykazId != null
+        ? reportPdfUrl(vykazId)
+        : undefined;
+  const excelUrl = xlsPriloha?.id != null ? attachmentUrl(xlsPriloha.id) : undefined;
+
+  const attachments = (vykaz?.prilohy ?? [])
+    .filter((p): p is RuzPriloha & { id: number } => p.id != null)
+    .map((p) => ({
+      id: String(p.id),
+      name: p.meno ?? "prílohy",
+      mimeType: p.mimeType ?? "application/octet-stream",
+      url: attachmentUrl(p.id),
+      sizeBytes: p.velkostPrilohy,
+    }));
+
   return {
     id: String(raw.id),
+    statementId: String(raw.id),
+    vykazId: vykazId != null ? String(vykazId) : undefined,
     year,
     type: raw.typ?.trim() || "Neznámy typ",
     periodFrom: raw.obdobieOd,
     periodTo: raw.obdobieDo,
     submittedAt: raw.datumPodania,
+    submittedDate: raw.datumPodania,
     preparedAt: raw.datumZostavenia,
     approvedAt: raw.datumSchvalenia,
     consolidated: raw.konsolidovana,
-    detailUrl: `https://www.registeruz.sk/cruz-public/domain/accountingentity/show/${raw.id}`,
+    detailUrl,
+    pdfUrl,
+    excelUrl,
+    sourceUrl: detailUrl,
+    attachments: attachments.length ? attachments : undefined,
+    parsedNumericRowsCount: countNumericCells(vykaz),
   };
 }
-
-// Mock data removed — RÚZ never returns placeholder statements.
-
 
 export async function ruzStatements(
   ico: string,
@@ -134,12 +228,42 @@ export async function ruzStatements(
       ids.map((id) => ruzFetch<RuzStatement>(`/uctovna-zavierka?id=${id}`)),
     );
 
-    const statements: AccountingStatement[] = [];
+    // For each successful statement, fetch the primary report (first výkaz) to
+    // discover attachments and structured tables.
+    const statementRecords: Array<{ statement: RuzStatement; vykaz?: RuzVykaz }> = [];
+    const vykazFetches: Promise<void>[] = [];
     for (const s of settled) {
-      if (s.status === "fulfilled") {
-        const norm = normalizeStatement(s.value);
-        if (norm) statements.push(norm);
+      if (s.status !== "fulfilled") continue;
+      const record: { statement: RuzStatement; vykaz?: RuzVykaz } = { statement: s.value };
+      statementRecords.push(record);
+      const vykazId = s.value.idUctovnychVykazov?.[0];
+      if (vykazId != null) {
+        vykazFetches.push(
+          ruzFetch<RuzVykaz>(`/uctovny-vykaz?id=${vykazId}`)
+            .then((v) => {
+              record.vykaz = v;
+            })
+            .catch((err: unknown) => {
+              const e = err as RuzError;
+              diagnostics?.push({
+                source: "ruz",
+                capability: "statements",
+                endpoint: e.endpoint,
+                httpStatus: e.status,
+                errorCode: e.code ?? "unknown",
+                rawError: e.rawResponse,
+                normalizedError: `Chyba pri načítaní výkazu ${vykazId}: ${e.message}`,
+              });
+            }),
+        );
       }
+    }
+    await Promise.all(vykazFetches);
+
+    const statements: AccountingStatement[] = [];
+    for (const r of statementRecords) {
+      const norm = normalizeStatement(r.statement, r.vykaz);
+      if (norm) statements.push(norm);
     }
 
     // Newest first.
@@ -160,7 +284,6 @@ export async function ruzStatements(
       rawError: e.rawResponse,
       normalizedError: e.message,
     });
-    // No mock fallback — empty list means "Nedostupné" in the UI.
     return unavailable(
       "ruz",
       "statements",
