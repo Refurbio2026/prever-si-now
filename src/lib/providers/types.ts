@@ -112,7 +112,10 @@ export interface CompanyIntelligence {
   /** Dev-mode only: detailed per-provider diagnostics. */
   diagnostics?: ProviderDiagnostic[];
   /** Dev-mode only: per-field merge audit (raw candidate values + decision). */
+  /** Dev-mode only: per-field merge audit (raw candidate values + decision). */
   fieldAudit?: FieldMergeAudit[];
+  /** Unified, provider-tagged view the UI reads from. */
+  unified: UnifiedCompany;
 }
 
 /** Dev-mode audit entry: full merge trace for one field. */
