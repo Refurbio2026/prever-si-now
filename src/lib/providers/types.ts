@@ -61,6 +61,18 @@ export interface MonitoringSnapshot {
   changeCount: number;
 }
 
+/** Development-mode diagnostics. Never populated in production builds. */
+export interface ProviderDiagnostic {
+  source: ProviderSourceId;
+  capability: ProviderCapability;
+  endpoint?: string;
+  httpStatus?: number;
+  rawError?: string;
+  normalizedError?: string;
+  errorCode?: string;
+  finalUrlMasked?: string;
+}
+
 /** Full aggregated intelligence for a company. Every field is optional so the
  *  UI can render with partial data when some providers are unavailable. */
 export interface CompanyIntelligence {
@@ -75,4 +87,7 @@ export interface CompanyIntelligence {
   /** true if any source ended in `unavailable`/`error`/`not_configured` */
   partial: boolean;
   cachedAt: string;
+  /** Dev-mode only: detailed per-provider diagnostics. */
+  diagnostics?: ProviderDiagnostic[];
 }
+
