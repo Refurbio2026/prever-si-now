@@ -71,6 +71,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
     if (cached) return { ok: true, data: cached, source: "cache" };
 
     const diagnostics: ProviderDiagnostic[] = [];
+    const audit: FieldMergeAudit[] = [];
 
     let finstat: Awaited<ReturnType<typeof finstatFetchAll>>;
     try {
@@ -86,7 +87,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
 
     const [company, financials, statements, risks, contracts, monitoring] =
       await Promise.all([
-        runCompanyProvider(ico, finstat, DEV ? diagnostics : undefined),
+        runCompanyProvider(ico, finstat, DEV ? diagnostics : undefined, DEV ? audit : undefined),
         runFinancialProvider(ico, finstat),
         runStatementsProvider(ico, DEV ? diagnostics : undefined),
         runRiskProvider(ico, finstat),
@@ -124,7 +125,9 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       sources,
       partial: sources.some((s) => s.state !== "ok" && s.state !== "empty"),
       cachedAt: new Date().toISOString(),
+      fieldSources: company.fieldSources,
       diagnostics: DEV ? diagnostics : undefined,
+      fieldAudit: DEV ? audit : undefined,
     };
 
 
