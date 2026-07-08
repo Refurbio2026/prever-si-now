@@ -14,7 +14,7 @@ import type {
   RiskLevel,
 } from "./types";
 
-const FINSTAT_BASE = "https://www.finstat.sk/api";
+const DEFAULT_FINSTAT_BASE = "https://www.finstat.sk/api";
 const STATION_ID = "preversi-sk";
 const STATION_NAME = "PreverSi.sk";
 
@@ -27,11 +27,42 @@ export class FinstatError extends Error {
     | "unauthorized"
     | "server_error"
     | "network_error";
-  constructor(code: FinstatError["code"], message: string) {
+  status?: number;
+  rawResponse?: string;
+  endpoint?: string;
+  constructor(
+    code: FinstatError["code"],
+    message: string,
+    extra?: { status?: number; rawResponse?: string; endpoint?: string },
+  ) {
     super(message);
     this.code = code;
     this.name = "FinstatError";
+    this.status = extra?.status;
+    this.rawResponse = extra?.rawResponse;
+    this.endpoint = extra?.endpoint;
   }
+}
+
+export interface FinstatEnvStatus {
+  FINSTAT_API_KEY: boolean;
+  FINSTAT_PRIVATE_KEY: boolean;
+  FINSTAT_BASE_URL: boolean;
+  allSet: boolean;
+  baseUrl: string;
+}
+
+export function getFinstatEnvStatus(): FinstatEnvStatus {
+  const apiKey = !!process.env.FINSTAT_API_KEY;
+  const privateKey = !!process.env.FINSTAT_PRIVATE_KEY;
+  const baseUrl = !!process.env.FINSTAT_BASE_URL;
+  return {
+    FINSTAT_API_KEY: apiKey,
+    FINSTAT_PRIVATE_KEY: privateKey,
+    FINSTAT_BASE_URL: baseUrl,
+    allSet: apiKey && privateKey,
+    baseUrl: process.env.FINSTAT_BASE_URL || DEFAULT_FINSTAT_BASE,
+  };
 }
 
 function credentials() {
@@ -43,11 +74,10 @@ function credentials() {
       "Finstat API credentials are not configured on the server.",
     );
   }
-  return { apiKey, privateKey };
+  return { apiKey, privateKey, baseUrl: process.env.FINSTAT_BASE_URL || DEFAULT_FINSTAT_BASE };
 }
 
 // Finstat hash: sha256 of "<ApiKey>+<PrivateKey>+<value>" (hex).
-// Ref: https://www.finstat.sk/api/dokumentacia
 function computeHash(value: string): string {
   const { apiKey, privateKey } = credentials();
   return createHash("sha256")
@@ -59,17 +89,46 @@ export function looksLikeIco(query: string): boolean {
   return /^\d{6,8}$/.test(query.trim());
 }
 
-function mapStatusFromResponse(status: number): FinstatError {
+function mapStatusFromResponse(status: number, endpoint: string, body: string): FinstatError {
   if (status === 401 || status === 403) {
-    return new FinstatError("unauthorized", "Invalid Finstat API credentials.");
+    return new FinstatError("unauthorized", "Invalid Finstat API credentials.", {
+      status,
+      endpoint,
+      rawResponse: body,
+    });
   }
-  if (status === 404) return new FinstatError("not_found", "Company not found.");
-  if (status === 429) return new FinstatError("rate_limit", "Finstat rate limit reached.");
-  return new FinstatError("server_error", `Finstat responded with HTTP ${status}.`);
+  if (status === 404)
+    return new FinstatError("not_found", "Company not found.", {
+      status,
+      endpoint,
+      rawResponse: body,
+    });
+  if (status === 429)
+    return new FinstatError("rate_limit", "Finstat rate limit reached.", {
+      status,
+      endpoint,
+      rawResponse: body,
+    });
+  return new FinstatError("server_error", `Finstat responded with HTTP ${status}.`, {
+    status,
+    endpoint,
+    rawResponse: body,
+  });
 }
 
-async function finstatFetch(path: string, params: Record<string, string>): Promise<unknown> {
-  const { apiKey } = credentials();
+export interface FinstatFetchResult {
+  endpoint: string;
+  status: number;
+  rawResponse: string;
+  parsed: unknown;
+}
+
+async function finstatFetchRaw(
+  path: string,
+  params: Record<string, string>,
+): Promise<FinstatFetchResult> {
+  const { apiKey, baseUrl } = credentials();
+  const endpoint = `${baseUrl}${path}`;
   const body = new URLSearchParams({
     apiKey,
     StationId: STATION_ID,
@@ -79,7 +138,7 @@ async function finstatFetch(path: string, params: Record<string, string>): Promi
   });
   let res: Response;
   try {
-    res = await fetch(`${FINSTAT_BASE}${path}`, {
+    res = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -91,14 +150,135 @@ async function finstatFetch(path: string, params: Record<string, string>): Promi
     throw new FinstatError(
       "network_error",
       `Network error contacting Finstat: ${(err as Error).message}`,
+      { endpoint },
     );
   }
-  if (!res.ok) throw mapStatusFromResponse(res.status);
   const text = await res.text();
+  if (!res.ok) throw mapStatusFromResponse(res.status, endpoint, text);
+  let parsed: unknown = null;
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new FinstatError("server_error", "Finstat returned a non-JSON response.", {
+        status: res.status,
+        endpoint,
+        rawResponse: text,
+      });
+    }
+  }
+  return { endpoint, status: res.status, rawResponse: text, parsed };
+}
+
+async function finstatFetch(path: string, params: Record<string, string>): Promise<unknown> {
+  const { parsed } = await finstatFetchRaw(path, params);
+  return parsed;
+}
+
+// ---------- Mock fallback (used when credentials are missing) ----------
+
+export const MOCK_ICO = "31333532";
+
+export function mockCompanyDetail(ico: string): CompanyDetailBundle {
+  const raw: FinstatRawCompany = {
+    Ico: ico,
+    Dic: "2020317068",
+    IcDph: "SK2020317068",
+    Name: "ESET, spol. s r.o. (MOCK)",
+    LegalForm: "Spoločnosť s ručením obmedzeným",
+    Street: "Einsteinova",
+    StreetNumber: "24",
+    City: "Bratislava",
+    ZipCode: "851 01",
+    Created: "1992-06-16",
+    EmployeeCount: 1000,
+    Url: "https://www.eset.com",
+    SkNace: { Code: "62010", Name: "Počítačové programovanie" },
+    Sales: 250000000,
+    Profit: 90000000,
+    ReliableVatPayer: true,
+    Financials: [
+      { Year: 2021, Sales: 200000000, Profit: 60000000, Ebitda: 80000000, Assets: 500000000, Liabilities: 100000000 },
+      { Year: 2022, Sales: 230000000, Profit: 75000000, Ebitda: 95000000, Assets: 550000000, Liabilities: 110000000 },
+      { Year: 2023, Sales: 250000000, Profit: 90000000, Ebitda: 110000000, Assets: 600000000, Liabilities: 120000000 },
+    ],
+    Persons: [{ Name: "Richard Marko", Function: "konateľ", From: "2011-01-01" }],
+    Owners: [{ Name: "Rudolf Hrubý", Share: 40, From: "1992-06-16" }],
+    KUVs: [{ Name: "Rudolf Hrubý", Share: 40, From: "2017-01-01" }],
+  };
+  return normalizeDetail(raw);
+}
+
+export interface FinstatDiagnostic {
+  usingMock: boolean;
+  envStatus: FinstatEnvStatus;
+  endpoint: string | null;
+  httpStatus: number | null;
+  rawResponsePreview: string | null;
+  normalizedPreview: unknown;
+  errorMessage: string | null;
+  errorCode: string | null;
+}
+
+export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnostic> {
+  const envStatus = getFinstatEnvStatus();
+  if (!envStatus.allSet) {
+    return {
+      usingMock: true,
+      envStatus,
+      endpoint: null,
+      httpStatus: null,
+      rawResponsePreview: null,
+      normalizedPreview: mockCompanyDetail(ico).company,
+      errorMessage: "Using mock data because Finstat API is not configured.",
+      errorCode: "missing_credentials",
+    };
+  }
+
+  const hash = computeHash(ico);
   try {
-    return text ? JSON.parse(text) : null;
-  } catch {
-    throw new FinstatError("server_error", "Finstat returned a non-JSON response.");
+    const { endpoint, status, rawResponse, parsed } = await finstatFetchRaw("/detail", {
+      Ico: ico,
+      Hash: hash,
+    });
+    const raw = parsed as FinstatRawCompany | null;
+    if (!raw || !raw.Ico) {
+      return {
+        usingMock: false,
+        envStatus,
+        endpoint,
+        httpStatus: status,
+        rawResponsePreview: rawResponse.slice(0, 500),
+        normalizedPreview: null,
+        errorMessage: `Company with IČO ${ico} not found.`,
+        errorCode: "not_found",
+      };
+    }
+    return {
+      usingMock: false,
+      envStatus,
+      endpoint,
+      httpStatus: status,
+      rawResponsePreview: rawResponse.slice(0, 500),
+      normalizedPreview: normalizeDetail(raw).company,
+      errorMessage: null,
+      errorCode: null,
+    };
+  } catch (err) {
+    const fe = err as FinstatError;
+    const shouldFallback = fe.code === "unauthorized" || fe.code === "missing_credentials";
+    return {
+      usingMock: shouldFallback,
+      envStatus,
+      endpoint: fe.endpoint ?? null,
+      httpStatus: fe.status ?? null,
+      rawResponsePreview: fe.rawResponse ? fe.rawResponse.slice(0, 500) : null,
+      normalizedPreview: shouldFallback ? mockCompanyDetail(ico).company : null,
+      errorMessage: shouldFallback
+        ? `Using mock data because Finstat API is not configured. (${fe.message})`
+        : fe.message ?? "Unknown error",
+      errorCode: fe.code ?? "unknown",
+    };
   }
 }
 
