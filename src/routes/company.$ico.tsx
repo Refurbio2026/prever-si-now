@@ -1820,3 +1820,69 @@ function RuzDiagnosticsPanel({
     </Card>
   );
 }
+
+function FinanceKpiSection({
+  company,
+  financials,
+}: {
+  company: Company;
+  financials: FinancialYear[];
+}) {
+  const latestFin = financials.length ? financials[financials.length - 1] : undefined;
+
+  // Prefer time-series values (they carry a real year); fall back to Company latest.
+  const revenue = latestFin?.revenue ?? company.revenue;
+  const profit = latestFin?.profit ?? company.profit;
+  const assets = latestFin?.assets ?? company.latestAssets;
+  const liabilities = latestFin?.liabilities ?? company.latestLiabilities;
+  const year = latestFin?.year ?? company.latestFinancialsYear;
+  const period = latestFin
+    ? String(latestFin.year)
+    : year
+      ? String(year)
+      : "Neznáme obdobie";
+  const source = financials.length > 0 ? "Finstat" : "Finstat";
+
+  const hasAnyValue =
+    (typeof revenue === "number" && revenue > 0) ||
+    (typeof profit === "number" && profit !== 0) ||
+    (typeof assets === "number" && assets > 0) ||
+    (typeof liabilities === "number" && liabilities > 0);
+
+  if (!hasAnyValue) {
+    return (
+      <Card className="rounded-2xl border-dashed p-6 text-center text-sm text-muted-foreground">
+        Finančné hodnoty nie sú dostupné v strojovo čitateľnej forme.
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <h3 className="text-lg font-semibold">Kľúčové ukazovatele</h3>
+        <Badge variant="secondary" className="rounded-full">
+          {period}
+        </Badge>
+        <SectionSourceBadge label={source} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiTile label="Tržby" value={revenue} />
+        <KpiTile label="Zisk" value={profit} />
+        <KpiTile label="Aktíva" value={assets} />
+        <KpiTile label="Pasíva" value={liabilities} />
+      </div>
+    </Card>
+  );
+}
+
+function KpiTile({ label, value }: { label: string; value: number | undefined }) {
+  const display =
+    typeof value === "number" && Number.isFinite(value) ? formatCurrency(value) : "Nedostupné";
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{display}</div>
+    </div>
+  );
+}
