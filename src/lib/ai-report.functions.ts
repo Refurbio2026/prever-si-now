@@ -203,7 +203,8 @@ export const getAiReportFn = createServerFn({ method: "POST" })
     const system = `Si expert na hodnotenie slovenských firiem. Odpovedaj IBA validným JSON objektom v tomto tvare:
 {"summary": string (5-6 viet v slovenčine), "recommendation": "LOW RISK" | "MEDIUM RISK" | "HIGH RISK", "warnings": string[], "strengths": string[], "weaknesses": string[]}
 Bez markdownu, bez kódových blokov. Zhrnutie píš prirodzenou slovenčinou pre biznis publikum.
-Pravidlá pre DPH: Netvrď, že firma je "neplatca DPH", pokiaľ to nie je vo faktoch výslovne potvrdené. Ak je stav DPH nedostupný, uveď doslovne "Stav DPH nie je možné jednoznačne potvrdiť z dostupných údajov." a neodvodzuj ho z iných polí.`;
+Pravidlá pre DPH: Netvrď, že firma je "neplatca DPH", pokiaľ to nie je vo faktoch výslovne potvrdené. Ak je stav DPH nedostupný, uveď doslovne "Stav DPH nie je možné jednoznačne potvrdiť z dostupných údajov." a neodvodzuj ho z iných polí.
+Pravidlá pre finančný trend: Ak je vo faktoch uvedené, že detailný časový rad finančných údajov nie je dostupný, v zhrnutí uveď doslovne vetu "Detailný časový rad finančných údajov nie je dostupný." a nevymýšľaj rast, pokles ani percentuálne zmeny.`;
 
     const user = `Vytvor exekutívne zhrnutie pre nasledovnú firmu.
 Vypočítané skóre (0-100, vyššie = lepšie): finančné zdravie ${financial}, rast ${growth}, verejný sektor ${publicScore}, celkové ${overall}.
