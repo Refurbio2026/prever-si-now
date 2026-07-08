@@ -9,6 +9,18 @@ import type {
   RiskIndicator,
 } from "@/lib/types";
 
+/** Registry (ORSR / RPO) detail bundle. Kept here so client code can render
+ *  it without importing any `.server.ts` module. */
+export interface RegistryDetails {
+  source: ProviderSourceId;
+  registrationNumber?: string;
+  legalForm?: string;
+  registeredAddress?: string;
+  registrationDate?: string;
+  status?: string;
+  statutoryRepresentatives: CompanyPerson[];
+}
+
 
 export type ProviderSourceId =
   | "finstat"
@@ -88,6 +100,8 @@ export interface CompanyIntelligence {
   risks: RiskIndicator[];
   contracts: GovContract[];
   monitoring?: MonitoringSnapshot;
+  /** Registry (ORSR) details — primary source for legal/registry fields. */
+  registry?: RegistryDetails;
   sources: ProviderSourceStatus[];
   /** true if any source ended in `unavailable`/`error`/`not_configured` */
   partial: boolean;

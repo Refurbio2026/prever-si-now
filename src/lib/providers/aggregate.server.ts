@@ -3,14 +3,14 @@
 // to the relevant provider below; the UI needs zero changes.
 
 import type { Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
-import type { GovContract, MonitoringSnapshot, ProviderSourceStatus } from "./types";
+import type { GovContract, MonitoringSnapshot, ProviderDiagnostic, ProviderSourceStatus, RegistryDetails } from "./types";
 import { finstatFetchAll } from "./finstat.provider.server";
+import { orsrRegistryDetails } from "./orsr.provider.server";
 import {
   crzContracts,
   financialAdminRisks,
   healthInsuranceRisks,
   justiceRisks,
-  orsrCompanyInfo,
   rpvsBeneficialOwners,
   ruzFinancials,
   socialInsuranceRisks,
@@ -39,20 +39,42 @@ async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
 export async function runCompanyProvider(
   ico: string,
   finstat: FinstatBundle,
-): Promise<{ data: Company | undefined; sources: ProviderSourceStatus[] }> {
-  const orsr = await safe(orsrCompanyInfo(ico), {
-    data: undefined,
+  diagnostics?: ProviderDiagnostic[],
+): Promise<{
+  data: Company | undefined;
+  registry?: RegistryDetails;
+  sources: ProviderSourceStatus[];
+}> {
+  const orsr = await safe(orsrRegistryDetails(ico, diagnostics), {
+    data: undefined as import("./orsr.provider.server").OrsrRegistryDetails | undefined,
     status: { source: "orsr" as const, capability: "company" as const, state: "error" as const },
   });
   const cadastre = await safe(cadastreCompanyInfo(ico), {
     data: undefined,
     status: { source: "cadastre" as const, capability: "company" as const, state: "error" as const },
   });
+
+  // ORSR is the primary source for registry/legal fields; Finstat is fallback.
+  const base = finstat.company.data;
+  let merged: Company | undefined = base;
+  if (base && orsr.data) {
+    merged = {
+      ...base,
+      legalForm: orsr.data.legalForm || base.legalForm,
+      address: orsr.data.registeredAddress || base.address,
+      registrationDate: orsr.data.registrationDate || base.registrationDate,
+      registrationNumberText:
+        orsr.data.registrationNumber || base.registrationNumberText,
+    };
+  }
+
   return {
-    data: finstat.company.data,
+    data: merged,
+    registry: orsr.data,
     sources: [finstat.company.status, orsr.status, cadastre.status],
   };
 }
+
 
 export async function runFinancialProvider(
   ico: string,
@@ -88,13 +110,15 @@ export async function runRiskProvider(
 export async function runPeopleProvider(
   ico: string,
   finstat: FinstatBundle,
+  orsrPeople: CompanyPerson[] = [],
 ): Promise<{ data: CompanyPerson[]; sources: ProviderSourceStatus[] }> {
   const rpvs = await safe(rpvsBeneficialOwners(ico), {
     data: [] as CompanyPerson[],
     status: err("rpvs"),
   });
+  // ORSR statutory reps take priority over Finstat's executives.
   return {
-    data: mergePeople(finstat.people.data, rpvs.data),
+    data: mergePeople(orsrPeople, finstat.people.data, rpvs.data),
     sources: [finstat.people.status, rpvs.status],
   };
 }
@@ -158,12 +182,14 @@ function severity(s: RiskIndicator["status"]): number {
   return s === "critical" ? 2 : s === "warning" ? 1 : 0;
 }
 
-function mergePeople(a: CompanyPerson[], b: CompanyPerson[]): CompanyPerson[] {
+function mergePeople(...groups: CompanyPerson[][]): CompanyPerson[] {
   const key = (p: CompanyPerson) => `${p.role}::${p.name.trim().toLowerCase()}`;
   const map = new Map<string, CompanyPerson>();
-  for (const p of [...a, ...b]) {
-    const k = key(p);
-    if (!map.has(k)) map.set(k, p);
+  for (const group of groups) {
+    for (const p of group) {
+      const k = key(p);
+      if (!map.has(k)) map.set(k, p);
+    }
   }
   return [...map.values()];
 }

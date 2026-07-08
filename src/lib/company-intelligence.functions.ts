@@ -84,16 +84,22 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       };
     }
 
-    const [company, financials, statements, risks, people, contracts, monitoring] =
+    const [company, financials, statements, risks, contracts, monitoring] =
       await Promise.all([
-        runCompanyProvider(ico, finstat),
+        runCompanyProvider(ico, finstat, DEV ? diagnostics : undefined),
         runFinancialProvider(ico, finstat),
         runStatementsProvider(ico, DEV ? diagnostics : undefined),
         runRiskProvider(ico, finstat),
-        runPeopleProvider(ico, finstat),
         runContractsProvider(ico),
         runMonitoringProvider(ico),
       ]);
+
+    // People run after company so ORSR statutory reps flow into the merge.
+    const people = await runPeopleProvider(
+      ico,
+      finstat,
+      company.registry?.statutoryRepresentatives ?? [],
+    );
 
     const sources = [
       ...company.sources,
@@ -114,6 +120,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       risks: risks.data,
       contracts: contracts.data,
       monitoring: monitoring.data,
+      registry: company.registry,
       sources,
       partial: sources.some((s) => s.state !== "ok" && s.state !== "empty"),
       cachedAt: new Date().toISOString(),
