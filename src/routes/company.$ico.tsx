@@ -1050,3 +1050,90 @@ function formatDate(iso?: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("sk-SK");
 }
+
+// ---------- Registrové údaje (ORSR) ----------
+
+function RegistryCard({
+  registry,
+  company,
+}: {
+  registry?: RegistryDetails;
+  company: Company;
+}) {
+  const hasOrsr = registry?.source === "orsr";
+  // Fall back to Company (Finstat-derived) fields when ORSR didn't return.
+  const registrationNumber = registry?.registrationNumber ?? company.registrationNumberText;
+  const legalForm = registry?.legalForm ?? company.legalForm;
+  const registeredAddress =
+    registry?.registeredAddress ??
+    [company.address, company.city].filter((v) => v && v !== "—").join(", ");
+  const registrationDate = registry?.registrationDate ?? company.registrationDate;
+  const status = registry?.status;
+
+  const sourceLabel = hasOrsr ? "ORSR" : "Finstat";
+  const sourceClass = hasOrsr
+    ? "text-success bg-success/15"
+    : "text-muted-foreground bg-secondary";
+
+  return (
+    <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-primary" />
+          <h3 className="text-lg font-semibold">Registrové údaje</h3>
+        </div>
+        <Badge variant="secondary" className={`rounded-full text-[10px] ${sourceClass}`}>
+          Zdroj: {sourceLabel}
+        </Badge>
+      </div>
+      <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+        <InfoField label="Registračné číslo" value={na(registrationNumber)} />
+        <InfoField label="Právna forma" value={na(legalForm)} />
+        <InfoField label="Sídlo" value={na(registeredAddress)} />
+        <InfoField
+          label="Dátum registrácie"
+          value={
+            registrationDate
+              ? new Date(registrationDate).toLocaleDateString("sk-SK")
+              : "Nedostupné"
+          }
+        />
+        {status && <InfoField label="Stav" value={status} />}
+      </div>
+
+      {registry?.statutoryRepresentatives?.length ? (
+        <div className="mt-6">
+          <div className="mb-3 flex items-center gap-2">
+            <Users className="h-4 w-4 text-primary" />
+            <h4 className="text-sm font-semibold">Štatutárny orgán</h4>
+            <Badge variant="secondary" className="rounded-full">
+              {registry.statutoryRepresentatives.length}
+            </Badge>
+          </div>
+          <ul className="divide-y divide-border/60">
+            {registry.statutoryRepresentatives.map((p, i) => (
+              <li key={i} className="flex items-center gap-3 py-2 text-sm">
+                <div className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-primary">
+                  {initials(p.name)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">{p.name}</div>
+                  {p.since && (
+                    <div className="text-xs text-muted-foreground">
+                      od {new Date(p.since).toLocaleDateString("sk-SK")}
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : hasOrsr ? (
+        <p className="mt-4 text-xs text-muted-foreground">
+          ORSR nevrátil žiadnych aktívnych štatutárov.
+        </p>
+      ) : null}
+    </Card>
+  );
+}
+
