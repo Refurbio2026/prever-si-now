@@ -21,7 +21,11 @@ import {
   Clock,
   Loader2,
   AlertCircle,
+  FileText,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
+
 import {
   Area,
   AreaChart,
