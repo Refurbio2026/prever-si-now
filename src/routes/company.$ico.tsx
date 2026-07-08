@@ -457,6 +457,29 @@ function CompanyProfileView({
 
           {/* RISKS */}
           <TabsContent value="risks" className="space-y-3">
+            {company.debtIndicators && (
+              <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+                <h3 className="mb-4 text-lg font-semibold">Ukazovatele dlhov</h3>
+                <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <InfoField
+                    label="Daňový nedoplatok"
+                    value={company.debtIndicators.taxDebt != null ? formatCurrency(company.debtIndicators.taxDebt) : "Nedostupné"}
+                  />
+                  <InfoField
+                    label="Súdny dlh"
+                    value={company.debtIndicators.judicialDebt != null ? formatCurrency(company.debtIndicators.judicialDebt) : "Nedostupné"}
+                  />
+                  <InfoField
+                    label="Sociálna poisťovňa"
+                    value={company.debtIndicators.socialDebt != null ? formatCurrency(company.debtIndicators.socialDebt) : "Nedostupné"}
+                  />
+                  <InfoField
+                    label="Zdravotné poisťovne"
+                    value={company.debtIndicators.healthDebt != null ? formatCurrency(company.debtIndicators.healthDebt) : "Nedostupné"}
+                  />
+                </div>
+              </Card>
+            )}
             {risks.map((r) => (
               <RiskRow key={r.key} risk={r} large />
             ))}
