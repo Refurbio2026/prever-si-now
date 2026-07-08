@@ -1010,6 +1010,46 @@ function DbPeopleCard({
   );
 }
 
+function ImportRegistriesBanner({
+  isAuthenticated,
+  isPending,
+  onImport,
+}: {
+  isAuthenticated: boolean;
+  isPending: boolean;
+  onImport: () => void;
+}) {
+  return (
+    <Card className="mb-6 rounded-2xl border-border/70 p-5 shadow-soft">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="font-semibold">Verejné registre zatiaľ neboli načítané</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {isAuthenticated
+              ? "Načítať údaje z ORSR / RPO pre osoby, históriu a základné údaje."
+              : "Pre načítanie verejných registrov sa prihláste."}
+          </p>
+        </div>
+        {isAuthenticated ? (
+          <Button onClick={onImport} disabled={isPending} className="rounded-xl">
+            {isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Načítavam…
+              </>
+            ) : (
+              "Načítať verejné registre"
+            )}
+          </Button>
+        ) : (
+          <Button asChild variant="outline" className="rounded-xl">
+            <Link to="/auth">Prihlásiť sa</Link>
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function DbHistoryCard({
   history,
   loading,
