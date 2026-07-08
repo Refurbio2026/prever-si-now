@@ -49,6 +49,7 @@ export interface Company {
   latestLiabilities?: number;
   /** Year for latest revenue/profit/assets/liabilities (from Finstat). */
   latestFinancialsYear?: number;
+  latestFinancialsSource?: "finstat" | "ruz";
   warnings?: string[];
   paymentOrderWarnings?: string[];
   debtIndicators?: {
@@ -66,6 +67,47 @@ export interface FinancialYear {
   ebitda: number;
   assets: number;
   liabilities: number;
+  source?: "finstat" | "ruz";
+  availableFields?: FinanceField[];
+}
+
+export type FinanceField = "revenue" | "profit" | "assets" | "liabilities";
+export type FinanceSource = "finstat" | "ruz";
+
+export interface FinanceMappingCandidate {
+  source: FinanceSource;
+  field: FinanceField;
+  rawField: string;
+  rawValuePreview: string;
+  period?: string;
+  selected: boolean;
+  reason: string;
+}
+
+export interface FinanceMappingRuzRow {
+  statementId: string;
+  reportId?: string;
+  year: number;
+  tableName: string;
+  rowName: string;
+  values: number[];
+  selectedField?: FinanceField;
+  selectedValue?: number;
+  reason: string;
+}
+
+export interface FinanceMappingSelection {
+  field: FinanceField;
+  value?: number;
+  year?: number;
+  source?: FinanceSource;
+  reason: string;
+}
+
+export interface FinanceMappingInspector {
+  finstatCandidates: FinanceMappingCandidate[];
+  ruzRows: FinanceMappingRuzRow[];
+  selected: FinanceMappingSelection[];
 }
 
 export interface CompanyPerson {
@@ -150,6 +192,8 @@ export interface AccountingStatement {
   }>;
   /** Dev-only: how many numeric cells were parsed from the structured tables. */
   parsedNumericRowsCount?: number;
+  /** Dev-only: parsed numeric rows/candidates from structured RÚZ tables. */
+  parsedNumericRows?: FinanceMappingRuzRow[];
 }
 
 

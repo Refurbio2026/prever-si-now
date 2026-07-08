@@ -5,6 +5,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import type { CompanyIntelligence, FieldMergeAudit, ProviderDiagnostic } from "./providers/types";
+import type {
+  FinanceField,
+  FinanceMappingCandidate,
+  FinanceMappingInspector,
+  FinanceMappingRuzRow,
+} from "./types";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const DEV = process.env.NODE_ENV !== "production";
@@ -88,7 +94,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
     const [company, financials, statements, risks, contracts, monitoring] =
       await Promise.all([
         runCompanyProvider(ico, finstat, DEV ? diagnostics : undefined, DEV ? audit : undefined),
-        runFinancialProvider(ico, finstat),
+        runFinancialProvider(ico, finstat, DEV ? diagnostics : undefined),
         runStatementsProvider(ico, DEV ? diagnostics : undefined),
         runRiskProvider(ico, finstat),
         runContractsProvider(ico, DEV ? diagnostics : undefined),
@@ -102,6 +108,27 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       company.registry?.statutoryRepresentatives ?? [],
       DEV ? diagnostics : undefined,
     );
+
+    const latestFinancial = financials.data.at(-1);
+    if (company.data && latestFinancial) {
+      const financialSource = latestFinancial.source ?? "finstat";
+      const hasField = (field: FinanceField) =>
+        latestFinancial.availableFields?.includes(field) ?? latestFinancial[field] !== 0;
+      company.data = {
+        ...company.data,
+        revenue: latestFinancial.revenue,
+        profit: latestFinancial.profit,
+        latestAssets: latestFinancial.assets,
+        latestLiabilities: latestFinancial.liabilities,
+        latestFinancialsYear: latestFinancial.year,
+        latestFinancialsSource: financialSource,
+      };
+      company.fieldSources = { ...company.fieldSources };
+      if (hasField("revenue")) company.fieldSources.revenue = financialSource;
+      if (hasField("profit")) company.fieldSources.profit = financialSource;
+      if (hasField("assets")) company.fieldSources.latestAssets = financialSource;
+      if (hasField("liabilities")) company.fieldSources.latestLiabilities = financialSource;
+    }
 
     const sources = [
       ...company.sources,
@@ -127,9 +154,59 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
     });
 
     let finstatRawInspector: CompanyIntelligence["finstatRawInspector"];
+    let financeMappingInspector: FinanceMappingInspector | undefined;
     if (DEV && finstat.raw) {
-      const { buildFinstatRawInspector } = await import("./finstat.server");
+      const { buildFinstatRawInspector, buildFinstatFinanceCandidates } = await import("./finstat.server");
       finstatRawInspector = buildFinstatRawInspector(finstat.raw);
+      const selectedByField = new Map<FinanceField, { value?: number; year?: number; source?: "finstat" | "ruz" }>();
+      const latest = financials.data.at(-1);
+      if (latest) {
+        const latestHasField = (field: FinanceField) =>
+          latest.availableFields?.includes(field) ?? latest[field] !== 0;
+        if (latestHasField("revenue")) {
+          selectedByField.set("revenue", { value: latest.revenue, year: latest.year, source: latest.source ?? "finstat" });
+        }
+        if (latestHasField("profit")) {
+          selectedByField.set("profit", { value: latest.profit, year: latest.year, source: latest.source ?? "finstat" });
+        }
+        if (latestHasField("assets")) {
+          selectedByField.set("assets", { value: latest.assets, year: latest.year, source: latest.source ?? "finstat" });
+        }
+        if (latestHasField("liabilities")) {
+          selectedByField.set("liabilities", { value: latest.liabilities, year: latest.year, source: latest.source ?? "finstat" });
+        }
+      }
+
+      const finstatCandidates = buildFinstatFinanceCandidates(finstat.raw).map(
+        (candidate): FinanceMappingCandidate => {
+          const chosen = selectedByField.get(candidate.field);
+          const selected =
+            chosen?.source === "finstat" &&
+            chosen.value !== undefined &&
+            candidate.period === String(chosen.year) &&
+            Number(candidate.rawValuePreview) === chosen.value;
+          return selected ? { ...candidate, selected: true, reason: `selected: ${candidate.reason}` } : candidate;
+        },
+      );
+      const ruzRows: FinanceMappingRuzRow[] = statements.data.flatMap(
+        (statement) => statement.parsedNumericRows ?? [],
+      );
+      financeMappingInspector = {
+        finstatCandidates,
+        ruzRows,
+        selected: (["revenue", "profit", "assets", "liabilities"] as const).map((field) => {
+          const chosen = selectedByField.get(field);
+          return {
+            field,
+            value: chosen?.value,
+            year: chosen?.year,
+            source: chosen?.source,
+            reason: chosen?.source
+              ? `selected latest ${chosen.source.toUpperCase()} value with year ${chosen.year}`
+              : "rejected: no trustworthy financial value with attached period was found",
+          };
+        }),
+      };
     }
 
     const intel: CompanyIntelligence = {
@@ -153,6 +230,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       diagnostics: DEV ? diagnostics : undefined,
       fieldAudit: DEV ? audit : undefined,
       finstatRawInspector,
+      financeMappingInspector,
       unified,
     };
 

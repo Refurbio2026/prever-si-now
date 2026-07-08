@@ -19,7 +19,6 @@ import {
   financialAdminRisks,
   healthInsuranceRisks,
   justiceRisks,
-  ruzFinancials,
   socialInsuranceRisks,
   enforcementRisks,
   aiRiskAnalysis,
@@ -185,8 +184,10 @@ function toAuditValue(v: unknown): string | number | boolean | null {
 export async function runFinancialProvider(
   ico: string,
   finstat: FinstatBundle,
+  diagnostics?: ProviderDiagnostic[],
 ): Promise<{ data: FinancialYear[]; sources: ProviderSourceStatus[] }> {
-  const ruz = await safe(ruzFinancials(ico), {
+  const { ruzFinancials } = await import("./ruz.provider.server");
+  const ruz = await safe(ruzFinancials(ico, diagnostics), {
     data: [] as FinancialYear[],
     status: { source: "ruz" as const, capability: "financials" as const, state: "unavailable" as const },
   });
@@ -301,9 +302,27 @@ function mergeFinancials(a: FinancialYear[], b: FinancialYear[]): FinancialYear[
   const byYear = new Map<number, FinancialYear>();
   for (const row of [...a, ...b]) {
     const prev = byYear.get(row.year);
-    byYear.set(row.year, prev ? { ...prev, ...row } : row);
+    byYear.set(row.year, prev ? mergeFinancialYear(prev, row) : row);
   }
   return [...byYear.values()].sort((x, y) => x.year - y.year);
+}
+
+function mergeFinancialYear(prev: FinancialYear, next: FinancialYear): FinancialYear {
+  const hasNext = (field: "revenue" | "profit" | "ebitda" | "assets" | "liabilities"): boolean => {
+    if (field === "ebitda") return next.ebitda !== 0;
+    return next.availableFields?.includes(field) ?? next[field] !== 0;
+  };
+  const mergedAvailable = new Set([...(prev.availableFields ?? []), ...(next.availableFields ?? [])]);
+  return {
+    year: next.year,
+    revenue: hasNext("revenue") ? next.revenue : prev.revenue,
+    profit: hasNext("profit") ? next.profit : prev.profit,
+    ebitda: hasNext("ebitda") ? next.ebitda : prev.ebitda,
+    assets: hasNext("assets") ? next.assets : prev.assets,
+    liabilities: hasNext("liabilities") ? next.liabilities : prev.liabilities,
+    source: next.source ?? prev.source,
+    availableFields: [...mergedAvailable],
+  };
 }
 
 function mergeRisks(...groups: RiskIndicator[][]): RiskIndicator[] {

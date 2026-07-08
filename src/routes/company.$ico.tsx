@@ -64,6 +64,8 @@ import type {
   AccountingStatement,
   BasicCompanyInfo,
   Company,
+  FinanceField,
+  FinanceMappingInspector,
   CompanyOwner,
   CompanyPerson,
   FinancialYear,
@@ -209,6 +211,7 @@ function CompanyProfilePage() {
       fieldSources={intel.fieldSources}
       fieldAudit={intel.fieldAudit}
       finstatRawInspector={intel.finstatRawInspector}
+      financeMappingInspector={intel.financeMappingInspector}
       rpvsStatus={intel.rpvsStatus}
       rpvsRegistrationDate={intel.rpvsRegistrationDate}
       authorizedPerson={intel.authorizedPerson}
@@ -229,6 +232,7 @@ function CompanyProfileView({
   fieldSources,
   fieldAudit,
   finstatRawInspector,
+  financeMappingInspector,
   rpvsStatus,
   rpvsRegistrationDate,
   authorizedPerson,
@@ -249,6 +253,7 @@ function CompanyProfileView({
     mapped: boolean;
     target?: string;
   }>;
+  financeMappingInspector?: FinanceMappingInspector;
   rpvsStatus?: "aktívny" | "neaktívny" | "nezaregistrovaný";
   rpvsRegistrationDate?: string;
   authorizedPerson?: {
@@ -468,81 +473,84 @@ function CompanyProfileView({
               financials={financials}
             />
 
-            {financials.length >= 2 ? (
-              <>
-                <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-                  <div className="mb-4 flex items-center gap-2">
-                    <h3 className="text-lg font-semibold">Vývoj tržieb</h3>
-                    <SectionSourceBadge label="Finstat" />
-                  </div>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
-                        <defs>
-                          <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0.35} />
-                            <stop offset="100%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
-                        <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
-                        <YAxis
-                          stroke="oklch(0.5 0.03 255)"
-                          fontSize={12}
-                          axisLine={false}
-                          tickLine={false}
-                          tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
-                        />
-                        <RTooltip
-                          contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
-                          formatter={(v: number) => formatCurrency(v)}
-                        />
-                        <Area type="monotone" dataKey="revenue" stroke="oklch(0.55 0.2 258)" strokeWidth={2} fill="url(#revGrad)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
+            {hasChartableSeries(financials, "revenue") ? (
+              <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+                <div className="mb-4 flex items-center gap-2">
+                  <h3 className="text-lg font-semibold">Vývoj tržieb</h3>
+                  <SectionSourceBadge label={financeSourceLabel(financials)} />
+                </div>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={financials.filter((f) => hasFinancialField(f, "revenue"))} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
+                      <defs>
+                        <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="oklch(0.55 0.2 258)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
+                      <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
+                      <YAxis
+                        stroke="oklch(0.5 0.03 255)"
+                        fontSize={12}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                      />
+                      <RTooltip
+                        contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
+                        formatter={(v: number) => formatCurrency(v)}
+                      />
+                      <Area type="monotone" dataKey="revenue" stroke="oklch(0.55 0.2 258)" strokeWidth={2} fill="url(#revGrad)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            ) : null}
 
-                <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-                  <div className="mb-4 flex items-center gap-2">
-                    <h3 className="text-lg font-semibold">Zisk vs. EBITDA</h3>
-                    <SectionSourceBadge label="Finstat" />
-                  </div>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
-                        <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
-                        <YAxis
-                          stroke="oklch(0.5 0.03 255)"
-                          fontSize={12}
-                          axisLine={false}
-                          tickLine={false}
-                          tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
-                        />
-                        <RTooltip
-                          contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
-                          formatter={(v: number) => formatCurrency(v)}
-                        />
-                        <Bar dataKey="profit" fill="oklch(0.55 0.2 258)" radius={[6, 6, 0, 0]} />
-                        <Bar dataKey="ebitda" fill="oklch(0.72 0.16 245)" radius={[6, 6, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
-              </>
-            ) : (
+            {hasChartableSeries(financials, "profit") ? (
+              <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+                <div className="mb-4 flex items-center gap-2">
+                  <h3 className="text-lg font-semibold">Zisk vs. EBITDA</h3>
+                  <SectionSourceBadge label={financeSourceLabel(financials)} />
+                </div>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={financials.filter((f) => hasFinancialField(f, "profit"))} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.015 255)" vertical={false} />
+                      <XAxis dataKey="year" stroke="oklch(0.5 0.03 255)" fontSize={12} axisLine={false} tickLine={false} />
+                      <YAxis
+                        stroke="oklch(0.5 0.03 255)"
+                        fontSize={12}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                      />
+                      <RTooltip
+                        contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
+                        formatter={(v: number) => formatCurrency(v)}
+                      />
+                      <Bar dataKey="profit" fill="oklch(0.55 0.2 258)" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="ebitda" fill="oklch(0.72 0.16 245)" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            ) : null}
+
+            {!hasChartableSeries(financials, "revenue") && !hasChartableSeries(financials, "profit") ? (
               <Card className="rounded-2xl border-dashed p-6 text-center text-sm text-muted-foreground">
                 Detailný časový rad finančných údajov nie je dostupný.
               </Card>
-            )}
+            ) : null}
 
 
-            {financials.some(
-              (f) => f.assets > 0 || f.liabilities > 0 || f.revenue > 0 || f.profit > 0,
-            ) ? (
+            {financials.some(hasAnyFinancialField) ? (
               <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-                <h3 className="mb-4 text-lg font-semibold">Aktíva a pasíva</h3>
+                <div className="mb-4 flex items-center gap-2">
+                  <h3 className="text-lg font-semibold">Aktíva a pasíva</h3>
+                  <SectionSourceBadge label={financeSourceLabel(financials)} />
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[560px] text-sm">
                     <thead>
@@ -556,14 +564,14 @@ function CompanyProfileView({
                       </tr>
                     </thead>
                     <tbody>
-                      {[...financials].reverse().map((f) => (
+                      {[...financials].reverse().filter(hasAnyFinancialField).map((f) => (
                         <tr key={f.year} className="border-b border-border/50 last:border-0">
                           <td className="py-3 font-medium">{f.year}</td>
-                          <td className="py-3 text-right">{formatCurrency(f.revenue)}</td>
-                          <td className="py-3 text-right">{formatCurrency(f.profit)}</td>
-                          <td className="py-3 text-right">{formatCurrency(f.ebitda)}</td>
-                          <td className="py-3 text-right">{formatCurrency(f.assets)}</td>
-                          <td className="py-3 text-right">{formatCurrency(f.liabilities)}</td>
+                          <td className="py-3 text-right">{formatFinancialCell(f, "revenue")}</td>
+                          <td className="py-3 text-right">{formatFinancialCell(f, "profit")}</td>
+                          <td className="py-3 text-right">{f.ebitda !== 0 ? formatCurrency(f.ebitda) : "Nedostupné"}</td>
+                          <td className="py-3 text-right">{formatFinancialCell(f, "assets")}</td>
+                          <td className="py-3 text-right">{formatFinancialCell(f, "liabilities")}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -577,6 +585,9 @@ function CompanyProfileView({
             )}
 
             <AccountingStatementsCard statements={statements} />
+            {import.meta.env.DEV && financeMappingInspector && (
+              <FinanceMappingInspectorPanel inspector={financeMappingInspector} />
+            )}
             {import.meta.env.DEV && statements.length > 0 && (
               <RuzDiagnosticsPanel statements={statements} />
             )}
@@ -856,6 +867,31 @@ function na(value: string | number | undefined | null): string {
   const s = String(value).trim();
   if (!s || s === "—") return "Nedostupné";
   return s;
+}
+
+function hasFinancialField(row: FinancialYear, field: FinanceField): boolean {
+  return row.availableFields?.includes(field) ?? row[field] !== 0;
+}
+
+function hasAnyFinancialField(row: FinancialYear): boolean {
+  return (["revenue", "profit", "assets", "liabilities"] as const).some((field) =>
+    hasFinancialField(row, field),
+  );
+}
+
+function hasChartableSeries(financials: FinancialYear[], field: FinanceField): boolean {
+  return financials.filter((row) => hasFinancialField(row, field)).length >= 2;
+}
+
+function formatFinancialCell(row: FinancialYear, field: FinanceField): string {
+  return hasFinancialField(row, field) ? formatCurrency(row[field]) : "Nedostupné";
+}
+
+function financeSourceLabel(financials: FinancialYear[]): string {
+  const sources = new Set(financials.map((row) => row.source).filter(Boolean));
+  if (sources.has("finstat") && sources.has("ruz")) return "Finstat / RÚZ";
+  if (sources.has("ruz")) return "RÚZ";
+  return "Finstat";
 }
 
 function initials(name: string): string {
@@ -1827,6 +1863,96 @@ function RuzDiagnosticsPanel({
   );
 }
 
+function FinanceMappingInspectorPanel({
+  inspector,
+}: {
+  inspector: FinanceMappingInspector;
+}) {
+  return (
+    <Card className="rounded-2xl border-dashed border-border/70 p-6 shadow-soft">
+      <div className="mb-3 flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold">Developer — Finance Mapping Inspector</h3>
+      </div>
+      <div className="space-y-5 text-xs">
+        <div>
+          <h4 className="mb-2 font-semibold">Selected values</h4>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {inspector.selected.map((s) => (
+              <div key={s.field} className="rounded-lg border border-border/60 bg-secondary/30 p-3">
+                <div className="font-mono font-semibold">{s.field}</div>
+                <div className="mt-1">{s.value !== undefined ? formatCurrency(s.value) : "Nedostupné"}</div>
+                <div className="text-muted-foreground">{s.source ?? "—"} {s.year ?? ""}</div>
+                <div className="mt-1 text-[10px] text-muted-foreground">{s.reason}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <h4 className="mb-2 font-semibold">Raw Finstat financial candidates</h4>
+          <table className="w-full min-w-[760px] text-xs">
+            <thead>
+              <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 text-left font-medium">Field</th>
+                <th className="py-2 text-left font-medium">Raw key</th>
+                <th className="py-2 text-left font-medium">Value</th>
+                <th className="py-2 text-left font-medium">Period</th>
+                <th className="py-2 text-left font-medium">Selected</th>
+                <th className="py-2 text-left font-medium">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inspector.finstatCandidates.map((c, i) => (
+                <tr key={`${c.rawField}-${i}`} className="border-b border-border/50 align-top last:border-0">
+                  <td className="py-2 pr-3 font-mono">{c.field}</td>
+                  <td className="py-2 pr-3 font-mono">{c.rawField}</td>
+                  <td className="py-2 pr-3 font-mono">{c.rawValuePreview}</td>
+                  <td className="py-2 pr-3 font-mono">{c.period ?? "—"}</td>
+                  <td className="py-2 pr-3">{c.selected ? "✓" : "—"}</td>
+                  <td className="py-2 pr-3 text-muted-foreground">{c.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="overflow-x-auto">
+          <h4 className="mb-2 font-semibold">Raw RÚZ parsed numeric rows</h4>
+          <table className="w-full min-w-[820px] text-xs">
+            <thead>
+              <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 text-left font-medium">Statement</th>
+                <th className="py-2 text-left font-medium">Year</th>
+                <th className="py-2 text-left font-medium">Table</th>
+                <th className="py-2 text-left font-medium">Row</th>
+                <th className="py-2 text-left font-medium">Values</th>
+                <th className="py-2 text-left font-medium">Selected</th>
+                <th className="py-2 text-left font-medium">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inspector.ruzRows.map((r, i) => (
+                <tr key={`${r.statementId}-${r.rowName}-${i}`} className="border-b border-border/50 align-top last:border-0">
+                  <td className="py-2 pr-3 font-mono">{r.statementId}</td>
+                  <td className="py-2 pr-3 font-mono">{r.year}</td>
+                  <td className="py-2 pr-3">{r.tableName}</td>
+                  <td className="py-2 pr-3">{r.rowName}</td>
+                  <td className="py-2 pr-3 font-mono">{r.values.join(", ") || "—"}</td>
+                  <td className="py-2 pr-3 font-mono">
+                    {r.selectedField ? `${r.selectedField}: ${r.selectedValue}` : "—"}
+                  </td>
+                  <td className="py-2 pr-3 text-muted-foreground">{r.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function FinanceKpiSection({
   company,
   financials,
@@ -1836,18 +1962,18 @@ function FinanceKpiSection({
 }) {
   const latestFin = financials.length ? financials[financials.length - 1] : undefined;
 
-  // Prefer time-series values (they carry a real year); fall back to Company latest.
-  const revenue = latestFin?.revenue ?? company.revenue;
-  const profit = latestFin?.profit ?? company.profit;
-  const assets = latestFin?.assets ?? company.latestAssets;
-  const liabilities = latestFin?.liabilities ?? company.latestLiabilities;
+  const hasLatest = (field: FinanceField) => latestFin ? hasFinancialField(latestFin, field) : false;
+  const revenue = hasLatest("revenue") ? latestFin?.revenue : undefined;
+  const profit = hasLatest("profit") ? latestFin?.profit : undefined;
+  const assets = hasLatest("assets") ? latestFin?.assets : company.latestAssets;
+  const liabilities = hasLatest("liabilities") ? latestFin?.liabilities : company.latestLiabilities;
   const year = latestFin?.year ?? company.latestFinancialsYear;
   const period = latestFin
     ? String(latestFin.year)
     : year
       ? String(year)
-      : "Neznáme obdobie";
-  const source = financials.length > 0 ? "Finstat" : "Finstat";
+      : "Nedostupné";
+  const source = company.latestFinancialsSource === "ruz" ? "RÚZ" : financeSourceLabel(financials);
 
   const hasAnyValue =
     (typeof revenue === "number" && revenue > 0) ||
