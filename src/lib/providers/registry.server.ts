@@ -8,9 +8,8 @@ import type { GovContract, ProviderSourceId } from "./types";
 
 const soon = (name: string) => `${name}: integrácia sa pripravuje.`;
 
-export async function orsrCompanyInfo(_ico: string): Promise<ProviderResult<undefined>> {
-  return unavailable("orsr", "company", undefined, "unavailable", soon("ORSR"));
-}
+// ORSR now has a real implementation in orsr.provider.server.ts —
+// no placeholder needed here.
 
 export async function ruzFinancials(_ico: string): Promise<ProviderResult<import("@/lib/types").FinancialYear[]>> {
   return unavailable<import("@/lib/types").FinancialYear[]>("ruz", "financials", [], "unavailable", soon("Register účtovných závierok"));
