@@ -105,10 +105,11 @@ export const searchCompaniesFn = createServerFn({ method: "POST" })
         const hits = await finstatSearchByName(query);
         result = {
           ok: true,
-          results: hits.slice(0, 20).map(normalizeSearchHit),
+          results: hits.slice(0, 20),
           source: "finstat",
           mode,
         };
+
       }
       searchCacheSet(cacheKey, result);
       return result;
