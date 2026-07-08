@@ -59,7 +59,7 @@ import {
   ensureCompanyDataFn,
   getCompanyDataStatusFn,
   runDataHubWorkerFn,
-  AUTO_SOURCES,
+  type AutoSource,
   type AutoSource,
   type SourceProgress,
 } from "@/lib/datahub-auto.functions";
