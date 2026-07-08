@@ -623,7 +623,10 @@ export function normalizeCompany(raw: FinstatRawCompany): Company {
     latestLiabilities:
       latestFin?.liabilities ?? (raw.Liabilities != null ? Number(raw.Liabilities) : undefined),
     latestFinancialsYear:
-      latestFin?.year ?? (typeof raw.Year === "number" ? raw.Year : undefined),
+      latestFin?.year ??
+      (typeof bag.Year === "number"
+        ? (bag.Year as number)
+        : pickRawNumber(raw, ["YearOfSales", "YearOfProfit", "FinancialsYear"])),
     warnings: warnings.length ? warnings : undefined,
     paymentOrderWarnings: paymentOrders.length ? paymentOrders : undefined,
     debtIndicators: {
