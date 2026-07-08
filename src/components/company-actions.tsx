@@ -85,6 +85,35 @@ export function CompanyActions({ company }: Props) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const exportPdfFn = useServerFn(generateCompanyReportPdfFn);
+  const exportPdf = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("Nie ste prihlásený");
+      const res = await exportPdfFn({ data: { ico: company.ico } });
+      if (!res.ok || !res.base64 || !res.filename) {
+        throw new Error(res.error ?? "Generovanie PDF zlyhalo.");
+      }
+      // Decode base64 → Blob → trigger download.
+      const bin = atob(res.base64);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i += 1) arr[i] = bin.charCodeAt(i);
+      const blob = new Blob([arr], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      toast.success("PDF report bol vygenerovaný");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   function requireAuth(action: () => void) {
     if (loading) return;
     if (!user) {
@@ -124,6 +153,22 @@ export function CompanyActions({ company }: Props) {
           <Download className="mr-1.5 h-4 w-4" />
         )}
         Uložiť report
+      </Button>
+      <Button
+        onClick={() => requireAuth(() => exportPdf.mutate())}
+        disabled={exportPdf.isPending}
+        variant="outline"
+        className="col-span-2 rounded-xl"
+      >
+        {exportPdf.isPending ? (
+          <>
+            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Generujem PDF…
+          </>
+        ) : (
+          <>
+            <FileDown className="mr-1.5 h-4 w-4" /> Exportovať PDF
+          </>
+        )}
       </Button>
     </div>
   );
