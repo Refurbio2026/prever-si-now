@@ -8,6 +8,7 @@ import type {
   FinancialYear,
   RiskIndicator,
 } from "@/lib/types";
+import type { OrsrRegistryDetails } from "./orsr.provider.server";
 
 
 export type ProviderSourceId =
