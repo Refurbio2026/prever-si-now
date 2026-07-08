@@ -1182,6 +1182,27 @@ function SectionSourceBadge({ label }: { label: string }) {
   );
 }
 
+/** Pick the most common provider across a set of fields for a section badge.
+ *  When the merged data actually came from Finstat (ORSR failed), the badge
+ *  must reflect that — not lie about "Zdroj: ORSR". */
+function dominantSourceLabel(
+  fieldSources: Record<string, ProviderSourceId> | undefined,
+  fields: string[],
+  fallback: string,
+): string {
+  if (!fieldSources) return fallback;
+  const counts = new Map<ProviderSourceId, number>();
+  for (const f of fields) {
+    const src = fieldSources[f];
+    if (!src) continue;
+    counts.set(src, (counts.get(src) ?? 0) + 1);
+  }
+  if (counts.size === 0) return fallback;
+  const [top] = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  return providerMeta(top[0]).short;
+}
+
+
 function RegistryCard({
   basic,
   fieldSources,
