@@ -49,7 +49,15 @@ export type ProviderCapability =
   | "monitoring";
 
 
-export type ProviderState = "ok" | "unavailable" | "not_configured" | "empty" | "error";
+export type ProviderState =
+  | "ok"
+  | "unavailable"
+  | "not_configured"
+  | "not_implemented"
+  | "requires_auth"
+  | "empty"
+  | "error";
+
 
 export interface ProviderSourceStatus {
   source: ProviderSourceId;

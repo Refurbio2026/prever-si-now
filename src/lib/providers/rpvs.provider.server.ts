@@ -241,7 +241,7 @@ export async function rpvsPartnerBundle(
       "rpvs",
       "people",
       undefined,
-      "error",
+      "unavailable",
       e.message ?? "Chyba pri komunikácii s RPVS.",
     );
   }

@@ -48,6 +48,8 @@ import { RiskBadge, formatCurrency } from "@/components/risk-badge";
 import { CompanyActions } from "@/components/company-actions";
 import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
+import { useAuth } from "@/hooks/use-auth";
+
 import type {
   AccountingStatement,
   BasicCompanyInfo,
@@ -239,6 +241,10 @@ function CompanyProfileView({
     validTo?: string;
   };
 }) {
+  const { user } = useAuth();
+  const isAuthenticated = !!user;
+
+
 
 
   // All section data comes from the unified structure — never directly from
@@ -422,8 +428,9 @@ function CompanyProfileView({
             <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
               <div className="mb-5 flex items-center justify-between gap-2">
                 <h3 className="text-lg font-semibold">Základné informácie</h3>
-                <SectionSourceBadge label="ORSR" />
+                <SectionSourceBadge label={dominantSourceLabel(fieldSources, ["legalForm", "industry", "skNaceCode", "vatPayer"], "ORSR")} />
               </div>
+
               {basic ? (
                 <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                   <InfoField label="Odvetvie" value={na(basic.industry)} source={fieldSources?.industry} />
@@ -443,7 +450,7 @@ function CompanyProfileView({
 
             <RegistryCard basic={basic} fieldSources={fieldSources} />
 
-            <ProviderStatusSection ico={ico} sources={sources} diagnostics={diagnostics} />
+            <ProviderStatusSection ico={ico} sources={sources} diagnostics={diagnostics} isAuthenticated={isAuthenticated} />
             {fieldAudit && fieldAudit.length > 0 && <DevDebugPanel audit={fieldAudit} />}
           </TabsContent>
 
@@ -896,12 +903,15 @@ function ProviderStatusSection({
   sources,
   diagnostics,
   className,
+  isAuthenticated = false,
 }: {
   ico: string;
   sources: ProviderSourceStatus[];
   diagnostics?: ProviderDiagnostic[];
   className?: string;
+  isAuthenticated?: boolean;
 }) {
+
   const byId = new Map<string, ProviderSourceStatus[]>();
   for (const s of sources) {
     const arr = byId.get(s.source) ?? [];
@@ -933,7 +943,13 @@ function ProviderStatusSection({
           {PROVIDER_META.map((meta) => {
             const implemented = IMPLEMENTED_SOURCES.has(meta.id);
             const statuses = byId.get(meta.id) ?? [];
-            const state = deriveDisplayState(implemented, statuses);
+            // Anonymous users can't see monitoring — surface a login CTA
+            // instead of showing it as "Nedostupné".
+            const isMonitoring = meta.id === "internal";
+            const state =
+              isMonitoring && !isAuthenticated
+                ? "requires_auth"
+                : deriveDisplayState(implemented, statuses);
             const cfg = STATE_CFG[state];
             const Icon = cfg.icon;
             return (
@@ -954,11 +970,17 @@ function ProviderStatusSection({
                     </Badge>
                   </div>
                   <div className="truncate text-xs text-muted-foreground">{meta.label}</div>
+                  {state === "requires_auth" && (
+                    <Button asChild size="sm" variant="outline" className="mt-2 h-7 rounded-lg text-xs">
+                      <Link to="/auth">Prihlásiť sa</Link>
+                    </Button>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
+
       </Card>
 
       {diagnostics && diagnostics.length > 0 && (
@@ -998,28 +1020,30 @@ function ProviderStatusSection({
 }
 
 const STATE_CFG: Record<
-  "ok" | "empty" | "pending" | "unavailable" | "error",
+  "ok" | "empty" | "pending" | "unavailable" | "requires_auth",
   { icon: typeof CheckCircle2; cls: string; label: string }
 > = {
   ok: { icon: CheckCircle2, cls: "text-success bg-success/15", label: "Aktívne" },
-  empty: { icon: CheckCircle2, cls: "text-muted-foreground bg-secondary", label: "Bez dát" },
+  empty: { icon: CheckCircle2, cls: "text-muted-foreground bg-secondary", label: "Bez záznamov" },
   pending: { icon: Clock, cls: "text-muted-foreground bg-secondary", label: "Pripravuje sa" },
   unavailable: { icon: AlertTriangle, cls: "text-warning-foreground bg-warning/20", label: "Nedostupné" },
-  error: { icon: XCircle, cls: "text-destructive bg-destructive/15", label: "Chyba" },
+  requires_auth: { icon: AlertCircle, cls: "text-muted-foreground bg-secondary", label: "Vyžaduje prihlásenie" },
 };
 
 function deriveDisplayState(
   implemented: boolean,
   statuses: ProviderSourceStatus[],
-): "ok" | "empty" | "pending" | "unavailable" | "error" {
+): "ok" | "empty" | "pending" | "unavailable" | "requires_auth" {
   if (!implemented) return "pending";
   if (statuses.length === 0) return "pending";
+  if (statuses.some((s) => s.state === "requires_auth")) return "requires_auth";
   if (statuses.some((s) => s.state === "ok")) return "ok";
-  if (statuses.some((s) => s.state === "error")) return "error";
-  if (statuses.some((s) => s.state === "unavailable" || s.state === "not_configured"))
-    return "unavailable";
-  return "empty";
+  if (statuses.some((s) => s.state === "empty")) return "empty";
+  // Any failure — network, HTTP, parse, timeout — surfaces as "Nedostupné",
+  // never "Chyba". "Chyba" made providers with zero data look broken.
+  return "unavailable";
 }
+
 
 function DiagRow({ label, value }: { label: string; value: string }) {
   return (
@@ -1158,6 +1182,27 @@ function SectionSourceBadge({ label }: { label: string }) {
   );
 }
 
+/** Pick the most common provider across a set of fields for a section badge.
+ *  When the merged data actually came from Finstat (ORSR failed), the badge
+ *  must reflect that — not lie about "Zdroj: ORSR". */
+function dominantSourceLabel(
+  fieldSources: Record<string, ProviderSourceId> | undefined,
+  fields: string[],
+  fallback: string,
+): string {
+  if (!fieldSources) return fallback;
+  const counts = new Map<ProviderSourceId, number>();
+  for (const f of fields) {
+    const src = fieldSources[f];
+    if (!src) continue;
+    counts.set(src, (counts.get(src) ?? 0) + 1);
+  }
+  if (counts.size === 0) return fallback;
+  const [top] = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  return providerMeta(top[0]).short;
+}
+
+
 function RegistryCard({
   basic,
   fieldSources,
@@ -1172,7 +1217,7 @@ function RegistryCard({
           <Building2 className="h-4 w-4 text-primary" />
           <h3 className="text-lg font-semibold">Registrové údaje</h3>
         </div>
-        <SectionSourceBadge label="ORSR" />
+        <SectionSourceBadge label={dominantSourceLabel(fieldSources, ["registrationNumberText", "legalForm", "address", "registrationDate"], "ORSR")} />
       </div>
       {basic ? (
         <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -55,11 +55,11 @@ export async function runCompanyProvider(
 }> {
   const orsr = await safe(orsrRegistryDetails(ico, diagnostics), {
     data: undefined as import("./orsr.provider.server").OrsrRegistryDetails | undefined,
-    status: { source: "orsr" as const, capability: "company" as const, state: "error" as const },
+    status: { source: "orsr" as const, capability: "company" as const, state: "unavailable" as const },
   });
   const cadastre = await safe(cadastreCompanyInfo(ico), {
     data: undefined,
-    status: { source: "cadastre" as const, capability: "company" as const, state: "error" as const },
+    status: { source: "cadastre" as const, capability: "company" as const, state: "unavailable" as const },
   });
 
   const base = finstat.company.data;
@@ -174,7 +174,7 @@ export async function runFinancialProvider(
 ): Promise<{ data: FinancialYear[]; sources: ProviderSourceStatus[] }> {
   const ruz = await safe(ruzFinancials(ico), {
     data: [] as FinancialYear[],
-    status: { source: "ruz" as const, capability: "financials" as const, state: "error" as const },
+    status: { source: "ruz" as const, capability: "financials" as const, state: "unavailable" as const },
   });
   const merged = mergeFinancials(finstat.financials.data, ruz.data);
   return { data: merged, sources: [finstat.financials.status, ruz.status] };
@@ -266,7 +266,7 @@ export async function runStatementsProvider(
   const { ruzStatements } = await import("./ruz.provider.server");
   const result = await safe(ruzStatements(ico, diagnostics), {
     data: [] as import("@/lib/types").AccountingStatement[],
-    status: { source: "ruz" as const, capability: "statements" as const, state: "error" as const },
+    status: { source: "ruz" as const, capability: "statements" as const, state: "unavailable" as const },
   });
   return { data: result.data, sources: [result.status] };
 }
@@ -321,5 +321,5 @@ function mergePeople(...groups: CompanyPerson[][]): CompanyPerson[] {
 }
 
 function err(source: "orsr" | "ruz" | "rpvs" | "financial_admin" | "social_insurance" | "health_insurance" | "crz" | "uvo" | "justice" | "enforcement" | "cadastre" | "ai" | "internal", capability: ProviderSourceStatus["capability"] = "company"): ProviderSourceStatus {
-  return { source, capability, state: "error" };
+  return { source, capability, state: "unavailable" };
 }
