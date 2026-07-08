@@ -100,6 +100,8 @@ export interface CompanyIntelligence {
   risks: RiskIndicator[];
   contracts: GovContract[];
   monitoring?: MonitoringSnapshot;
+  /** Registry (ORSR) details — primary source for legal/registry fields. */
+  registry?: RegistryDetails;
   sources: ProviderSourceStatus[];
   /** true if any source ended in `unavailable`/`error`/`not_configured` */
   partial: boolean;
