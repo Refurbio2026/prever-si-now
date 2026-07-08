@@ -146,10 +146,23 @@ function SearchPage() {
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-semibold">{r.name}</div>
                         <div className="mt-0.5 text-xs text-muted-foreground">
-                          IČO {r.ico} · {r.city}
+                          IČO {r.ico}
+                          {r.address ? ` · ${r.address}` : ""}
+                          {r.legalForm ? ` · ${r.legalForm}` : ""}
                         </div>
+                        {(r.revenue || r.profit || r.warningIndicators?.length) ? (
+                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            {r.revenue ? <span>Tržby: {formatCurrency(r.revenue)}</span> : null}
+                            {r.profit ? <span>Zisk: {formatCurrency(r.profit)}</span> : null}
+                            {r.warningIndicators?.length ? (
+                              <span className="text-warning-foreground">
+                                {r.warningIndicators.length} upozornení
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
-                      {r.riskScore > 0 && (
+                      {r.riskScore !== undefined && r.riskScore > 0 && (
                         <div className="hidden text-right sm:block">
                           <div className="text-xs text-muted-foreground">Finančné skóre</div>
                           <div className="text-lg font-bold">
@@ -158,7 +171,9 @@ function SearchPage() {
                           </div>
                         </div>
                       )}
-                      {r.riskScore > 0 && <RiskBadge level={r.riskLevel} />}
+                      {r.riskScore !== undefined && r.riskScore > 0 && (
+                        <RiskBadge level={riskLevelFromScore(r.riskScore)} />
+                      )}
                     </div>
                   </Card>
                 </Link>
