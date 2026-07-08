@@ -46,7 +46,7 @@ export async function runCompanyProvider(
   sources: ProviderSourceStatus[];
 }> {
   const orsr = await safe(orsrRegistryDetails(ico, diagnostics), {
-    data: undefined as RegistryDetails | undefined,
+    data: undefined as import("./orsr.provider.server").OrsrRegistryDetails | undefined,
     status: { source: "orsr" as const, capability: "company" as const, state: "error" as const },
   });
   const cadastre = await safe(cadastreCompanyInfo(ico), {
