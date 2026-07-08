@@ -622,24 +622,51 @@ function CompanyProfileView({
               registrationDate={rpvsRegistrationDate}
               authorizedPerson={authorizedPerson}
             />
-            <PeopleCard
+            <DbPeopleCard
               title="Štatutárny orgán / Konatelia"
               icon={Users}
-              people={executives}
-              sourceLabel="ORSR"
+              people={dbExecutives}
+              loading={recordsLoading}
+              emptyText="Žiadni štatutári nie sú evidovaní."
             />
-            <OwnersCard
+            <DbPeopleCard
               title="Spoločníci"
               icon={Crown}
-              owners={partnersOwners}
-              sourceLabel="RPVS"
+              people={dbOwners}
+              loading={recordsLoading}
+              emptyText="Žiadni spoločníci nie sú evidovaní."
             />
-            <OwnersCard
+            <DbPeopleCard
               title="Koneční užívatelia výhod (KUV)"
               icon={ShieldCheck}
-              owners={beneficials}
-              sourceLabel="RPVS"
+              people={dbBeneficials}
+              loading={recordsLoading}
+              emptyText="Žiadni koneční užívatelia výhod nie sú evidovaní."
             />
+            <DbPeopleCard
+              title="Oprávnená osoba"
+              icon={ShieldCheck}
+              people={dbAuthorized}
+              loading={recordsLoading}
+              emptyText="Žiadna oprávnená osoba nie je evidovaná."
+            />
+            {/* Legacy fallback: RPVS-sourced owners/beneficial owners from aggregation */}
+            {(partnersOwners.length > 0 || beneficials.length > 0) && (
+              <>
+                <OwnersCard
+                  title="Spoločníci (RPVS)"
+                  icon={Crown}
+                  owners={partnersOwners}
+                  sourceLabel="RPVS"
+                />
+                <OwnersCard
+                  title="Koneční užívatelia výhod (RPVS)"
+                  icon={ShieldCheck}
+                  owners={beneficials}
+                  sourceLabel="RPVS"
+                />
+              </>
+            )}
           </TabsContent>
 
 
@@ -676,33 +703,9 @@ function CompanyProfileView({
 
           {/* HISTORY */}
           <TabsContent value="history">
-            <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-              <h3 className="mb-6 text-lg font-semibold">Časová os zmien</h3>
-              <ol className="relative border-l border-border pl-6">
-                {mockHistory.map((h, i) => (
-                  <li key={i} className="relative mb-6 last:mb-0">
-                    <span
-                      className={`absolute -left-[29px] flex h-4 w-4 items-center justify-center rounded-full ring-4 ring-background ${
-                        h.severity === "critical"
-                          ? "bg-destructive"
-                          : h.severity === "warning"
-                          ? "bg-warning"
-                          : h.severity === "success"
-                          ? "bg-success"
-                          : "bg-primary"
-                      }`}
-                    />
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {new Date(h.date).toLocaleDateString("sk-SK")}
-                    </div>
-                    <div className="mt-1 text-sm font-semibold">{h.type}</div>
-                    <div className="text-sm text-muted-foreground">{h.description}</div>
-                  </li>
-                ))}
-              </ol>
-            </Card>
+            <DbHistoryCard history={dbHistory} loading={recordsLoading} />
           </TabsContent>
+
 
           {/* MONITORING */}
           <TabsContent value="monitoring" className="space-y-6">
