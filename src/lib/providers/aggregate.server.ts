@@ -3,6 +3,15 @@
 // to the relevant provider below; the UI needs zero changes.
 
 import type { Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
+import type {
+  FieldMergeAudit,
+  GovContract,
+  MonitoringSnapshot,
+  ProviderDiagnostic,
+  ProviderSourceId,
+  ProviderSourceStatus,
+  RegistryDetails,
+} from "./types";
 import type { GovContract, MonitoringSnapshot, ProviderDiagnostic, ProviderSourceStatus, RegistryDetails } from "./types";
 import { finstatFetchAll } from "./finstat.provider.server";
 import { orsrRegistryDetails } from "./orsr.provider.server";
