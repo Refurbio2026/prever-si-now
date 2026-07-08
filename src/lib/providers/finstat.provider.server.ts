@@ -87,8 +87,9 @@ export async function finstatFetchAll(
       return unavailable<T>("finstat", cap, fallback, "not_configured", "Finstat API nie je nakonfigurované.");
     }
     if (reason === "error") {
-      return unavailable<T>("finstat", cap, fallback, "error", message ?? "Chyba pri komunikácii s Finstat.");
+      return unavailable<T>("finstat", cap, fallback, "unavailable", message ?? "Chyba pri komunikácii s Finstat.");
     }
+
     return empty<T>("finstat", cap, fallback, "Firma nebola nájdená.");
   };
 
