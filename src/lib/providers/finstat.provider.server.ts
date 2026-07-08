@@ -4,7 +4,7 @@
 
 import type { Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
 import { empty, ok, unavailable, type ProviderResult } from "./base.server";
-import type { ProviderCapability } from "./types";
+import type { ProviderCapability, ProviderDiagnostic } from "./types";
 
 async function loadFinstat() {
   const mod = await import("@/lib/finstat.server");
@@ -13,16 +13,33 @@ async function loadFinstat() {
 
 const ALLOW_MOCK = process.env.NODE_ENV !== "production";
 
-async function getRaw(ico: string) {
+interface RawFetchResult {
+  raw: Awaited<ReturnType<Awaited<ReturnType<typeof loadFinstat>>["finstatGetByIco"]>> | null;
+  mock: ReturnType<Awaited<ReturnType<typeof loadFinstat>>["mockCompanyDetail"]> | null;
+  reason: "not_configured" | "empty" | "error" | null;
+  errorMessage?: string;
+}
+
+async function getRaw(
+  ico: string,
+  diagnostics?: ProviderDiagnostic[],
+): Promise<RawFetchResult> {
   const { getFinstatEnvStatus, finstatGetByIco, mockCompanyDetail, FinstatError } =
     await loadFinstat();
 
   const env = getFinstatEnvStatus();
   if (!env.allSet) {
+    diagnostics?.push({
+      source: "finstat",
+      capability: "company",
+      endpoint: "/detail",
+      errorCode: "missing_credentials",
+      normalizedError: "Finstat API kľúče nie sú nastavené.",
+    });
     return {
       raw: null,
       mock: ALLOW_MOCK ? mockCompanyDetail(ico) : null,
-      reason: "not_configured" as const,
+      reason: "not_configured",
     };
   }
   try {
@@ -30,21 +47,34 @@ async function getRaw(ico: string) {
     return { raw, mock: null, reason: null };
   } catch (err) {
     const fe = err as InstanceType<typeof FinstatError>;
+    diagnostics?.push({
+      source: "finstat",
+      capability: "company",
+      endpoint: fe?.endpoint ?? "/detail",
+      httpStatus: fe?.status,
+      errorCode: fe?.code ?? "unknown",
+      rawError: fe?.rawResponse?.slice(0, 800),
+      normalizedError: fe?.message,
+      finalUrlMasked: fe?.finalUrlMasked,
+    });
     if (fe?.code === "unauthorized" || fe?.code === "missing_credentials") {
       return {
         raw: null,
         mock: ALLOW_MOCK ? mockCompanyDetail(ico) : null,
-        reason: "not_configured" as const,
+        reason: "not_configured",
       };
     }
     if (fe?.code === "not_found") {
-      return { raw: null, mock: null, reason: "empty" as const };
+      return { raw: null, mock: null, reason: "empty" };
     }
-    throw err;
+    return { raw: null, mock: null, reason: "error", errorMessage: fe?.message };
   }
 }
 
-export async function finstatFetchAll(ico: string): Promise<{
+export async function finstatFetchAll(
+  ico: string,
+  diagnostics?: ProviderDiagnostic[],
+): Promise<{
   company: ProviderResult<Company | undefined>;
   financials: ProviderResult<FinancialYear[]>;
   people: ProviderResult<CompanyPerson[]>;
@@ -52,43 +82,40 @@ export async function finstatFetchAll(ico: string): Promise<{
 }> {
   const { normalizeDetail } = await loadFinstat();
 
-  const emptyResult = <T,>(cap: ProviderCapability, fallback: T, reason: "empty" | "not_configured") =>
-    reason === "not_configured"
-      ? unavailable<T>("finstat", cap, fallback, "not_configured", "Finstat API nie je nakonfigurované.")
-      : empty<T>("finstat", cap, fallback, "Firma nebola nájdená.");
+  const emptyResult = <T,>(cap: ProviderCapability, fallback: T, reason: "empty" | "not_configured" | "error", message?: string) => {
+    if (reason === "not_configured") {
+      return unavailable<T>("finstat", cap, fallback, "not_configured", "Finstat API nie je nakonfigurované.");
+    }
+    if (reason === "error") {
+      return unavailable<T>("finstat", cap, fallback, "error", message ?? "Chyba pri komunikácii s Finstat.");
+    }
+    return empty<T>("finstat", cap, fallback, "Firma nebola nájdená.");
+  };
 
-  try {
-    const { raw, mock, reason } = await getRaw(ico);
-    if (raw) {
-      const bundle = normalizeDetail(raw);
-      return {
-        company: ok("finstat", "company", bundle.company),
-        financials: ok("finstat", "financials", bundle.financials),
-        people: ok("finstat", "people", bundle.people),
-        risks: ok("finstat", "risks", bundle.risks),
-      };
-    }
-    if (mock) {
-      return {
-        company: unavailable("finstat", "company", mock.company, "not_configured", "Zobrazujem ukážkové dáta."),
-        financials: unavailable("finstat", "financials", mock.financials, "not_configured"),
-        people: unavailable("finstat", "people", mock.people, "not_configured"),
-        risks: unavailable("finstat", "risks", mock.risks, "not_configured"),
-      };
-    }
+  const { raw, mock, reason, errorMessage } = await getRaw(ico, diagnostics);
+  if (raw) {
+    const bundle = normalizeDetail(raw);
     return {
-      company: emptyResult<Company | undefined>("company", undefined, reason ?? "empty"),
-      financials: emptyResult<FinancialYear[]>("financials", [], reason ?? "empty"),
-      people: emptyResult<CompanyPerson[]>("people", [], reason ?? "empty"),
-      risks: emptyResult<RiskIndicator[]>("risks", [], reason ?? "empty"),
-    };
-  } catch (err) {
-    const message = (err as Error).message;
-    return {
-      company: unavailable<Company | undefined>("finstat", "company", undefined, "error", message),
-      financials: unavailable<FinancialYear[]>("finstat", "financials", [], "error", message),
-      people: unavailable<CompanyPerson[]>("finstat", "people", [], "error", message),
-      risks: unavailable<RiskIndicator[]>("finstat", "risks", [], "error", message),
+      company: ok("finstat", "company", bundle.company),
+      financials: ok("finstat", "financials", bundle.financials),
+      people: ok("finstat", "people", bundle.people),
+      risks: ok("finstat", "risks", bundle.risks),
     };
   }
+  if (mock) {
+    return {
+      company: unavailable("finstat", "company", mock.company, "not_configured", "Zobrazujem ukážkové dáta."),
+      financials: unavailable("finstat", "financials", mock.financials, "not_configured"),
+      people: unavailable("finstat", "people", mock.people, "not_configured"),
+      risks: unavailable("finstat", "risks", mock.risks, "not_configured"),
+    };
+  }
+  const r = reason ?? "empty";
+  return {
+    company: emptyResult<Company | undefined>("company", undefined, r, errorMessage),
+    financials: emptyResult<FinancialYear[]>("financials", [], r, errorMessage),
+    people: emptyResult<CompanyPerson[]>("people", [], r, errorMessage),
+    risks: emptyResult<RiskIndicator[]>("risks", [], r, errorMessage),
+  };
 }
+
