@@ -15,7 +15,11 @@ const RPO_BASE = "https://api.statistics.sk/rpo/v2";
 const REQUEST_TIMEOUT_MS = 8000;
 const ALLOW_MOCK = process.env.NODE_ENV !== "production";
 
-export interface OrsrRegistryDetails {
+import type { RegistryDetails } from "./types";
+
+export type OrsrRegistryDetails = RegistryDetails & { source: "orsr" };
+
+interface _OrsrRegistryDetailsUnused {
   source: "orsr";
   registrationNumber?: string;
   legalForm?: string;
