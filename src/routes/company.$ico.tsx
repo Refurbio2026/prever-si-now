@@ -186,6 +186,8 @@ function CompanyProfilePage() {
       partial={intel.partial}
       diagnostics={intel.diagnostics}
       registry={intel.registry}
+      fieldSources={intel.fieldSources}
+      fieldAudit={intel.fieldAudit}
     />
   );
 }
@@ -202,6 +204,8 @@ function CompanyProfileView({
   partial,
   diagnostics,
   registry,
+  fieldSources,
+  fieldAudit,
 }: {
   ico: string;
   company: Company;
@@ -213,6 +217,8 @@ function CompanyProfileView({
   partial: boolean;
   diagnostics?: ProviderDiagnostic[];
   registry?: RegistryDetails;
+  fieldSources?: Record<string, ProviderSourceId>;
+  fieldAudit?: FieldMergeAudit[];
 }) {
 
 
