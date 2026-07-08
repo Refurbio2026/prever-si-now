@@ -666,12 +666,35 @@ function InfoRow({ icon: Icon, label, value }: { icon: typeof Building2; label: 
   );
 }
 
-function InfoField({ label, value }: { label: string; value: string }) {
+function InfoField({
+  label,
+  value,
+  source,
+}: {
+  label: string;
+  value: string;
+  source?: ProviderSourceId;
+}) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+        <span>{label}</span>
+        {source && <SourceBadge source={source} />}
+      </div>
       <div className="mt-1 text-sm font-medium">{value}</div>
     </div>
+  );
+}
+
+function SourceBadge({ source }: { source: ProviderSourceId }) {
+  const meta = providerMeta(source);
+  return (
+    <span
+      className="inline-flex items-center rounded-full border border-border/60 bg-secondary px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground"
+      title={`Zdroj: ${meta.label}`}
+    >
+      {meta.short}
+    </span>
   );
 }
 
