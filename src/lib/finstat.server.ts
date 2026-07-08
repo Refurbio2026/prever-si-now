@@ -320,20 +320,20 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
   }
 }
 
-export async function finstatSearchByName(query: string): Promise<FinstatSearchHit[]> {
-  // Official Finstat Premium endpoint (per FinStat PHP client `RequestAutoComplete`):
-  //   POST/GET https://www.finstat.sk/api/autocomplete
-  //   params: query
-  //   hash input: raw query string
-  //   response: { Results: [{ Ico, Name, City, Cancelled }], Suggestions: [] }
-  const data = (await finstatFetch("/autocomplete", { query }, query)) as
-    | { Results?: FinstatSearchHit[] }
-    | FinstatSearchHit[]
-    | null;
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  return data.Results ?? [];
+/** Raw search response — useful for debug pages. Never throws on parse issues. */
+export async function finstatSearchByNameRaw(query: string): Promise<unknown> {
+  return finstatFetch("/autocomplete", { query }, query);
 }
+
+export async function finstatSearchByName(query: string): Promise<CompanySearchResult[]> {
+  const raw = await finstatSearchByNameRaw(query);
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.log("[finstat] /autocomplete raw response:", JSON.stringify(raw));
+  }
+  return normalizeSearchResponse(raw);
+}
+
 
 export async function finstatGetByIco(ico: string): Promise<FinstatRawCompany> {
   const data = (await finstatFetch("/detail", { ico }, ico)) as FinstatRawCompany | null;
@@ -412,18 +412,30 @@ export function normalizeCompany(raw: FinstatRawCompany): Company {
   };
 }
 
+function safeTrim(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t.length ? t : null;
+}
+
 function collectStrings(
-  list: Array<string | { Text?: string; Description?: string }> | undefined,
-  single: string | undefined,
+  list: unknown,
+  single: unknown,
 ): string[] {
   const out: string[] = [];
-  if (single && single.trim()) out.push(single.trim());
+  const s = safeTrim(single);
+  if (s) out.push(s);
   if (Array.isArray(list)) {
     for (const item of list) {
-      if (typeof item === "string" && item.trim()) out.push(item.trim());
-      else if (item && typeof item === "object") {
-        const t = item.Text ?? item.Description;
-        if (t && t.trim()) out.push(t.trim());
+      const direct = safeTrim(item);
+      if (direct) {
+        out.push(direct);
+        continue;
+      }
+      if (item && typeof item === "object") {
+        const obj = item as { Text?: unknown; Description?: unknown };
+        const t = safeTrim(obj.Text) ?? safeTrim(obj.Description);
+        if (t) out.push(t);
       }
     }
   }
@@ -432,13 +444,64 @@ function collectStrings(
 
 /** Light-weight search hit → CompanySearchResult (name search path). */
 export function normalizeSearchHit(hit: FinstatSearchHit): CompanySearchResult {
-  const addressParts = [hit.Street, hit.ZipCode, hit.City].filter(Boolean);
+  const addressParts = [hit.Street, hit.ZipCode, hit.City].filter(
+    (v): v is string => typeof v === "string" && v.trim().length > 0,
+  );
   return {
     ico: String(hit.Ico ?? ""),
-    name: hit.Name ?? "Neznáma firma",
+    name: typeof hit.Name === "string" ? hit.Name : "Neznáma firma",
     address: addressParts.length ? addressParts.join(" ") : undefined,
   };
 }
+
+/**
+ * Defensive normalizer for the Finstat search / autocomplete endpoint.
+ * Accepts any shape (array, single object, `{ Results }`, `{ Companies }`,
+ * `{ Data }`, `{ Suggestions }`, etc.) and never throws.
+ */
+export function normalizeSearchResponse(raw: unknown): CompanySearchResult[] {
+  if (raw == null) return [];
+
+  // Array of hits.
+  if (Array.isArray(raw)) {
+    return raw.flatMap(hitToResult);
+  }
+
+  if (typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+
+    // Known collection keys used by Finstat / similar registries.
+    for (const key of ["Results", "Companies", "Data", "Items", "Suggestions", "Hits"]) {
+      const v = obj[key];
+      if (Array.isArray(v)) return v.flatMap(hitToResult);
+    }
+
+    // Single company object shape (has Ico).
+    if ("Ico" in obj || "ico" in obj) {
+      return hitToResult(obj);
+    }
+  }
+
+  return [];
+}
+
+function hitToResult(item: unknown): CompanySearchResult[] {
+  if (!item || typeof item !== "object") return [];
+  const o = item as Record<string, unknown>;
+  const ico = o.Ico ?? o.ico;
+  const name = o.Name ?? o.name;
+  if (ico == null && name == null) return [];
+  const hit: FinstatSearchHit = {
+    Ico: ico != null ? String(ico) : undefined,
+    Name: typeof name === "string" ? name : name != null ? String(name) : undefined,
+    Street: typeof o.Street === "string" ? o.Street : undefined,
+    City: typeof o.City === "string" ? o.City : undefined,
+    ZipCode: typeof o.ZipCode === "string" ? o.ZipCode : undefined,
+    Region: typeof o.Region === "string" ? o.Region : undefined,
+  };
+  return [normalizeSearchHit(hit)];
+}
+
 
 /** Full Finstat detail → CompanySearchResult (IČO search path — includes financials, risks). */
 export function companyToSearchResult(
