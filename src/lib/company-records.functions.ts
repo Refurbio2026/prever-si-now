@@ -146,6 +146,7 @@ async function runImport(
 }
 
 export const importCompanyRegistryFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => icoSchema.parse(input))
   .handler(async ({ data }): Promise<ImportJobResult> => {
     const { importCompanyRegistry } = await import("./imports.server");
@@ -153,6 +154,7 @@ export const importCompanyRegistryFn = createServerFn({ method: "POST" })
   });
 
 export const importCompanyPeopleFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => icoSchema.parse(input))
   .handler(async ({ data }): Promise<ImportJobResult> => {
     const { importCompanyPeople } = await import("./imports.server");
@@ -160,6 +162,7 @@ export const importCompanyPeopleFn = createServerFn({ method: "POST" })
   });
 
 export const importCompanyHistoryFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => icoSchema.parse(input))
   .handler(async ({ data }): Promise<ImportJobResult> => {
     const { importCompanyHistory } = await import("./imports.server");
