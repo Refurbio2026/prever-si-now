@@ -5,6 +5,7 @@ import type {
   AccountingStatement,
   Company,
   CompanyPerson,
+  FinanceMappingInspector,
   FinancialYear,
   RiskIndicator,
   UnifiedCompany,
@@ -143,6 +144,8 @@ export interface CompanyIntelligence {
     mapped: boolean;
     target?: string;
   }>;
+  /** Dev-mode only: finance-field candidate mapping and selected source/value. */
+  financeMappingInspector?: FinanceMappingInspector;
   /** Unified, provider-tagged view the UI reads from. */
   unified: UnifiedCompany;
 }
