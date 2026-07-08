@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RiskBadge } from "@/components/risk-badge";
+import { RiskBadge, riskLevelFromScore, formatCurrency } from "@/components/risk-badge";
 import { searchCompaniesFn } from "@/lib/finstat.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
