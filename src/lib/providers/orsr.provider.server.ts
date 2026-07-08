@@ -274,7 +274,7 @@ export async function orsrRegistryDetails(
       "orsr",
       "company",
       undefined,
-      "error",
+      "unavailable",
       e.message ?? "Chyba pri komunikácii s ORSR/RPO.",
     );
   }

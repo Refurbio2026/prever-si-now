@@ -189,7 +189,7 @@ export async function uvoProcurementByIco(
       "uvo",
       "contracts",
       [],
-      "error",
+      "unavailable",
       e.message ?? "Chyba pri komunikácii s ÚVO.",
     );
   }

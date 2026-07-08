@@ -165,7 +165,7 @@ export async function ruzStatements(
       "ruz",
       "statements",
       [],
-      "error",
+      "unavailable",
       e.message ?? "Chyba pri komunikácii s RÚZ.",
     );
   }

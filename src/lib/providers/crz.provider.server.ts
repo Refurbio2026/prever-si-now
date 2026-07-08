@@ -197,7 +197,7 @@ export async function crzContractsByIco(
       "crz",
       "contracts",
       [],
-      "error",
+      "unavailable",
       e.message ?? "Chyba pri komunikácii s CRZ.",
     );
   }
