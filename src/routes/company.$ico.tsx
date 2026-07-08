@@ -64,6 +64,7 @@ import type {
   AccountingStatement,
   BasicCompanyInfo,
   Company,
+  FinanceMappingInspector,
   CompanyOwner,
   CompanyPerson,
   FinancialYear,
@@ -209,6 +210,7 @@ function CompanyProfilePage() {
       fieldSources={intel.fieldSources}
       fieldAudit={intel.fieldAudit}
       finstatRawInspector={intel.finstatRawInspector}
+      financeMappingInspector={intel.financeMappingInspector}
       rpvsStatus={intel.rpvsStatus}
       rpvsRegistrationDate={intel.rpvsRegistrationDate}
       authorizedPerson={intel.authorizedPerson}
@@ -229,6 +231,7 @@ function CompanyProfileView({
   fieldSources,
   fieldAudit,
   finstatRawInspector,
+  financeMappingInspector,
   rpvsStatus,
   rpvsRegistrationDate,
   authorizedPerson,
@@ -249,6 +252,7 @@ function CompanyProfileView({
     mapped: boolean;
     target?: string;
   }>;
+  financeMappingInspector?: FinanceMappingInspector;
   rpvsStatus?: "aktívny" | "neaktívny" | "nezaregistrovaný";
   rpvsRegistrationDate?: string;
   authorizedPerson?: {
