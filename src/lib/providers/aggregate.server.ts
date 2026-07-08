@@ -182,12 +182,14 @@ function severity(s: RiskIndicator["status"]): number {
   return s === "critical" ? 2 : s === "warning" ? 1 : 0;
 }
 
-function mergePeople(a: CompanyPerson[], b: CompanyPerson[]): CompanyPerson[] {
+function mergePeople(...groups: CompanyPerson[][]): CompanyPerson[] {
   const key = (p: CompanyPerson) => `${p.role}::${p.name.trim().toLowerCase()}`;
   const map = new Map<string, CompanyPerson>();
-  for (const p of [...a, ...b]) {
-    const k = key(p);
-    if (!map.has(k)) map.set(k, p);
+  for (const group of groups) {
+    for (const p of group) {
+      const k = key(p);
+      if (!map.has(k)) map.set(k, p);
+    }
   }
   return [...map.values()];
 }
