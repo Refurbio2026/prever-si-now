@@ -365,6 +365,13 @@ function joinAddress(raw: FinstatRawCompany): { address: string; city: string } 
 export function normalizeCompany(raw: FinstatRawCompany): Company {
   const { address, city } = joinAddress(raw);
   const score = computeRiskScore(raw);
+  const financials = normalizeFinancials(raw);
+  const latestFin = financials.length ? financials[financials.length - 1] : undefined;
+  const warnings = collectStrings(raw.Warnings ?? undefined, raw.Warning ?? undefined);
+  const paymentOrders = collectStrings(
+    raw.PaymentOrderInfo?.PaymentOrders ?? raw.PaymentOrders ?? undefined,
+    raw.PaymentOrder ?? undefined,
+  );
   return {
     ico: String(raw.Ico ?? ""),
     dic: raw.Dic || undefined,
@@ -375,14 +382,46 @@ export function normalizeCompany(raw: FinstatRawCompany): Company {
     city,
     registrationDate: raw.Created ?? "",
     vatPayer: !!raw.IcDph || !!raw.ReliableVatPayer,
-    revenue: Number(raw.Sales ?? 0),
-    profit: Number(raw.Profit ?? 0),
+    revenue: Number(raw.Sales ?? latestFin?.revenue ?? 0),
+    profit: Number(raw.Profit ?? latestFin?.profit ?? 0),
     riskScore: score,
     riskLevel: riskLevelFromScore(score),
     employees: raw.EmployeeCount ? Number(raw.EmployeeCount) : undefined,
     industry: raw.SkNace?.Name || raw.Activity || undefined,
     website: raw.Url || undefined,
+    registrationNumberText: raw.RegisterNumberText ?? undefined,
+    skNaceCode: raw.SkNace?.Code ?? undefined,
+    skNaceText: raw.SkNace?.Name ?? undefined,
+    latestAssets: latestFin?.assets ?? (raw.Assets != null ? Number(raw.Assets) : undefined),
+    latestLiabilities:
+      latestFin?.liabilities ?? (raw.Liabilities != null ? Number(raw.Liabilities) : undefined),
+    warnings: warnings.length ? warnings : undefined,
+    paymentOrderWarnings: paymentOrders.length ? paymentOrders : undefined,
+    debtIndicators: {
+      taxDebt: raw.TaxDebt != null ? Number(raw.TaxDebt) : undefined,
+      judicialDebt: raw.JudicialDebt != null ? Number(raw.JudicialDebt) : undefined,
+      socialDebt: raw.SocialInsuranceDebt != null ? Number(raw.SocialInsuranceDebt) : undefined,
+      healthDebt: raw.HealthInsuranceDebt != null ? Number(raw.HealthInsuranceDebt) : undefined,
+    },
   };
+}
+
+function collectStrings(
+  list: Array<string | { Text?: string; Description?: string }> | undefined,
+  single: string | undefined,
+): string[] {
+  const out: string[] = [];
+  if (single && single.trim()) out.push(single.trim());
+  if (Array.isArray(list)) {
+    for (const item of list) {
+      if (typeof item === "string" && item.trim()) out.push(item.trim());
+      else if (item && typeof item === "object") {
+        const t = item.Text ?? item.Description;
+        if (t && t.trim()) out.push(t.trim());
+      }
+    }
+  }
+  return out;
 }
 
 export function normalizeSearchHit(hit: FinstatSearchHit): Company {
