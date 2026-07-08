@@ -120,7 +120,7 @@ export interface FieldMergeAudit {
   chosenSource: ProviderSourceId | null;
   chosenValue: string | number | boolean | null;
   decision: string;
-  candidates: Array<{ source: ProviderSourceId; value: unknown }>;
+  candidates: Array<{ source: ProviderSourceId; value: string | number | boolean | null }>;
 }
 
 
