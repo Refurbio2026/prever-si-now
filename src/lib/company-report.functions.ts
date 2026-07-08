@@ -169,7 +169,7 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
       const color = opts.color ?? text;
       const startX = opts.x ?? marginX + (opts.indent ?? 0);
       const maxWidth = pageWidth - marginX - startX;
-      const lines = wrapText(asciiSafe(s), font, size, maxWidth);
+      const lines = wrapText(safe(s), font, size, maxWidth);
       for (const line of lines) {
         ensureSpace(size + 4);
         page.drawText(line, { x: startX, y: cursorY - size, size, font, color });
@@ -224,7 +224,7 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
         height: 16,
         color: brandAccent,
       });
-      page.drawText(asciiSafe(title), {
+      page.drawText(safe(title), {
         x: marginX + 10,
         y: cursorY - 14,
         size: 13,
@@ -245,14 +245,14 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
           rowTopY = cursorY;
         }
         const x = marginX + col * colWidth;
-        page.drawText(asciiSafe(k), {
+        page.drawText(safe(k), {
           x,
           y: rowTopY - 10,
           size: 8,
           font: helvBold,
           color: muted,
         });
-        const valueLines = wrapText(asciiSafe(v), helv, 10, colWidth - 8);
+        const valueLines = wrapText(safe(v), helv, 10, colWidth - 8);
         page.drawText(valueLines[0] ?? "", {
           x,
           y: rowTopY - 22,
@@ -277,7 +277,7 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
       for (const item of items) {
         ensureSpace(14);
         page.drawText("•", { x: marginX, y: cursorY - 10, size: 10, font: helvBold, color: brandAccent });
-        const lines = wrapText(asciiSafe(item), helv, 10, contentWidth - 14);
+        const lines = wrapText(safe(item), helv, 10, contentWidth - 14);
         for (let i = 0; i < lines.length; i += 1) {
           ensureSpace(14);
           page.drawText(lines[i]!, { x: marginX + 14, y: cursorY - 10, size: 10, font: helv, color: text });
@@ -292,12 +292,12 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
       x: marginX, y: pageHeight - 46,
       size: 22, font: helvBold, color: rgb(1, 1, 1),
     });
-    page.drawText(asciiSafe("Report o spoločnosti"), {
+    page.drawText(safe("Report o spoločnosti"), {
       x: marginX, y: pageHeight - 66,
       size: 11, font: helv, color: rgb(0.83, 0.86, 0.95),
     });
     const genOn = `Vygenerované: ${new Date().toLocaleString("sk-SK")}`;
-    const genOnAscii = asciiSafe(genOn);
+    const genOnAscii = safe(genOn);
     const genWidth = helv.widthOfTextAtSize(genOnAscii, 9);
     page.drawText(genOnAscii, {
       x: pageWidth - marginX - genWidth,
@@ -481,7 +481,7 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
 
     // ── FOOTER on every page ─────────────────────────────────────────────
     const pages = pdf.getPages();
-    const footer = asciiSafe(`PreverSi.sk · Report o spoločnosti ${displayName ?? ico} · ${new Date().toLocaleDateString("sk-SK")}`);
+    const footer = safe(`PreverSi.sk · Report o spoločnosti ${displayName ?? ico} · ${new Date().toLocaleDateString("sk-SK")}`);
     pages.forEach((p, i) => {
       p.drawText(footer, { x: marginX, y: 24, size: 8, font: helv, color: muted });
       const num = `Strana ${i + 1} / ${pages.length}`;
