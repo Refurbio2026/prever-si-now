@@ -1399,4 +1399,75 @@ function DevDebugPanel({ audit }: { audit: FieldMergeAudit[] }) {
   );
 }
 
+// ---------- RPVS status & authorized person ----------
+
+function RpvsStatusCard({
+  status,
+  registrationDate,
+  authorizedPerson,
+}: {
+  status?: "aktívny" | "neaktívny" | "nezaregistrovaný";
+  registrationDate?: string;
+  authorizedPerson?: {
+    name: string;
+    ico?: string;
+    address?: string;
+    validFrom?: string;
+    validTo?: string;
+  };
+}) {
+  const statusCls =
+    status === "aktívny"
+      ? "text-success bg-success/15"
+      : status === "neaktívny"
+      ? "text-warning-foreground bg-warning/20"
+      : "text-muted-foreground bg-secondary";
+  return (
+    <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <h3 className="text-lg font-semibold">Register partnerov verejného sektora</h3>
+        </div>
+        <SectionSourceBadge label="RPVS" />
+      </div>
+      <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">Stav</div>
+          <div className="mt-1">
+            {status ? (
+              <Badge variant="secondary" className={`rounded-full ${statusCls}`}>
+                {status}
+              </Badge>
+            ) : (
+              <span className="text-sm font-medium">Nedostupné</span>
+            )}
+          </div>
+        </div>
+        <InfoField
+          label="Dátum zápisu"
+          value={
+            registrationDate
+              ? new Date(registrationDate).toLocaleDateString("sk-SK")
+              : "Nedostupné"
+          }
+          source="rpvs"
+        />
+        <InfoField
+          label="Oprávnená osoba"
+          value={na(authorizedPerson?.name)}
+          source={authorizedPerson ? "rpvs" : undefined}
+        />
+        {authorizedPerson?.ico && (
+          <InfoField label="IČO oprávnenej osoby" value={authorizedPerson.ico} source="rpvs" />
+        )}
+        {authorizedPerson?.address && (
+          <InfoField label="Adresa oprávnenej osoby" value={authorizedPerson.address} source="rpvs" />
+        )}
+      </div>
+    </Card>
+  );
+}
+
+
 
