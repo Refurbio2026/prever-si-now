@@ -13,7 +13,6 @@ import type { ProviderDiagnostic, RegistryDetails } from "./types";
 
 const RPO_BASE = "https://api.statistics.sk/rpo/v2";
 const REQUEST_TIMEOUT_MS = 8000;
-const ALLOW_MOCK = process.env.NODE_ENV !== "production";
 
 export type OrsrRegistryDetails = RegistryDetails & { source: "orsr" };
 
@@ -227,21 +226,6 @@ function normalizeRpoResult(result: Record<string, unknown>): OrsrRegistryDetail
   };
 }
 
-function mockRegistry(): OrsrRegistryDetails {
-  return {
-    source: "orsr",
-    registrationNumber: "12345/B",
-    legalForm: "Spoločnosť s ručením obmedzeným",
-    registeredAddress: "Mockova 1, 811 01 Bratislava",
-    registrationDate: "2015-06-10",
-    status: "Aktívna",
-    statutoryRepresentatives: [
-      { name: "Ján Novák (ukážka)", role: "executive", since: "2018-01-01" },
-      { name: "Eva Kováčová (ukážka)", role: "executive", since: "2020-05-14" },
-    ],
-  };
-}
-
 export async function orsrRegistryDetails(
   ico: string,
   diagnostics?: ProviderDiagnostic[],
@@ -284,15 +268,8 @@ export async function orsrRegistryDetails(
       rawError: e.rawResponse,
       normalizedError: e.message,
     });
-    if (ALLOW_MOCK) {
-      return unavailable<OrsrRegistryDetails | undefined>(
-        "orsr",
-        "company",
-        mockRegistry(),
-        "unavailable",
-        "ORSR/RPO dočasne nedostupné — zobrazujem ukážkové dáta.",
-      );
-    }
+    // No mock fallback. When ORSR fails, downstream merge falls back to
+    // Finstat values (or "Nedostupné" if Finstat also has none).
     return unavailable<OrsrRegistryDetails | undefined>(
       "orsr",
       "company",
@@ -302,3 +279,4 @@ export async function orsrRegistryDetails(
     );
   }
 }
+

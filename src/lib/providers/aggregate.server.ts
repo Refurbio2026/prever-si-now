@@ -3,7 +3,16 @@
 // to the relevant provider below; the UI needs zero changes.
 
 import type { Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
-import type { GovContract, MonitoringSnapshot, ProviderDiagnostic, ProviderSourceStatus, RegistryDetails } from "./types";
+import type {
+  FieldMergeAudit,
+  GovContract,
+  MonitoringSnapshot,
+  ProviderDiagnostic,
+  ProviderSourceId,
+  ProviderSourceStatus,
+  RegistryDetails,
+} from "./types";
+
 import { finstatFetchAll } from "./finstat.provider.server";
 import { orsrRegistryDetails } from "./orsr.provider.server";
 import {
@@ -40,9 +49,11 @@ export async function runCompanyProvider(
   ico: string,
   finstat: FinstatBundle,
   diagnostics?: ProviderDiagnostic[],
+  audit?: FieldMergeAudit[],
 ): Promise<{
   data: Company | undefined;
   registry?: RegistryDetails;
+  fieldSources: Record<string, ProviderSourceId>;
   sources: ProviderSourceStatus[];
 }> {
   const orsr = await safe(orsrRegistryDetails(ico, diagnostics), {
@@ -54,26 +65,110 @@ export async function runCompanyProvider(
     status: { source: "cadastre" as const, capability: "company" as const, state: "error" as const },
   });
 
-  // ORSR is the primary source for registry/legal fields; Finstat is fallback.
   const base = finstat.company.data;
-  let merged: Company | undefined = base;
-  if (base && orsr.data) {
+  const fieldSources: Record<string, ProviderSourceId> = {};
+
+  // Priority merge helper: pick the first candidate whose value is non-empty.
+  const pick = <T>(
+    field: string,
+    candidates: Array<[ProviderSourceId, T | undefined | null]>,
+  ): T | undefined => {
+    let chosen: T | undefined;
+    let chosenSource: ProviderSourceId | null = null;
+    let decision = "no provider returned a value";
+    for (const [src, val] of candidates) {
+      const isEmpty =
+        val == null ||
+        (typeof val === "string" && val.trim() === "") ||
+        (typeof val === "number" && Number.isNaN(val));
+      if (!isEmpty && chosen === undefined) {
+        chosen = val;
+        chosenSource = src;
+        decision = `${src} provided the first non-empty value`;
+        break;
+      }
+    }
+    if (chosenSource) fieldSources[field] = chosenSource;
+    audit?.push({
+      field,
+      chosenSource,
+      chosenValue: toAuditValue(chosen),
+      decision,
+      candidates: candidates.map(([source, value]) => ({
+        source,
+        value: toAuditValue(value),
+      })),
+    });
+    return chosen;
+  };
+
+  let merged: Company | undefined;
+  if (base) {
     merged = {
       ...base,
-      legalForm: orsr.data.legalForm || base.legalForm,
-      address: orsr.data.registeredAddress || base.address,
-      registrationDate: orsr.data.registrationDate || base.registrationDate,
-      registrationNumberText:
-        orsr.data.registrationNumber || base.registrationNumberText,
+      // ORSR primary for registry/legal fields, Finstat fallback.
+      legalForm:
+        pick("legalForm", [
+          ["orsr", orsr.data?.legalForm],
+          ["finstat", base.legalForm],
+        ]) ?? "",
+      address:
+        pick("address", [
+          ["orsr", orsr.data?.registeredAddress],
+          ["finstat", base.address],
+        ]) ?? "",
+      registrationDate:
+        pick("registrationDate", [
+          ["orsr", orsr.data?.registrationDate],
+          ["finstat", base.registrationDate],
+        ]) ?? "",
+      registrationNumberText: pick("registrationNumberText", [
+        ["orsr", orsr.data?.registrationNumber],
+        ["finstat", base.registrationNumberText],
+      ]),
     };
+    // Finstat-only fields — still record provenance so the UI can show source.
+    for (const f of [
+      "name",
+      "ico",
+      "dic",
+      "icDph",
+      "city",
+      "vatPayer",
+      "revenue",
+      "profit",
+      "employees",
+      "industry",
+      "website",
+      "skNaceCode",
+      "skNaceText",
+      "latestAssets",
+      "latestLiabilities",
+      "riskScore",
+    ] as const) {
+      const v = base[f as keyof Company];
+      if (v != null && v !== "") fieldSources[f] = "finstat";
+    }
   }
 
   return {
     data: merged,
     registry: orsr.data,
+    fieldSources,
     sources: [finstat.company.status, orsr.status, cadastre.status],
   };
 }
+
+function toAuditValue(v: unknown): string | number | boolean | null {
+  if (v == null) return null;
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return v;
+  try {
+    return JSON.stringify(v).slice(0, 200);
+  } catch {
+    return String(v).slice(0, 200);
+  }
+}
+
 
 
 export async function runFinancialProvider(

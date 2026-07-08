@@ -12,7 +12,6 @@ import type { ProviderDiagnostic } from "./types";
 const RUZ_BASE = "https://www.registeruz.sk/cruz-public/api";
 const REQUEST_TIMEOUT_MS = 8000;
 const MAX_STATEMENTS = 12;
-const ALLOW_MOCK = process.env.NODE_ENV !== "production";
 
 interface RuzUnitList {
   id?: number[];
@@ -109,31 +108,8 @@ function normalizeStatement(raw: RuzStatement): AccountingStatement | null {
   };
 }
 
-function mockStatements(): AccountingStatement[] {
-  const now = new Date().getFullYear();
-  return [
-    {
-      id: "mock-1",
-      year: now - 1,
-      type: "Riadna",
-      periodFrom: `${now - 1}-01`,
-      periodTo: `${now - 1}-12`,
-      submittedAt: `${now}-06-30`,
-      preparedAt: `${now}-04-15`,
-      approvedAt: `${now}-06-01`,
-      consolidated: false,
-    },
-    {
-      id: "mock-2",
-      year: now - 2,
-      type: "Riadna",
-      periodFrom: `${now - 2}-01`,
-      periodTo: `${now - 2}-12`,
-      submittedAt: `${now - 1}-07-01`,
-      consolidated: false,
-    },
-  ];
-}
+// Mock data removed — RÚZ never returns placeholder statements.
+
 
 export async function ruzStatements(
   ico: string,
@@ -184,15 +160,7 @@ export async function ruzStatements(
       rawError: e.rawResponse,
       normalizedError: e.message,
     });
-    if (ALLOW_MOCK) {
-      return unavailable(
-        "ruz",
-        "statements",
-        mockStatements(),
-        "unavailable",
-        "RÚZ dočasne nedostupný — zobrazujem ukážkové dáta.",
-      );
-    }
+    // No mock fallback — empty list means "Nedostupné" in the UI.
     return unavailable(
       "ruz",
       "statements",

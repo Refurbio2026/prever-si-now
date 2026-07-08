@@ -49,8 +49,14 @@ import { CompanyActions } from "@/components/company-actions";
 import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
 import type { AccountingStatement, Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
-import type { ProviderSourceStatus, ProviderDiagnostic, RegistryDetails } from "@/lib/providers/types";
-import { PROVIDER_META, IMPLEMENTED_SOURCES } from "@/lib/providers/registry-labels";
+import type {
+  FieldMergeAudit,
+  ProviderSourceStatus,
+  ProviderDiagnostic,
+  ProviderSourceId,
+  RegistryDetails,
+} from "@/lib/providers/types";
+import { PROVIDER_META, IMPLEMENTED_SOURCES, providerMeta } from "@/lib/providers/registry-labels";
 
 
 export const Route = createFileRoute("/company/$ico")({
@@ -180,6 +186,8 @@ function CompanyProfilePage() {
       partial={intel.partial}
       diagnostics={intel.diagnostics}
       registry={intel.registry}
+      fieldSources={intel.fieldSources}
+      fieldAudit={intel.fieldAudit}
     />
   );
 }
@@ -196,6 +204,8 @@ function CompanyProfileView({
   partial,
   diagnostics,
   registry,
+  fieldSources,
+  fieldAudit,
 }: {
   ico: string;
   company: Company;
@@ -207,6 +217,8 @@ function CompanyProfileView({
   partial: boolean;
   diagnostics?: ProviderDiagnostic[];
   registry?: RegistryDetails;
+  fieldSources?: Record<string, ProviderSourceId>;
+  fieldAudit?: FieldMergeAudit[];
 }) {
 
 
@@ -382,24 +394,25 @@ function CompanyProfileView({
             <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
               <h3 className="mb-5 text-lg font-semibold">Základné informácie</h3>
               <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-                <InfoField label="Odvetvie" value={na(company.industry)} />
-                <InfoField label="Počet zamestnancov" value={na(company.employees ? String(company.employees) : undefined)} />
-                <InfoField label="Web" value={na(company.website)} />
-                <InfoField label="Tržby" value={company.revenue ? formatCurrency(company.revenue) : "Nedostupné"} />
-                <InfoField label="Zisk" value={company.profit ? formatCurrency(company.profit) : "Nedostupné"} />
-                <InfoField label="Právna forma" value={na(company.legalForm)} />
-                <InfoField label="Aktíva" value={company.latestAssets ? formatCurrency(company.latestAssets) : "Nedostupné"} />
-                <InfoField label="Pasíva" value={company.latestLiabilities ? formatCurrency(company.latestLiabilities) : "Nedostupné"} />
-                <InfoField label="Platiteľ DPH" value={company.vatPayer ? "Áno" : "Nie"} />
-                <InfoField label="Reg. číslo" value={na(company.registrationNumberText)} />
-                <InfoField label="SK NACE kód" value={na(company.skNaceCode)} />
-                <InfoField label="SK NACE popis" value={na(company.skNaceText)} />
+                <InfoField label="Odvetvie" value={na(company.industry)} source={fieldSources?.industry} />
+                <InfoField label="Počet zamestnancov" value={na(company.employees ? String(company.employees) : undefined)} source={fieldSources?.employees} />
+                <InfoField label="Web" value={na(company.website)} source={fieldSources?.website} />
+                <InfoField label="Tržby" value={company.revenue ? formatCurrency(company.revenue) : "Nedostupné"} source={fieldSources?.revenue} />
+                <InfoField label="Zisk" value={company.profit ? formatCurrency(company.profit) : "Nedostupné"} source={fieldSources?.profit} />
+                <InfoField label="Právna forma" value={na(company.legalForm)} source={fieldSources?.legalForm} />
+                <InfoField label="Aktíva" value={company.latestAssets ? formatCurrency(company.latestAssets) : "Nedostupné"} source={fieldSources?.latestAssets} />
+                <InfoField label="Pasíva" value={company.latestLiabilities ? formatCurrency(company.latestLiabilities) : "Nedostupné"} source={fieldSources?.latestLiabilities} />
+                <InfoField label="Platiteľ DPH" value={company.vatPayer ? "Áno" : "Nie"} source={fieldSources?.vatPayer} />
+                <InfoField label="Reg. číslo" value={na(company.registrationNumberText)} source={fieldSources?.registrationNumberText} />
+                <InfoField label="SK NACE kód" value={na(company.skNaceCode)} source={fieldSources?.skNaceCode} />
+                <InfoField label="SK NACE popis" value={na(company.skNaceText)} source={fieldSources?.skNaceText} />
               </div>
             </Card>
 
-            <RegistryCard registry={registry} company={company} />
+            <RegistryCard registry={registry} company={company} fieldSources={fieldSources} />
 
             <ProviderStatusSection ico={ico} sources={sources} diagnostics={diagnostics} />
+            {fieldAudit && fieldAudit.length > 0 && <DevDebugPanel audit={fieldAudit} />}
           </TabsContent>
 
 
@@ -654,12 +667,35 @@ function InfoRow({ icon: Icon, label, value }: { icon: typeof Building2; label: 
   );
 }
 
-function InfoField({ label, value }: { label: string; value: string }) {
+function InfoField({
+  label,
+  value,
+  source,
+}: {
+  label: string;
+  value: string;
+  source?: ProviderSourceId;
+}) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+        <span>{label}</span>
+        {source && <SourceBadge source={source} />}
+      </div>
       <div className="mt-1 text-sm font-medium">{value}</div>
     </div>
+  );
+}
+
+function SourceBadge({ source }: { source: ProviderSourceId }) {
+  const meta = providerMeta(source);
+  return (
+    <span
+      className="inline-flex items-center rounded-full border border-border/60 bg-secondary px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground"
+      title={`Zdroj: ${meta.label}`}
+    >
+      {meta.short}
+    </span>
   );
 }
 
@@ -1056,12 +1092,13 @@ function formatDate(iso?: string): string {
 function RegistryCard({
   registry,
   company,
+  fieldSources,
 }: {
   registry?: RegistryDetails;
   company: Company;
+  fieldSources?: Record<string, ProviderSourceId>;
 }) {
   const hasOrsr = registry?.source === "orsr";
-  // Fall back to Company (Finstat-derived) fields when ORSR didn't return.
   const registrationNumber = registry?.registrationNumber ?? company.registrationNumberText;
   const legalForm = registry?.legalForm ?? company.legalForm;
   const registeredAddress =
@@ -1070,11 +1107,6 @@ function RegistryCard({
   const registrationDate = registry?.registrationDate ?? company.registrationDate;
   const status = registry?.status;
 
-  const sourceLabel = hasOrsr ? "ORSR" : "Finstat";
-  const sourceClass = hasOrsr
-    ? "text-success bg-success/15"
-    : "text-muted-foreground bg-secondary";
-
   return (
     <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
@@ -1082,14 +1114,29 @@ function RegistryCard({
           <Building2 className="h-4 w-4 text-primary" />
           <h3 className="text-lg font-semibold">Registrové údaje</h3>
         </div>
-        <Badge variant="secondary" className={`rounded-full text-[10px] ${sourceClass}`}>
-          Zdroj: {sourceLabel}
+        <Badge
+          variant="secondary"
+          className={`rounded-full text-[10px] ${hasOrsr ? "text-success bg-success/15" : "text-muted-foreground bg-secondary"}`}
+        >
+          Primárny zdroj: {hasOrsr ? "ORSR" : "Finstat (fallback)"}
         </Badge>
       </div>
       <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-        <InfoField label="Registračné číslo" value={na(registrationNumber)} />
-        <InfoField label="Právna forma" value={na(legalForm)} />
-        <InfoField label="Sídlo" value={na(registeredAddress)} />
+        <InfoField
+          label="Registračné číslo"
+          value={na(registrationNumber)}
+          source={fieldSources?.registrationNumberText ?? (registry?.registrationNumber ? "orsr" : undefined)}
+        />
+        <InfoField
+          label="Právna forma"
+          value={na(legalForm)}
+          source={fieldSources?.legalForm}
+        />
+        <InfoField
+          label="Sídlo"
+          value={na(registeredAddress)}
+          source={fieldSources?.address}
+        />
         <InfoField
           label="Dátum registrácie"
           value={
@@ -1097,8 +1144,9 @@ function RegistryCard({
               ? new Date(registrationDate).toLocaleDateString("sk-SK")
               : "Nedostupné"
           }
+          source={fieldSources?.registrationDate}
         />
-        {status && <InfoField label="Stav" value={status} />}
+        {status && <InfoField label="Stav" value={status} source={hasOrsr ? "orsr" : undefined} />}
       </div>
 
       {registry?.statutoryRepresentatives?.length ? (
@@ -1109,6 +1157,7 @@ function RegistryCard({
             <Badge variant="secondary" className="rounded-full">
               {registry.statutoryRepresentatives.length}
             </Badge>
+            <SourceBadge source="orsr" />
           </div>
           <ul className="divide-y divide-border/60">
             {registry.statutoryRepresentatives.map((p, i) => (
@@ -1136,4 +1185,67 @@ function RegistryCard({
     </Card>
   );
 }
+
+// ---------- Developer debug panel (dev-only) ----------
+
+function DevDebugPanel({ audit }: { audit: FieldMergeAudit[] }) {
+  return (
+    <Card className="rounded-2xl border-dashed border-border/70 p-6 shadow-soft">
+      <div className="mb-3 flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold">Developer debug — merge audit (dev mode)</h3>
+      </div>
+      <p className="mb-3 text-[11px] text-muted-foreground">
+        Poradie priorít: ORSR → RPVS → RÚZ → Finstat → ostatné. Pole zobrazí
+        prvú neprázdnu hodnotu podľa priority.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-xs">
+          <thead>
+            <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+              <th className="py-2 text-left font-medium">Pole</th>
+              <th className="py-2 text-left font-medium">Zobrazená hodnota</th>
+              <th className="py-2 text-left font-medium">Zdroj</th>
+              <th className="py-2 text-left font-medium">Merge rozhodnutie</th>
+              <th className="py-2 text-left font-medium">Kandidáti (raw)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {audit.map((a) => (
+              <tr key={a.field} className="border-b border-border/50 align-top last:border-0">
+                <td className="py-2 pr-3 font-mono font-medium">{a.field}</td>
+                <td className="py-2 pr-3">
+                  {a.chosenValue == null ? (
+                    <span className="text-muted-foreground italic">Nedostupné</span>
+                  ) : (
+                    String(a.chosenValue)
+                  )}
+                </td>
+                <td className="py-2 pr-3">
+                  {a.chosenSource ? <SourceBadge source={a.chosenSource} /> : "—"}
+                </td>
+                <td className="py-2 pr-3 text-muted-foreground">{a.decision}</td>
+                <td className="py-2">
+                  <ul className="space-y-0.5 font-mono text-[10px]">
+                    {a.candidates.map((c, i) => (
+                      <li key={i}>
+                        <span className="text-muted-foreground">{c.source}:</span>{" "}
+                        {c.value == null ? (
+                          <span className="text-muted-foreground italic">null</span>
+                        ) : (
+                          <span>{String(c.value)}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
 
