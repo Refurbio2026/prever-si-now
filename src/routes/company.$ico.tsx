@@ -86,11 +86,9 @@ function CompanyProfilePage() {
     );
   }
 
-  if (query.isError || (query.data && !query.data.ok)) {
-    const message =
-      query.data && !query.data.ok
-        ? query.data.error
-        : "Nepodarilo sa načítať profil firmy.";
+  // Network-level failure (queryFn threw) → generic retry screen.
+  if (query.isError) {
+    const message = (query.error as Error)?.message ?? "Nepodarilo sa spojiť so serverom.";
     return (
       <div className="min-h-screen bg-background">
         <SiteHeader />
@@ -112,17 +110,55 @@ function CompanyProfilePage() {
     );
   }
 
-  if (!query.data || !query.data.ok) return null;
+  if (!query.data) return null;
+
+  // Server returned a structured failure (e.g. Finstat aggregate crashed).
+  if (!query.data.ok) {
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader />
+        <div className="mx-auto max-w-xl px-4 py-24 text-center">
+          <AlertCircle className="mx-auto h-8 w-8 text-destructive" />
+          <h1 className="mt-3 text-2xl font-bold">Chyba pri načítaní</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{query.data.error}</p>
+          <div className="mt-6 flex justify-center gap-2">
+            <Button onClick={() => query.refetch()} className="rounded-xl">
+              Skúsiť znovu
+            </Button>
+            <Button variant="outline" asChild className="rounded-xl">
+              <Link to="/search">Späť na vyhľadávanie</Link>
+            </Button>
+          </div>
+        </div>
+        <SiteFooter />
+      </div>
+    );
+  }
 
   const intel = query.data.data;
+
+  // Company not found (Finstat returned empty / invalid IČO).
   if (!intel.company) {
     return (
       <div className="min-h-screen bg-background">
         <SiteHeader />
         <div className="mx-auto max-w-xl px-4 py-24 text-center">
           <AlertCircle className="mx-auto h-8 w-8 text-warning-foreground" />
-          <h1 className="mt-3 text-2xl font-bold">Firma sa nenašla</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Pre IČO {ico} sme nenašli žiadne údaje.</p>
+          <h1 className="mt-3 text-2xl font-bold">Firma sa nenašla.</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Pre IČO {ico} sme nenašli žiadne údaje.
+          </p>
+          <div className="mt-6 flex justify-center gap-2">
+            <Button variant="outline" asChild className="rounded-xl">
+              <Link to="/search">Späť na vyhľadávanie</Link>
+            </Button>
+          </div>
+          <ProviderStatusSection
+            ico={ico}
+            sources={intel.sources}
+            diagnostics={intel.diagnostics}
+            className="mx-auto mt-10 max-w-2xl text-left"
+          />
         </div>
         <SiteFooter />
       </div>
@@ -130,15 +166,18 @@ function CompanyProfilePage() {
   }
   return (
     <CompanyProfileView
+      ico={ico}
       company={intel.company}
       financials={intel.financials}
       people={intel.people}
       risks={intel.risks}
       sources={intel.sources}
       partial={intel.partial}
+      diagnostics={intel.diagnostics}
     />
   );
 }
+
 
 function CompanyProfileView({
   company,
