@@ -293,6 +293,72 @@ export type Database = {
         }
         Relationships: []
       }
+      datahub_settings: {
+        Row: {
+          id: boolean
+          updated_at: string
+          updated_by: string | null
+          worker_paused: boolean
+        }
+        Insert: {
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          worker_paused?: boolean
+        }
+        Update: {
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          worker_paused?: boolean
+        }
+        Relationships: []
+      }
+      datahub_worker_runs: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          failed: number
+          finished_at: string | null
+          id: string
+          paused: boolean
+          processed: number
+          skipped: number
+          started_at: string
+          successful: number
+          trigger_source: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          paused?: boolean
+          processed?: number
+          skipped?: number
+          started_at?: string
+          successful?: number
+          trigger_source?: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          paused?: boolean
+          processed?: number
+          skipped?: number
+          started_at?: string
+          successful?: number
+          trigger_source?: string
+        }
+        Relationships: []
+      }
       import_logs: {
         Row: {
           error_message: string | null
