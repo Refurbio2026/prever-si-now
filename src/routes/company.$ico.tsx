@@ -683,6 +683,13 @@ function PeopleCard({
   );
 }
 
+function na(value: string | number | undefined | null): string {
+  if (value === undefined || value === null) return "Nedostupné";
+  const s = String(value).trim();
+  if (!s || s === "—") return "Nedostupné";
+  return s;
+}
+
 function initials(name: string): string {
   return name
     .replace(/[.,]/g, "")
