@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Users, Building2, Bug, Settings, LogOut, ArrowLeft } from "lucide-react";
+import { LayoutDashboard, Users, Building2, Bug, Settings, LogOut, ArrowLeft, Download } from "lucide-react";
 import { toast } from "sonner";
 
 import {
