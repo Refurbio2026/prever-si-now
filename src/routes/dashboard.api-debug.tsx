@@ -116,7 +116,7 @@ function ApiDebugPage() {
             <Card className="rounded-2xl border-amber-500/40 bg-amber-500/5 p-4">
               <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
                 <AlertCircle className="h-4 w-4" />
-                Using mock data because Finstat API is not configured.
+                Mock data was not used for this diagnostic request.
               </div>
             </Card>
           )}
@@ -127,6 +127,9 @@ function ApiDebugPage() {
             </h2>
             <dl className="mt-3 grid gap-2 text-sm">
               <Row label="Endpoint" value={diagnostic.endpoint ?? "—"} mono />
+              <Row label="Hash base" value={diagnostic.hashBaseMasked ?? "—"} mono />
+              <Row label="Generated hash" value={diagnostic.generatedHash ?? "—"} mono />
+              <Row label="Final request URL" value={diagnostic.finalRequestUrlMasked ?? "—"} mono />
               <Row
                 label="HTTP status"
                 value={
@@ -156,10 +159,10 @@ function ApiDebugPage() {
 
           <Card className="rounded-2xl p-6">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              Raw response (first 500 chars)
+              Raw response
             </h2>
-            <pre className="mt-2 max-h-72 overflow-auto rounded-xl bg-muted p-3 text-xs">
-              {diagnostic.rawResponsePreview ?? "(no raw response)"}
+            <pre className="mt-2 max-h-72 overflow-auto rounded-xl bg-muted p-3 text-xs whitespace-pre-wrap break-words">
+              {diagnostic.rawResponse ?? diagnostic.rawResponsePreview ?? "(no raw response)"}
             </pre>
           </Card>
 
