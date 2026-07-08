@@ -60,7 +60,6 @@ import {
   getCompanyDataStatusFn,
   runDataHubWorkerFn,
   type AutoSource,
-  type AutoSource,
   type SourceProgress,
 } from "@/lib/datahub-auto.functions";
 import { AiReportCard } from "@/components/ai-report-card";
