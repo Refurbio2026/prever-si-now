@@ -110,6 +110,12 @@ export interface FinstatRawCompany {
   Liabilities?: number;
   Warning?: string | null;
   WarningUrl?: string | null;
+  Warnings?: Array<string | { Text?: string; Description?: string }> | null;
+  PaymentOrder?: string | null;
+  PaymentOrders?: Array<string | { Text?: string; Description?: string }> | null;
+  PaymentOrderInfo?: { PaymentOrders?: Array<{ Text?: string; Description?: string }> } | null;
+  RegisterNumberText?: string | null;
+  TaxDebt?: number | null;
   JudicialDebt?: number | null;
   SocialInsuranceDebt?: number | null;
   HealthInsuranceDebt?: number | null;
