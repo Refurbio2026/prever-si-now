@@ -627,28 +627,28 @@ function CompanyProfileView({
               icon={Users}
               people={dbExecutives}
               loading={recordsLoading}
-              emptyText="Žiadni štatutári nie sú evidovaní."
+              emptyText="Dáta zatiaľ neboli importované."
             />
             <DbPeopleCard
               title="Spoločníci"
               icon={Crown}
               people={dbOwners}
               loading={recordsLoading}
-              emptyText="Žiadni spoločníci nie sú evidovaní."
+              emptyText="Dáta zatiaľ neboli importované."
             />
             <DbPeopleCard
               title="Koneční užívatelia výhod (KUV)"
               icon={ShieldCheck}
               people={dbBeneficials}
               loading={recordsLoading}
-              emptyText="Žiadni koneční užívatelia výhod nie sú evidovaní."
+              emptyText="Dáta zatiaľ neboli importované."
             />
             <DbPeopleCard
               title="Oprávnená osoba"
               icon={ShieldCheck}
               people={dbAuthorized}
               loading={recordsLoading}
-              emptyText="Žiadna oprávnená osoba nie je evidovaná."
+              emptyText="Dáta zatiaľ neboli importované."
             />
             {/* Legacy fallback: RPVS-sourced owners/beneficial owners from aggregation */}
             {(partnersOwners.length > 0 || beneficials.length > 0) && (
