@@ -458,6 +458,9 @@ function CompanyProfileView({
 
             <ProviderStatusSection ico={ico} sources={sources} diagnostics={diagnostics} isAuthenticated={isAuthenticated} />
             {fieldAudit && fieldAudit.length > 0 && <DevDebugPanel audit={fieldAudit} />}
+            {finstatRawInspector && finstatRawInspector.length > 0 && (
+              <FinstatRawInspector rows={finstatRawInspector} />
+            )}
           </TabsContent>
 
 
