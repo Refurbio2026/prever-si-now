@@ -196,6 +196,9 @@ function CompanyProfilePage() {
       diagnostics={intel.diagnostics}
       fieldSources={intel.fieldSources}
       fieldAudit={intel.fieldAudit}
+      rpvsStatus={intel.rpvsStatus}
+      rpvsRegistrationDate={intel.rpvsRegistrationDate}
+      authorizedPerson={intel.authorizedPerson}
     />
   );
 }
@@ -212,6 +215,9 @@ function CompanyProfileView({
   diagnostics,
   fieldSources,
   fieldAudit,
+  rpvsStatus,
+  rpvsRegistrationDate,
+  authorizedPerson,
 }: {
   ico: string;
   unified: UnifiedCompany;
@@ -223,7 +229,17 @@ function CompanyProfileView({
   diagnostics?: ProviderDiagnostic[];
   fieldSources?: Record<string, ProviderSourceId>;
   fieldAudit?: FieldMergeAudit[];
+  rpvsStatus?: "aktívny" | "neaktívny" | "nezaregistrovaný";
+  rpvsRegistrationDate?: string;
+  authorizedPerson?: {
+    name: string;
+    ico?: string;
+    address?: string;
+    validFrom?: string;
+    validTo?: string;
+  };
 }) {
+
 
   // All section data comes from the unified structure — never directly from
   // ORSR / Finstat / RÚZ / RPVS / CRZ / ÚVO shapes.
