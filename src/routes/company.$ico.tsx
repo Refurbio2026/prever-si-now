@@ -896,12 +896,15 @@ function ProviderStatusSection({
   sources,
   diagnostics,
   className,
+  isAuthenticated = false,
 }: {
   ico: string;
   sources: ProviderSourceStatus[];
   diagnostics?: ProviderDiagnostic[];
   className?: string;
+  isAuthenticated?: boolean;
 }) {
+
   const byId = new Map<string, ProviderSourceStatus[]>();
   for (const s of sources) {
     const arr = byId.get(s.source) ?? [];
