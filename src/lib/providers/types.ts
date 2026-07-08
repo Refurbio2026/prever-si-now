@@ -27,10 +27,12 @@ export type ProviderSourceId =
 export type ProviderCapability =
   | "company"
   | "financials"
+  | "statements"
   | "risks"
   | "people"
   | "contracts"
   | "monitoring";
+
 
 export type ProviderState = "ok" | "unavailable" | "not_configured" | "empty" | "error";
 
