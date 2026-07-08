@@ -35,8 +35,11 @@ export const IMPLEMENTED_SOURCES: ReadonlySet<ProviderSourceId> = new Set<Provid
   "orsr",
   "ruz",
   "rpvs",
+  "crz",
+  "uvo",
   "internal",
 ]);
+
 
 
 export function providerMeta(id: ProviderSourceId): ProviderMeta {
