@@ -1217,7 +1217,7 @@ function RegistryCard({
           <Building2 className="h-4 w-4 text-primary" />
           <h3 className="text-lg font-semibold">Registrové údaje</h3>
         </div>
-        <SectionSourceBadge label="ORSR" />
+        <SectionSourceBadge label={dominantSourceLabel(fieldSources, ["registrationNumberText", "legalForm", "address", "registrationDate"], "ORSR")} />
       </div>
       {basic ? (
         <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
