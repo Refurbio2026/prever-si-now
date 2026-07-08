@@ -292,47 +292,50 @@ function CompanyProfileView({
   const recordsLoading = recordsQuery.isLoading;
 
   const qc = useQueryClient();
-  const runRegistry = useServerFn(importCompanyRegistryFn);
-  const runPeople = useServerFn(importCompanyPeopleFn);
-  const runHistory = useServerFn(importCompanyHistoryFn);
-  const autoImport = useMutation({
-    mutationFn: async () => {
-      const results = await Promise.all([
-        runRegistry({ data: { ico } }),
-        runPeople({ data: { ico } }),
-        runHistory({ data: { ico } }),
-      ]);
-      const failed = results.filter((r) => !r.ok);
-      if (failed.length === results.length) {
-        throw new Error(failed[0]?.error ?? "Import zlyhal.");
-      }
-      return {
-        imported: results.reduce((s, r) => s + r.imported, 0),
-        partial: failed.length > 0,
-        firstError: failed[0]?.error,
-      };
-    },
-    onSuccess: (res) => {
-      if (res.partial) {
-        toast.warning("Import čiastočne úspešný", {
-          description: res.firstError ?? "Niektoré zdroje zlyhali.",
-        });
-      } else {
-        toast.success("Verejné registre boli načítané", {
-          description: `Importovaných ${res.imported} záznamov.`,
-        });
-      }
-      qc.invalidateQueries({ queryKey: ["company-records", ico] });
-      qc.invalidateQueries({ queryKey: ["import-logs"] });
-    },
-    onError: (err) => {
-      toast.error("Import zlyhal", { description: (err as Error).message });
-    },
-  });
+  const ensureFn = useServerFn(ensureCompanyDataFn);
+  const statusFn = useServerFn(getCompanyDataStatusFn);
+  const workerFn = useServerFn(runDataHubWorkerFn);
 
-  const hasAnyDbData =
-    !!dbRegistry || dbPeople.length > 0 || dbHistory.length > 0;
-  const showImportBanner = !recordsLoading && !hasAnyDbData;
+  // Automatically enqueue any missing/stale sources on mount. Runs once per IČO.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ensureFn({ data: { ico } });
+        if (cancelled) return;
+        if (res.enqueued.length > 0) {
+          // Kick the worker immediately so users don't wait for cron.
+          void workerFn().catch(() => undefined);
+          qc.invalidateQueries({ queryKey: ["company-data-status", ico] });
+        }
+      } catch {
+        // Silent — the profile still renders whatever data exists.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ico, ensureFn, workerFn, qc]);
+
+  const statusQuery = useQuery({
+    queryKey: ["company-data-status", ico],
+    queryFn: () => statusFn({ data: { ico } }),
+    refetchInterval: (q) => (q.state.data?.loading ? 10_000 : false),
+  });
+  const status = statusQuery.data;
+  const previousLoadingRef = useRef<boolean>(false);
+  useEffect(() => {
+    const currentlyLoading = status?.loading ?? false;
+    if (previousLoadingRef.current && !currentlyLoading) {
+      // Just finished — refresh company + records queries.
+      qc.invalidateQueries({ queryKey: ["company-intel", ico] });
+      qc.invalidateQueries({ queryKey: ["company-records", ico] });
+    }
+    previousLoadingRef.current = currentlyLoading;
+  }, [status?.loading, ico, qc]);
+
+  const showProgressCard = !!status && (status.loading || status.anyFailed);
+
 
 
   // All section data comes from the unified structure — never directly from
