@@ -64,6 +64,7 @@ import type {
   AccountingStatement,
   BasicCompanyInfo,
   Company,
+  FinanceField,
   FinanceMappingInspector,
   CompanyOwner,
   CompanyPerson,
