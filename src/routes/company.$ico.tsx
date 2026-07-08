@@ -51,6 +51,9 @@ import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
 import {
   getCompanyRecordsFn,
+  importCompanyRegistryFn,
+  importCompanyPeopleFn,
+  importCompanyHistoryFn,
   type CompanyHistoryRecord,
   type CompanyPersonRecord,
 } from "@/lib/company-records.functions";
