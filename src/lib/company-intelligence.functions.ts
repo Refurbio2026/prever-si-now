@@ -62,7 +62,9 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       runPeopleProvider,
       runContractsProvider,
       runMonitoringProvider,
+      runStatementsProvider,
     } = await import("./providers/aggregate.server");
+
     const { finstatFetchAll } = await import("./providers/finstat.provider.server");
 
     const cached = await readCache(ico);
