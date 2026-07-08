@@ -262,6 +262,13 @@ export interface FinstatRawCompany {
   DistrainmentsInfo?: { Distrainments?: unknown[] } | null;
   UnreliableVatPayer?: boolean | null;
   ReliableVatPayer?: boolean | null;
+  // Additional VAT-related fields Finstat may return (defensive mapping).
+  Icdph?: string | null;
+  IcDPH?: string | null;
+  VatPayer?: boolean | string | null;
+  VatRegistration?: string | boolean | null;
+  Dph?: string | boolean | null;
+  TaxReliability?: string | null;
   Persons?: Array<{ Name?: string; Function?: string; From?: string }>;
   Owners?: Array<{ Name?: string; Share?: number; From?: string }>;
   KUVs?: Array<{ Name?: string; Share?: number; From?: string }>;
