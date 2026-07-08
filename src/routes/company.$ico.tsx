@@ -449,7 +449,7 @@ function CompanyProfileView({
 
             <RegistryCard basic={basic} fieldSources={fieldSources} />
 
-            <ProviderStatusSection ico={ico} sources={sources} diagnostics={diagnostics} />
+            <ProviderStatusSection ico={ico} sources={sources} diagnostics={diagnostics} isAuthenticated={isAuthenticated} />
             {fieldAudit && fieldAudit.length > 0 && <DevDebugPanel audit={fieldAudit} />}
           </TabsContent>
 
