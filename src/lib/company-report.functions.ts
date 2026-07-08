@@ -134,8 +134,16 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
     pdf.setProducer("PreverSi.sk");
     pdf.setCreator("PreverSi.sk");
 
-    const helv = await pdf.embedFont(StandardFonts.Helvetica);
-    const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    pdf.registerFontkit(fontkit);
+    const [regularBytes, boldBytes] = await Promise.all([
+      loadFont(FONT_REGULAR_URL, cachedRegular),
+      loadFont(FONT_BOLD_URL, cachedBold),
+    ]);
+    cachedRegular = regularBytes;
+    cachedBold = boldBytes;
+    const helv = await pdf.embedFont(regularBytes, { subset: true });
+    const helvBold = await pdf.embedFont(boldBytes, { subset: true });
+
 
     const pageWidth = 595.28;
     const pageHeight = 841.89;
