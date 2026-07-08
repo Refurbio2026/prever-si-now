@@ -4,7 +4,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import type { CompanyIntelligence, ProviderDiagnostic } from "./providers/types";
+import type { CompanyIntelligence, FieldMergeAudit, ProviderDiagnostic } from "./providers/types";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const DEV = process.env.NODE_ENV !== "production";
