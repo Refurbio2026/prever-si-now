@@ -554,27 +554,71 @@ export function normalizeCompany(raw: FinstatRawCompany): Company {
     raw.PaymentOrder ?? undefined,
   );
   const vat = resolveVatStatus(raw);
+  const bag = raw as Record<string, unknown>;
+
+  const legalForm =
+    pickRawString(raw, ["LegalFormText", "LegalForm", "legalForm", "LegalFormName"]) ??
+    pickRawString(raw, ["LegalFormCode"]) ??
+    "—";
+
+  const skNaceCode = pickRawString(raw, [
+    "SkNaceCode",
+    "SKNaceCode",
+    "NaceCode",
+    "SkNACECode",
+  ]) ?? (typeof raw.SkNace?.Code === "string" ? raw.SkNace.Code : undefined);
+
+  const skNaceText = pickRawString(raw, [
+    "SkNaceText",
+    "SKNaceText",
+    "NaceText",
+    "NaceDescription",
+    "SkNaceName",
+  ]) ?? (typeof raw.SkNace?.Name === "string" ? raw.SkNace.Name : undefined);
+
+  // Industry: prefer SK NACE text; fall back to Activity/Sector; last resort — the NACE code alone.
+  const industry =
+    skNaceText ??
+    pickRawString(raw, ["Activity", "Sector", "MainActivity", "Industry"]) ??
+    skNaceCode ??
+    undefined;
+
+  const employees =
+    pickRawNumber(raw, ["EmployeeCount", "Employees", "NumberOfEmployees", "EmployeesCount"]);
+
+  const website = pickWebsite(raw);
+
+  const registrationDate =
+    pickRawString(raw, ["Created", "RegistrationDate", "EstablishedOn", "DateOfEstablishment"]) ?? "";
+
+  const registrationNumberText = pickRawString(raw, [
+    "RegisterNumberText",
+    "RegistrationNumber",
+    "RegisterNumber",
+    "RegistrationNumberText",
+  ]);
+
   return {
-    ico: String(raw.Ico ?? ""),
-    dic: raw.Dic || undefined,
+    ico: String(raw.Ico ?? bag.ICO ?? bag.ico ?? ""),
+    dic: pickRawString(raw, ["Dic", "DIC", "TaxNumber"]) ?? undefined,
     icDph: nonEmptyString(raw.IcDph) ?? nonEmptyString(raw.IcDPH) ?? nonEmptyString(raw.Icdph) ?? undefined,
-    name: raw.Name ?? "Neznáma firma",
-    legalForm: raw.LegalForm ?? "—",
+    name: pickRawString(raw, ["Name", "CompanyName", "FullName"]) ?? "Neznáma firma",
+    legalForm,
     address,
     city,
-    registrationDate: raw.Created ?? "",
+    registrationDate,
     vatPayer: vat.value,
     vatPayerConfidence: vat.confidence,
     revenue: Number(raw.Sales ?? latestFin?.revenue ?? 0),
     profit: Number(raw.Profit ?? latestFin?.profit ?? 0),
     riskScore: score,
     riskLevel: riskLevelFromScore(score),
-    employees: raw.EmployeeCount ? Number(raw.EmployeeCount) : undefined,
-    industry: raw.SkNace?.Name || raw.Activity || undefined,
-    website: raw.Url || undefined,
-    registrationNumberText: raw.RegisterNumberText ?? undefined,
-    skNaceCode: raw.SkNace?.Code ?? undefined,
-    skNaceText: raw.SkNace?.Name ?? undefined,
+    employees,
+    industry,
+    website,
+    registrationNumberText,
+    skNaceCode,
+    skNaceText,
     latestAssets: latestFin?.assets ?? (raw.Assets != null ? Number(raw.Assets) : undefined),
     latestLiabilities:
       latestFin?.liabilities ?? (raw.Liabilities != null ? Number(raw.Liabilities) : undefined),
@@ -587,6 +631,144 @@ export function normalizeCompany(raw: FinstatRawCompany): Company {
       healthDebt: raw.HealthInsuranceDebt != null ? Number(raw.HealthInsuranceDebt) : undefined,
     },
   };
+}
+
+// ---------- Dev-only raw field inspector ----------
+
+/** Field keys we intentionally consume from a Finstat detail response. */
+export const FINSTAT_MAPPED_FIELDS: Record<string, string> = {
+  Ico: "ico",
+  ICO: "ico",
+  Dic: "dic",
+  DIC: "dic",
+  TaxNumber: "dic",
+  IcDph: "icDph",
+  IcDPH: "icDph",
+  Icdph: "icDph",
+  Name: "name",
+  CompanyName: "name",
+  FullName: "name",
+  LegalForm: "legalForm",
+  LegalFormText: "legalForm",
+  LegalFormCode: "legalForm",
+  LegalFormName: "legalForm",
+  legalForm: "legalForm",
+  Street: "address",
+  StreetName: "address",
+  StreetNumber: "address",
+  HouseNumber: "address",
+  OrientationNumber: "address",
+  Ulica: "address",
+  Address: "address",
+  AddressLine1: "address",
+  CisloDomu: "address",
+  City: "city",
+  Municipality: "city",
+  Town: "city",
+  Obec: "city",
+  ZipCode: "city",
+  Zip: "city",
+  PostalCode: "city",
+  PSC: "city",
+  Region: "city",
+  Created: "registrationDate",
+  RegistrationDate: "registrationDate",
+  EstablishedOn: "registrationDate",
+  DateOfEstablishment: "registrationDate",
+  RegisterNumberText: "registrationNumberText",
+  RegistrationNumber: "registrationNumberText",
+  RegisterNumber: "registrationNumberText",
+  RegistrationNumberText: "registrationNumberText",
+  EmployeeCount: "employees",
+  Employees: "employees",
+  NumberOfEmployees: "employees",
+  EmployeesCount: "employees",
+  SkNace: "skNaceCode/skNaceText",
+  SkNaceCode: "skNaceCode",
+  SKNaceCode: "skNaceCode",
+  NaceCode: "skNaceCode",
+  SkNACECode: "skNaceCode",
+  SkNaceText: "skNaceText",
+  SKNaceText: "skNaceText",
+  NaceText: "skNaceText",
+  NaceDescription: "skNaceText",
+  SkNaceName: "skNaceText",
+  Activity: "industry",
+  Sector: "industry",
+  MainActivity: "industry",
+  Industry: "industry",
+  Website: "website",
+  WebSite: "website",
+  HomePage: "website",
+  Homepage: "website",
+  Web: "website",
+  WebPage: "website",
+  CompanyWebsite: "website",
+  WebUrl: "website",
+  Url: "(ignored — Finstat profile URL, not company website)",
+  Sales: "revenue",
+  Profit: "profit",
+  Assets: "latestAssets",
+  Liabilities: "latestLiabilities",
+  ReliableVatPayer: "vatPayer",
+  UnreliableVatPayer: "vatPayer (reliability flag)",
+  VatPayer: "vatPayer",
+  VatRegistration: "vatPayer",
+  Dph: "vatPayer",
+  TaxReliability: "vatPayer (weak signal)",
+  Financials: "financials[]",
+  Persons: "people[]",
+  Owners: "people[]",
+  KUVs: "people[]",
+  Warnings: "warnings",
+  Warning: "warnings",
+  PaymentOrder: "paymentOrderWarnings",
+  PaymentOrders: "paymentOrderWarnings",
+  PaymentOrderInfo: "paymentOrderWarnings",
+  TaxDebt: "debtIndicators.taxDebt",
+  JudicialDebt: "debtIndicators.judicialDebt",
+  SocialInsuranceDebt: "debtIndicators.socialDebt",
+  HealthInsuranceDebt: "debtIndicators.healthDebt",
+  BankruptcyInfo: "risks.insolvency",
+  DistrainmentsInfo: "risks.executions",
+  Cancelled: "(not mapped)",
+};
+
+export interface FinstatRawFieldRow {
+  key: string;
+  valuePreview: string;
+  mapped: boolean;
+  target?: string;
+}
+
+export function buildFinstatRawInspector(raw: FinstatRawCompany): FinstatRawFieldRow[] {
+  const rows: FinstatRawFieldRow[] = [];
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const target = FINSTAT_MAPPED_FIELDS[key];
+    rows.push({
+      key,
+      valuePreview: previewValue(value),
+      mapped: Boolean(target) && !target?.startsWith("("),
+      target,
+    });
+  }
+  rows.sort((a, b) => {
+    if (a.mapped !== b.mapped) return a.mapped ? -1 : 1;
+    return a.key.localeCompare(b.key);
+  });
+  return rows;
+}
+
+function previewValue(v: unknown): string {
+  if (v == null) return "null";
+  if (typeof v === "string") return v.length > 80 ? `${v.slice(0, 80)}…` : v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try {
+    const j = JSON.stringify(v);
+    return j.length > 120 ? `${j.slice(0, 120)}…` : j;
+  } catch {
+    return "[unserializable]";
+  }
 }
 
 function safeTrim(v: unknown): string | null {
