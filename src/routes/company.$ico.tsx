@@ -979,7 +979,7 @@ function ProviderStatusSection({
                   <div className="truncate text-xs text-muted-foreground">{meta.label}</div>
                   {state === "requires_auth" && (
                     <Button asChild size="sm" variant="outline" className="mt-2 h-7 rounded-lg text-xs">
-                      <Link to="/auth">Prihlásiť sa</Link>
+                      <Link to="/login">Prihlásiť sa</Link>
                     </Button>
                   )}
                 </div>
