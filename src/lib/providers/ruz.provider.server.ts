@@ -161,15 +161,7 @@ export async function ruzStatements(
       rawError: e.rawResponse,
       normalizedError: e.message,
     });
-    if (ALLOW_MOCK) {
-      return unavailable(
-        "ruz",
-        "statements",
-        mockStatements(),
-        "unavailable",
-        "RÚZ dočasne nedostupný — zobrazujem ukážkové dáta.",
-      );
-    }
+    // No mock fallback — empty list means "Nedostupné" in the UI.
     return unavailable(
       "ruz",
       "statements",
