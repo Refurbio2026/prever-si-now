@@ -1,6 +1,6 @@
 // Server-side PDF report generation for company profiles.
-// Uses pdf-lib (pure JS, Cloudflare Worker-safe). Standard Helvetica does
-// not support Slovak diacritics — text is normalized to ASCII before drawing.
+// Uses pdf-lib + @pdf-lib/fontkit with an embedded Unicode TTF (Noto Sans)
+// so Slovak diacritics render correctly.
 
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
@@ -17,14 +17,26 @@ export interface CompanyReportPdfResponse {
 
 const MISSING = "Údaj nebol dostupný v čase generovania reportu.";
 
-function asciiSafe(input: string | number | null | undefined): string {
-  if (input == null) return MISSING;
-  const s = typeof input === "number" ? String(input) : input;
-  return s
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\x20-\x7E\n]/g, "?");
+const FONT_REGULAR_URL =
+  "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSans/NotoSans-Regular.ttf";
+const FONT_BOLD_URL =
+  "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSans/NotoSans-Bold.ttf";
+
+let cachedRegular: Uint8Array | null = null;
+let cachedBold: Uint8Array | null = null;
+
+async function loadFont(url: string, cached: Uint8Array | null): Promise<Uint8Array> {
+  if (cached) return cached;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
 }
+
+function safe(input: string | number | null | undefined): string {
+  if (input == null) return MISSING;
+  return typeof input === "number" ? String(input) : input;
+}
+
 
 function fmtEur(n: number | null | undefined): string {
   if (typeof n !== "number" || !Number.isFinite(n)) return MISSING;
