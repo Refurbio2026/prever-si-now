@@ -320,7 +320,12 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
 }
 
 export async function finstatSearchByName(query: string): Promise<FinstatSearchHit[]> {
-  const data = (await finstatFetch("/autocomplete-ext", { Query: query }, query)) as
+  // Official Finstat Premium endpoint (per FinStat PHP client `RequestAutoComplete`):
+  //   POST/GET https://www.finstat.sk/api/autocomplete
+  //   params: query
+  //   hash input: raw query string
+  //   response: { Results: [{ Ico, Name, City, Cancelled }], Suggestions: [] }
+  const data = (await finstatFetch("/autocomplete", { query }, query)) as
     | { Results?: FinstatSearchHit[] }
     | FinstatSearchHit[]
     | null;
