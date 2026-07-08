@@ -169,6 +169,7 @@ function CompanyProfilePage() {
       ico={ico}
       company={intel.company}
       financials={intel.financials}
+      statements={intel.statements}
       people={intel.people}
       risks={intel.risks}
       sources={intel.sources}
@@ -183,6 +184,7 @@ function CompanyProfileView({
   ico,
   company,
   financials,
+  statements,
   people,
   risks,
   sources,
@@ -192,12 +194,14 @@ function CompanyProfileView({
   ico: string;
   company: Company;
   financials: FinancialYear[];
+  statements: AccountingStatement[];
   people: CompanyPerson[];
   risks: RiskIndicator[];
   sources: ProviderSourceStatus[];
   partial: boolean;
   diagnostics?: ProviderDiagnostic[];
 }) {
+
 
   const executives = people.filter((p) => p.role === "executive");
   const owners = people.filter((p) => p.role === "owner");
