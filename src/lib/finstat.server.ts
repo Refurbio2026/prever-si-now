@@ -485,16 +485,18 @@ export function normalizeCompany(raw: FinstatRawCompany): Company {
     raw.PaymentOrderInfo?.PaymentOrders ?? raw.PaymentOrders ?? undefined,
     raw.PaymentOrder ?? undefined,
   );
+  const vat = resolveVatStatus(raw);
   return {
     ico: String(raw.Ico ?? ""),
     dic: raw.Dic || undefined,
-    icDph: raw.IcDph || undefined,
+    icDph: nonEmptyString(raw.IcDph) ?? nonEmptyString(raw.IcDPH) ?? nonEmptyString(raw.Icdph) ?? undefined,
     name: raw.Name ?? "Neznáma firma",
     legalForm: raw.LegalForm ?? "—",
     address,
     city,
     registrationDate: raw.Created ?? "",
-    vatPayer: !!raw.IcDph || !!raw.ReliableVatPayer,
+    vatPayer: vat.value,
+    vatPayerConfidence: vat.confidence,
     revenue: Number(raw.Sales ?? latestFin?.revenue ?? 0),
     profit: Number(raw.Profit ?? latestFin?.profit ?? 0),
     riskScore: score,
