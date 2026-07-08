@@ -111,6 +111,9 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
 
     const latestFinancial = financials.data.at(-1);
     if (company.data && latestFinancial) {
+      const financialSource = latestFinancial.source ?? "finstat";
+      const hasField = (field: FinanceField) =>
+        latestFinancial.availableFields?.includes(field) ?? latestFinancial[field] !== 0;
       company.data = {
         ...company.data,
         revenue: latestFinancial.revenue,
@@ -118,15 +121,13 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
         latestAssets: latestFinancial.assets,
         latestLiabilities: latestFinancial.liabilities,
         latestFinancialsYear: latestFinancial.year,
-        latestFinancialsSource: latestFinancial.source ?? "finstat",
+        latestFinancialsSource: financialSource,
       };
-      company.fieldSources = {
-        ...company.fieldSources,
-        revenue: latestFinancial.source ?? "finstat",
-        profit: latestFinancial.source ?? "finstat",
-        latestAssets: latestFinancial.source ?? "finstat",
-        latestLiabilities: latestFinancial.source ?? "finstat",
-      };
+      company.fieldSources = { ...company.fieldSources };
+      if (hasField("revenue")) company.fieldSources.revenue = financialSource;
+      if (hasField("profit")) company.fieldSources.profit = financialSource;
+      if (hasField("assets")) company.fieldSources.latestAssets = financialSource;
+      if (hasField("liabilities")) company.fieldSources.latestLiabilities = financialSource;
     }
 
     const sources = [
@@ -160,10 +161,20 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       const selectedByField = new Map<FinanceField, { value?: number; year?: number; source?: "finstat" | "ruz" }>();
       const latest = financials.data.at(-1);
       if (latest) {
-        selectedByField.set("revenue", { value: latest.revenue, year: latest.year, source: latest.source ?? "finstat" });
-        selectedByField.set("profit", { value: latest.profit, year: latest.year, source: latest.source ?? "finstat" });
-        selectedByField.set("assets", { value: latest.assets, year: latest.year, source: latest.source ?? "finstat" });
-        selectedByField.set("liabilities", { value: latest.liabilities, year: latest.year, source: latest.source ?? "finstat" });
+        const latestHasField = (field: FinanceField) =>
+          latest.availableFields?.includes(field) ?? latest[field] !== 0;
+        if (latestHasField("revenue")) {
+          selectedByField.set("revenue", { value: latest.revenue, year: latest.year, source: latest.source ?? "finstat" });
+        }
+        if (latestHasField("profit")) {
+          selectedByField.set("profit", { value: latest.profit, year: latest.year, source: latest.source ?? "finstat" });
+        }
+        if (latestHasField("assets")) {
+          selectedByField.set("assets", { value: latest.assets, year: latest.year, source: latest.source ?? "finstat" });
+        }
+        if (latestHasField("liabilities")) {
+          selectedByField.set("liabilities", { value: latest.liabilities, year: latest.year, source: latest.source ?? "finstat" });
+        }
       }
 
       const finstatCandidates = buildFinstatFinanceCandidates(finstat.raw).map(
