@@ -39,19 +39,25 @@ function SearchPage() {
     const trimmed = query.trim();
     if (!trimmed) return;
     navigate({ search: { q: trimmed } });
-
-    if (user) {
-      await supabase.from("recent_searches").insert({
-        user_id: user.id,
-        query: trimmed,
-        ico: null,
-        company_name: null,
-      });
-    }
   }
 
   const items = results.data?.ok ? results.data.results : [];
   const apiError = results.data && !results.data.ok ? results.data : null;
+
+  // Save to recent_searches only after a successful non-empty result.
+  const successKey = results.data?.ok && items.length > 0 ? `${q}|${items[0].ico}` : null;
+  const savedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!successKey || !user || savedKeyRef.current === successKey) return;
+    savedKeyRef.current = successKey;
+    const top = items[0];
+    void supabase.from("recent_searches").insert({
+      user_id: user.id,
+      query: q ?? "",
+      ico: top?.ico ?? null,
+      company_name: top?.name ?? null,
+    });
+  }, [successKey, user, items, q]);
 
   return (
     <div className="space-y-6">
