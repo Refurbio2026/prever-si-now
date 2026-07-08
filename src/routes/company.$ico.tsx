@@ -998,28 +998,30 @@ function ProviderStatusSection({
 }
 
 const STATE_CFG: Record<
-  "ok" | "empty" | "pending" | "unavailable" | "error",
+  "ok" | "empty" | "pending" | "unavailable" | "requires_auth",
   { icon: typeof CheckCircle2; cls: string; label: string }
 > = {
   ok: { icon: CheckCircle2, cls: "text-success bg-success/15", label: "Aktívne" },
-  empty: { icon: CheckCircle2, cls: "text-muted-foreground bg-secondary", label: "Bez dát" },
+  empty: { icon: CheckCircle2, cls: "text-muted-foreground bg-secondary", label: "Bez záznamov" },
   pending: { icon: Clock, cls: "text-muted-foreground bg-secondary", label: "Pripravuje sa" },
   unavailable: { icon: AlertTriangle, cls: "text-warning-foreground bg-warning/20", label: "Nedostupné" },
-  error: { icon: XCircle, cls: "text-destructive bg-destructive/15", label: "Chyba" },
+  requires_auth: { icon: AlertCircle, cls: "text-muted-foreground bg-secondary", label: "Vyžaduje prihlásenie" },
 };
 
 function deriveDisplayState(
   implemented: boolean,
   statuses: ProviderSourceStatus[],
-): "ok" | "empty" | "pending" | "unavailable" | "error" {
+): "ok" | "empty" | "pending" | "unavailable" | "requires_auth" {
   if (!implemented) return "pending";
   if (statuses.length === 0) return "pending";
+  if (statuses.some((s) => s.state === "requires_auth")) return "requires_auth";
   if (statuses.some((s) => s.state === "ok")) return "ok";
-  if (statuses.some((s) => s.state === "error")) return "error";
-  if (statuses.some((s) => s.state === "unavailable" || s.state === "not_configured"))
-    return "unavailable";
-  return "empty";
+  if (statuses.some((s) => s.state === "empty")) return "empty";
+  // Any failure — network, HTTP, parse, timeout — surfaces as "Nedostupné",
+  // never "Chyba". "Chyba" made providers with zero data look broken.
+  return "unavailable";
 }
+
 
 function DiagRow({ label, value }: { label: string; value: string }) {
   return (
