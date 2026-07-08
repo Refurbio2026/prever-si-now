@@ -11,13 +11,19 @@ async function loadFinstat() {
   return mod;
 }
 
+const ALLOW_MOCK = process.env.NODE_ENV !== "production";
+
 async function getRaw(ico: string) {
   const { getFinstatEnvStatus, finstatGetByIco, mockCompanyDetail, FinstatError } =
     await loadFinstat();
 
   const env = getFinstatEnvStatus();
   if (!env.allSet) {
-    return { raw: null, mock: mockCompanyDetail(ico), reason: "not_configured" as const };
+    return {
+      raw: null,
+      mock: ALLOW_MOCK ? mockCompanyDetail(ico) : null,
+      reason: "not_configured" as const,
+    };
   }
   try {
     const raw = await finstatGetByIco(ico);
@@ -25,7 +31,11 @@ async function getRaw(ico: string) {
   } catch (err) {
     const fe = err as InstanceType<typeof FinstatError>;
     if (fe?.code === "unauthorized" || fe?.code === "missing_credentials") {
-      return { raw: null, mock: mockCompanyDetail(ico), reason: "not_configured" as const };
+      return {
+        raw: null,
+        mock: ALLOW_MOCK ? mockCompanyDetail(ico) : null,
+        reason: "not_configured" as const,
+      };
     }
     if (fe?.code === "not_found") {
       return { raw: null, mock: null, reason: "empty" as const };

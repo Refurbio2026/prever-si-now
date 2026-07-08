@@ -18,6 +18,20 @@ export interface Company {
   industry?: string;
   website?: string;
   aiSummary?: string;
+  // Extended real Finstat fields
+  registrationNumberText?: string;
+  skNaceCode?: string;
+  skNaceText?: string;
+  latestAssets?: number;
+  latestLiabilities?: number;
+  warnings?: string[];
+  paymentOrderWarnings?: string[];
+  debtIndicators?: {
+    taxDebt?: number;
+    socialDebt?: number;
+    healthDebt?: number;
+    judicialDebt?: number;
+  };
 }
 
 export interface FinancialYear {
@@ -96,6 +110,12 @@ export interface FinstatRawCompany {
   Liabilities?: number;
   Warning?: string | null;
   WarningUrl?: string | null;
+  Warnings?: Array<string | { Text?: string; Description?: string }> | null;
+  PaymentOrder?: string | null;
+  PaymentOrders?: Array<string | { Text?: string; Description?: string }> | null;
+  PaymentOrderInfo?: { PaymentOrders?: Array<{ Text?: string; Description?: string }> } | null;
+  RegisterNumberText?: string | null;
+  TaxDebt?: number | null;
   JudicialDebt?: number | null;
   SocialInsuranceDebt?: number | null;
   HealthInsuranceDebt?: number | null;

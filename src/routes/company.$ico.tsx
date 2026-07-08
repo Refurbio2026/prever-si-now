@@ -204,16 +204,34 @@ function CompanyProfileView({
                   )}
                 </div>
                 <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
-                  <InfoRow icon={Receipt} label="IČO" value={company.ico} />
-                  {company.dic && <InfoRow icon={Receipt} label="DIČ" value={company.dic} />}
-                  {company.icDph && <InfoRow icon={Receipt} label="IČ DPH" value={company.icDph} />}
-                  <InfoRow icon={MapPin} label="Adresa" value={`${company.address}, ${company.city}`} />
-                  <InfoRow icon={Building2} label="Právna forma" value={company.legalForm} />
+                  <InfoRow icon={Receipt} label="IČO" value={na(company.ico)} />
+                  <InfoRow icon={Receipt} label="DIČ" value={na(company.dic)} />
+                  <InfoRow icon={Receipt} label="IČ DPH" value={na(company.icDph)} />
+                  <InfoRow
+                    icon={MapPin}
+                    label="Adresa"
+                    value={na([company.address, company.city].filter((v) => v && v !== "—").join(", "))}
+                  />
+                  <InfoRow icon={Building2} label="Právna forma" value={na(company.legalForm)} />
                   <InfoRow
                     icon={Calendar}
                     label="Registrácia"
-                    value={new Date(company.registrationDate).toLocaleDateString("sk-SK")}
+                    value={
+                      company.registrationDate
+                        ? new Date(company.registrationDate).toLocaleDateString("sk-SK")
+                        : "Nedostupné"
+                    }
                   />
+                  {company.registrationNumberText && (
+                    <InfoRow icon={Receipt} label="Reg. číslo" value={company.registrationNumberText} />
+                  )}
+                  {(company.skNaceCode || company.skNaceText) && (
+                    <InfoRow
+                      icon={Building2}
+                      label="SK NACE"
+                      value={[company.skNaceCode, company.skNaceText].filter(Boolean).join(" – ")}
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -285,15 +303,40 @@ function CompanyProfileView({
               </Card>
             )}
 
+            {(company.warnings?.length || company.paymentOrderWarnings?.length) ? (
+              <Card className="rounded-2xl border-warning/40 bg-warning/5 p-6 shadow-soft">
+                <div className="mb-3 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-warning-foreground" />
+                  <h3 className="text-lg font-semibold">Upozornenia z registra</h3>
+                </div>
+                <ul className="list-disc space-y-1 pl-5 text-sm">
+                  {company.warnings?.map((w, i) => (
+                    <li key={`w${i}`}>{w}</li>
+                  ))}
+                  {company.paymentOrderWarnings?.map((w, i) => (
+                    <li key={`p${i}`}>
+                      <span className="font-medium">Platobný rozkaz:</span> {w}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ) : null}
+
             <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
               <h3 className="mb-5 text-lg font-semibold">Základné informácie</h3>
               <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-                <InfoField label="Odvetvie" value={company.industry ?? "—"} />
-                <InfoField label="Počet zamestnancov" value={company.employees ? String(company.employees) : "—"} />
-                <InfoField label="Web" value={company.website ?? "—"} />
-                <InfoField label="Tržby" value={formatCurrency(company.revenue)} />
-                <InfoField label="Zisk" value={formatCurrency(company.profit)} />
-                <InfoField label="Právna forma" value={company.legalForm} />
+                <InfoField label="Odvetvie" value={na(company.industry)} />
+                <InfoField label="Počet zamestnancov" value={na(company.employees ? String(company.employees) : undefined)} />
+                <InfoField label="Web" value={na(company.website)} />
+                <InfoField label="Tržby" value={company.revenue ? formatCurrency(company.revenue) : "Nedostupné"} />
+                <InfoField label="Zisk" value={company.profit ? formatCurrency(company.profit) : "Nedostupné"} />
+                <InfoField label="Právna forma" value={na(company.legalForm)} />
+                <InfoField label="Aktíva" value={company.latestAssets ? formatCurrency(company.latestAssets) : "Nedostupné"} />
+                <InfoField label="Pasíva" value={company.latestLiabilities ? formatCurrency(company.latestLiabilities) : "Nedostupné"} />
+                <InfoField label="Platiteľ DPH" value={company.vatPayer ? "Áno" : "Nie"} />
+                <InfoField label="Reg. číslo" value={na(company.registrationNumberText)} />
+                <InfoField label="SK NACE kód" value={na(company.skNaceCode)} />
+                <InfoField label="SK NACE popis" value={na(company.skNaceText)} />
               </div>
             </Card>
           </TabsContent>
@@ -414,6 +457,29 @@ function CompanyProfileView({
 
           {/* RISKS */}
           <TabsContent value="risks" className="space-y-3">
+            {company.debtIndicators && (
+              <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+                <h3 className="mb-4 text-lg font-semibold">Ukazovatele dlhov</h3>
+                <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <InfoField
+                    label="Daňový nedoplatok"
+                    value={company.debtIndicators.taxDebt != null ? formatCurrency(company.debtIndicators.taxDebt) : "Nedostupné"}
+                  />
+                  <InfoField
+                    label="Súdny dlh"
+                    value={company.debtIndicators.judicialDebt != null ? formatCurrency(company.debtIndicators.judicialDebt) : "Nedostupné"}
+                  />
+                  <InfoField
+                    label="Sociálna poisťovňa"
+                    value={company.debtIndicators.socialDebt != null ? formatCurrency(company.debtIndicators.socialDebt) : "Nedostupné"}
+                  />
+                  <InfoField
+                    label="Zdravotné poisťovne"
+                    value={company.debtIndicators.healthDebt != null ? formatCurrency(company.debtIndicators.healthDebt) : "Nedostupné"}
+                  />
+                </div>
+              </Card>
+            )}
             {risks.map((r) => (
               <RiskRow key={r.key} risk={r} large />
             ))}
@@ -638,6 +704,13 @@ function PeopleCard({
       </div>
     </Card>
   );
+}
+
+function na(value: string | number | undefined | null): string {
+  if (value === undefined || value === null) return "Nedostupné";
+  const s = String(value).trim();
+  if (!s || s === "—") return "Nedostupné";
+  return s;
 }
 
 function initials(name: string): string {
