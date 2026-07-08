@@ -109,6 +109,19 @@ export async function runContractsProvider(
   return { data: [...crz.data, ...uvo.data], sources: [crz.status, uvo.status] };
 }
 
+export async function runStatementsProvider(
+  ico: string,
+  diagnostics?: import("./types").ProviderDiagnostic[],
+): Promise<{ data: import("@/lib/types").AccountingStatement[]; sources: ProviderSourceStatus[] }> {
+  const { ruzStatements } = await import("./ruz.provider.server");
+  const result = await safe(ruzStatements(ico, diagnostics), {
+    data: [] as import("@/lib/types").AccountingStatement[],
+    status: { source: "ruz" as const, capability: "statements" as const, state: "error" as const },
+  });
+  return { data: result.data, sources: [result.status] };
+}
+
+
 export async function runMonitoringProvider(
   ico: string,
 ): Promise<{ data: MonitoringSnapshot | undefined; sources: ProviderSourceStatus[] }> {

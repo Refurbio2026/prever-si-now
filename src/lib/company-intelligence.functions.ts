@@ -62,7 +62,9 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       runPeopleProvider,
       runContractsProvider,
       runMonitoringProvider,
+      runStatementsProvider,
     } = await import("./providers/aggregate.server");
+
     const { finstatFetchAll } = await import("./providers/finstat.provider.server");
 
     const cached = await readCache(ico);
@@ -82,18 +84,21 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       };
     }
 
-    const [company, financials, risks, people, contracts, monitoring] = await Promise.all([
-      runCompanyProvider(ico, finstat),
-      runFinancialProvider(ico, finstat),
-      runRiskProvider(ico, finstat),
-      runPeopleProvider(ico, finstat),
-      runContractsProvider(ico),
-      runMonitoringProvider(ico),
-    ]);
+    const [company, financials, statements, risks, people, contracts, monitoring] =
+      await Promise.all([
+        runCompanyProvider(ico, finstat),
+        runFinancialProvider(ico, finstat),
+        runStatementsProvider(ico, DEV ? diagnostics : undefined),
+        runRiskProvider(ico, finstat),
+        runPeopleProvider(ico, finstat),
+        runContractsProvider(ico),
+        runMonitoringProvider(ico),
+      ]);
 
     const sources = [
       ...company.sources,
       ...financials.sources,
+      ...statements.sources,
       ...risks.sources,
       ...people.sources,
       ...contracts.sources,
@@ -104,6 +109,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       ico,
       company: company.data,
       financials: financials.data,
+      statements: statements.data,
       people: people.data,
       risks: risks.data,
       contracts: contracts.data,
@@ -113,6 +119,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       cachedAt: new Date().toISOString(),
       diagnostics: DEV ? diagnostics : undefined,
     };
+
 
     // Only cache successful, non-empty results.
     if (intel.company) {

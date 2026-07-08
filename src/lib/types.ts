@@ -102,6 +102,28 @@ export interface MonitoringAlert {
 export type CompanyFinancials = FinancialYear[];
 export type CompanyRisk = RiskIndicator;
 
+/** A single accounting statement (účtovná závierka) as filed in RÚZ. */
+export interface AccountingStatement {
+  id: string;
+  year: number;
+  /** Typ závierky — e.g. "Riadna", "Mimoriadna", "Priebežná". */
+  type: string;
+  /** Period start (YYYY-MM). */
+  periodFrom?: string;
+  /** Period end (YYYY-MM). */
+  periodTo?: string;
+  /** Date filed with RÚZ (YYYY-MM-DD). */
+  submittedAt?: string;
+  /** Date of preparation (YYYY-MM-DD). */
+  preparedAt?: string;
+  /** Date of approval (YYYY-MM-DD). */
+  approvedAt?: string;
+  consolidated?: boolean;
+  /** Public link to the statement on registeruz.sk. */
+  detailUrl?: string;
+}
+
+
 // Loose shape of a raw Finstat detail payload. Finstat returns many
 // optional fields depending on plan/company; we only pin the ones we map.
 export interface FinstatRawCompany {

@@ -2,11 +2,13 @@
 // The UI never sees which provider returned which field.
 
 import type {
+  AccountingStatement,
   Company,
   CompanyPerson,
   FinancialYear,
   RiskIndicator,
 } from "@/lib/types";
+
 
 export type ProviderSourceId =
   | "finstat"
@@ -27,10 +29,12 @@ export type ProviderSourceId =
 export type ProviderCapability =
   | "company"
   | "financials"
+  | "statements"
   | "risks"
   | "people"
   | "contracts"
   | "monitoring";
+
 
 export type ProviderState = "ok" | "unavailable" | "not_configured" | "empty" | "error";
 
@@ -79,6 +83,7 @@ export interface CompanyIntelligence {
   ico: string;
   company?: Company;
   financials: FinancialYear[];
+  statements: AccountingStatement[];
   people: CompanyPerson[];
   risks: RiskIndicator[];
   contracts: GovContract[];
@@ -90,4 +95,5 @@ export interface CompanyIntelligence {
   /** Dev-mode only: detailed per-provider diagnostics. */
   diagnostics?: ProviderDiagnostic[];
 }
+
 

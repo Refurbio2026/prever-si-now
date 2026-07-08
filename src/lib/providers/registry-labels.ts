@@ -32,8 +32,10 @@ export const PROVIDER_META: ProviderMeta[] = [
 /** Sources that are actually wired up to real data. All others are placeholders. */
 export const IMPLEMENTED_SOURCES: ReadonlySet<ProviderSourceId> = new Set<ProviderSourceId>([
   "finstat",
+  "ruz",
   "internal",
 ]);
+
 
 export function providerMeta(id: ProviderSourceId): ProviderMeta {
   return (
