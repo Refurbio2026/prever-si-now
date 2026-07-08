@@ -112,6 +112,16 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       ...monitoring.sources,
     ];
 
+    const { buildUnifiedCompany } = await import("./providers/unified.server");
+    const unified = buildUnifiedCompany({
+      company: company.data,
+      registry: company.registry,
+      financials: financials.data,
+      statements: statements.data,
+      people: people.data,
+      contracts: contracts.data,
+    });
+
     const intel: CompanyIntelligence = {
       ico,
       company: company.data,
@@ -128,6 +138,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       fieldSources: company.fieldSources,
       diagnostics: DEV ? diagnostics : undefined,
       fieldAudit: DEV ? audit : undefined,
+      unified,
     };
 
 
