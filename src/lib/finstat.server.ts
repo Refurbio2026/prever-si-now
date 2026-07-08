@@ -91,35 +91,33 @@ export interface FinstatFetchResult {
 async function finstatFetchRaw(
   path: string,
   params: Record<string, string>,
+  hashInput: string,
 ): Promise<FinstatFetchResult> {
-  const { apiKey, baseUrl } = credentials();
-  const endpoint = `${baseUrl}${path}`;
-  const body = new URLSearchParams({
-    apiKey,
-    StationId: STATION_ID,
-    StationName: STATION_NAME,
-    Json: "1",
-    ...params,
-  });
+  let signed;
+  try {
+    signed = buildSignedFinstatRequest(path, params, hashInput);
+  } catch (err) {
+    if (err instanceof FinstatAuthError) {
+      throw new FinstatError("missing_credentials", err.message);
+    }
+    throw err;
+  }
   let res: Response;
   try {
-    res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body: body.toString(),
+    res = await fetch(signed.endpoint, {
+      method: signed.method,
+      headers: signed.headers,
+      body: signed.body,
     });
   } catch (err) {
     throw new FinstatError(
       "network_error",
       `Network error contacting Finstat: ${(err as Error).message}`,
-      { endpoint },
+      { endpoint: signed.endpoint },
     );
   }
   const text = await res.text();
-  if (!res.ok) throw mapStatusFromResponse(res.status, endpoint, text);
+  if (!res.ok) throw mapStatusFromResponse(res.status, signed.endpoint, text);
   let parsed: unknown = null;
   if (text) {
     try {
@@ -127,17 +125,22 @@ async function finstatFetchRaw(
     } catch {
       throw new FinstatError("server_error", "Finstat returned a non-JSON response.", {
         status: res.status,
-        endpoint,
+        endpoint: signed.endpoint,
         rawResponse: text,
       });
     }
   }
-  return { endpoint, status: res.status, rawResponse: text, parsed };
+  return { endpoint: signed.endpoint, status: res.status, rawResponse: text, parsed };
 }
 
-async function finstatFetch(path: string, params: Record<string, string>): Promise<unknown> {
-  const { parsed } = await finstatFetchRaw(path, params);
+async function finstatFetch(
+  path: string,
+  params: Record<string, string>,
+  hashInput: string,
+): Promise<unknown> {
+  const { parsed } = await finstatFetchRaw(path, params, hashInput);
   return parsed;
+
 }
 
 // ---------- Mock fallback (used when credentials are missing) ----------
