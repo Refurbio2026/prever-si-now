@@ -278,9 +278,6 @@ function CompanyProfileView({
   const beneficials = owners.filter((o) => o.role === "beneficial_owner");
   const partnersOwners = owners.filter((o) => o.role === "owner");
   const criticalRisks = risks.filter((r) => r.status !== "clear");
-  const hasFinancials = financials.length > 0;
-  const latestFin = hasFinancials ? financials[financials.length - 1] : undefined;
-  const prevFin = hasFinancials && financials.length > 1 ? financials[financials.length - 2] : latestFin;
   const okSources = sources.filter((s) => s.state === "ok").length;
 
 
@@ -466,24 +463,18 @@ function CompanyProfileView({
 
           {/* FINANCIALS */}
           <TabsContent value="financials" className="space-y-6">
-            {hasFinancials && latestFin && prevFin ? (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <TrendCard label={`Tržby (${latestFin.year})`} value={latestFin.revenue} prev={prevFin.revenue} />
-                <TrendCard label={`Zisk (${latestFin.year})`} value={latestFin.profit} prev={prevFin.profit} />
-                <TrendCard label="EBITDA" value={latestFin.ebitda} prev={prevFin.ebitda} />
-                <TrendCard
-                  label="Aktíva / Pasíva"
-                  value={latestFin.assets - latestFin.liabilities}
-                  prev={prevFin.assets - prevFin.liabilities}
-                  positiveOnly
-                />
-              </div>
-            ) : null}
+            <FinanceKpiSection
+              company={company}
+              financials={financials}
+            />
 
-            {hasFinancials ? (
+            {financials.length >= 2 ? (
               <>
                 <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-                  <h3 className="mb-4 text-lg font-semibold">Vývoj tržieb</h3>
+                  <div className="mb-4 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold">Vývoj tržieb</h3>
+                    <SectionSourceBadge label="Finstat" />
+                  </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
@@ -513,7 +504,10 @@ function CompanyProfileView({
                 </Card>
 
                 <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-                  <h3 className="mb-4 text-lg font-semibold">Zisk vs. EBITDA</h3>
+                  <div className="mb-4 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold">Zisk vs. EBITDA</h3>
+                    <SectionSourceBadge label="Finstat" />
+                  </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={financials} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
@@ -538,10 +532,11 @@ function CompanyProfileView({
                 </Card>
               </>
             ) : (
-              <Card className="rounded-2xl border-dashed p-8 text-center text-sm text-muted-foreground">
-                Finančné hodnoty nie sú dostupné v strojovo čitateľnej forme.
+              <Card className="rounded-2xl border-dashed p-6 text-center text-sm text-muted-foreground">
+                Detailný časový rad finančných údajov nie je dostupný.
               </Card>
             )}
+
 
             {financials.some(
               (f) => f.assets > 0 || f.liabilities > 0 || f.revenue > 0 || f.profit > 0,
@@ -1088,7 +1083,16 @@ function AccountingStatementsCard({ statements }: { statements: AccountingStatem
                 <td className="py-3 text-muted-foreground">
                   {formatPeriod(s.periodFrom, s.periodTo)}
                 </td>
-                <td className="py-3 text-muted-foreground">{formatDate(s.submittedAt)}</td>
+                <td className="py-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-muted-foreground">{formatDate(s.submittedAt)}</span>
+                    <div className="flex flex-wrap gap-1">
+                      <AvailabilityBadge label="Detail" available={!!s.detailUrl} />
+                      <AvailabilityBadge label="PDF" available={!!s.pdfUrl} />
+                      <AvailabilityBadge label="Excel" available={!!s.excelUrl} />
+                    </div>
+                  </div>
+                </td>
                 <td className="py-3">
                   <div className="flex justify-end gap-1">
                     <StatementLinkButton
@@ -1820,5 +1824,87 @@ function RuzDiagnosticsPanel({
         </table>
       </div>
     </Card>
+  );
+}
+
+function FinanceKpiSection({
+  company,
+  financials,
+}: {
+  company: Company;
+  financials: FinancialYear[];
+}) {
+  const latestFin = financials.length ? financials[financials.length - 1] : undefined;
+
+  // Prefer time-series values (they carry a real year); fall back to Company latest.
+  const revenue = latestFin?.revenue ?? company.revenue;
+  const profit = latestFin?.profit ?? company.profit;
+  const assets = latestFin?.assets ?? company.latestAssets;
+  const liabilities = latestFin?.liabilities ?? company.latestLiabilities;
+  const year = latestFin?.year ?? company.latestFinancialsYear;
+  const period = latestFin
+    ? String(latestFin.year)
+    : year
+      ? String(year)
+      : "Neznáme obdobie";
+  const source = financials.length > 0 ? "Finstat" : "Finstat";
+
+  const hasAnyValue =
+    (typeof revenue === "number" && revenue > 0) ||
+    (typeof profit === "number" && profit !== 0) ||
+    (typeof assets === "number" && assets > 0) ||
+    (typeof liabilities === "number" && liabilities > 0);
+
+  if (!hasAnyValue) {
+    return (
+      <Card className="rounded-2xl border-dashed p-6 text-center text-sm text-muted-foreground">
+        Finančné hodnoty nie sú dostupné v strojovo čitateľnej forme.
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <h3 className="text-lg font-semibold">Kľúčové ukazovatele</h3>
+        <Badge variant="secondary" className="rounded-full">
+          {period}
+        </Badge>
+        <SectionSourceBadge label={source} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiTile label="Tržby" value={revenue} />
+        <KpiTile label="Zisk" value={profit} />
+        <KpiTile label="Aktíva" value={assets} />
+        <KpiTile label="Pasíva" value={liabilities} />
+      </div>
+    </Card>
+  );
+}
+
+function KpiTile({ label, value }: { label: string; value: number | undefined }) {
+  const display =
+    typeof value === "number" && Number.isFinite(value) ? formatCurrency(value) : "Nedostupné";
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{display}</div>
+    </div>
+  );
+}
+
+function AvailabilityBadge({ label, available }: { label: string; available: boolean }) {
+  return (
+    <Badge
+      variant="secondary"
+      className={
+        "rounded-full text-[10px] " +
+        (available
+          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+          : "bg-muted text-muted-foreground line-through opacity-70")
+      }
+    >
+      {label}
+    </Badge>
   );
 }

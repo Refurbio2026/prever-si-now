@@ -47,6 +47,8 @@ export interface Company {
   skNaceText?: string;
   latestAssets?: number;
   latestLiabilities?: number;
+  /** Year for latest revenue/profit/assets/liabilities (from Finstat). */
+  latestFinancialsYear?: number;
   warnings?: string[];
   paymentOrderWarnings?: string[];
   debtIndicators?: {
