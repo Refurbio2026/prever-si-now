@@ -228,6 +228,7 @@ function CompanyProfileView({
   diagnostics,
   fieldSources,
   fieldAudit,
+  finstatRawInspector,
   rpvsStatus,
   rpvsRegistrationDate,
   authorizedPerson,
@@ -242,6 +243,12 @@ function CompanyProfileView({
   diagnostics?: ProviderDiagnostic[];
   fieldSources?: Record<string, ProviderSourceId>;
   fieldAudit?: FieldMergeAudit[];
+  finstatRawInspector?: Array<{
+    key: string;
+    valuePreview: string;
+    mapped: boolean;
+    target?: string;
+  }>;
   rpvsStatus?: "aktívny" | "neaktívny" | "nezaregistrovaný";
   rpvsRegistrationDate?: string;
   authorizedPerson?: {
