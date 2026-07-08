@@ -1895,3 +1895,19 @@ function KpiTile({ label, value }: { label: string; value: number | undefined })
     </div>
   );
 }
+
+function AvailabilityBadge({ label, available }: { label: string; available: boolean }) {
+  return (
+    <Badge
+      variant="secondary"
+      className={
+        "rounded-full text-[10px] " +
+        (available
+          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+          : "bg-muted text-muted-foreground line-through opacity-70")
+      }
+    >
+      {label}
+    </Badge>
+  );
+}
