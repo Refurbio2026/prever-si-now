@@ -229,23 +229,22 @@ export async function runContractsProvider(
   sources: ProviderSourceStatus[];
 }> {
   const { crzContractsByIco } = await import("./crz.provider.server");
-  const { uvoProcurementByIco } = await import("./uvo.provider.server");
-  const [crz, uvo] = await Promise.all([
-    safe(crzContractsByIco(ico, diagnostics), {
-      data: [] as import("@/lib/types").PublicContract[],
-      status: err("crz", "contracts"),
-    }),
-    safe(uvoProcurementByIco(ico, diagnostics), {
-      data: [] as import("@/lib/types").ProcurementRecord[],
-      status: err("uvo", "contracts"),
-    }),
-  ]);
+  // ÚVO live scraping is intentionally disabled — no stable public endpoint
+  // is wired yet. The provider status grid marks it as "Pripravuje sa"
+  // via IMPLEMENTED_SOURCES; do NOT push an unavailable status here.
+  const crz = await safe(crzContractsByIco(ico, diagnostics), {
+    data: [] as import("@/lib/types").PublicContract[],
+    status: err("crz", "contracts"),
+  });
   const stateOf = (s: ProviderSourceStatus): import("@/lib/types").SectionState =>
     s.state === "ok" ? "ok" : s.state === "empty" ? "empty" : "failed";
   return {
     contracts: { data: crz.data, state: stateOf(crz.status) },
-    procurement: { data: uvo.data, state: stateOf(uvo.status) },
-    sources: [crz.status, uvo.status],
+    procurement: {
+      data: [] as import("@/lib/types").ProcurementRecord[],
+      state: "empty" as import("@/lib/types").SectionState,
+    },
+    sources: [crz.status],
   };
 }
 
