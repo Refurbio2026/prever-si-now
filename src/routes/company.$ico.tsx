@@ -241,6 +241,10 @@ function CompanyProfileView({
     validTo?: string;
   };
 }) {
+  const { user } = useAuth();
+  const isAuthenticated = !!user;
+
+
 
 
   // All section data comes from the unified structure — never directly from
