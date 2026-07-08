@@ -256,6 +256,14 @@ function financialYearFromRows(year: number, rows: FinanceMappingRuzRow[]): Fina
     assets: assets ?? 0,
     liabilities: liabilities ?? 0,
     source: "ruz",
+    availableFields: ([
+      ["revenue", revenue],
+      ["profit", profit],
+      ["assets", assets],
+      ["liabilities", liabilities],
+    ] as const)
+      .filter(([, value]) => value !== undefined)
+      .map(([field]) => field),
   };
 }
 
