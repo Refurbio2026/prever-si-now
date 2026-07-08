@@ -11,10 +11,6 @@ const soon = (name: string) => `${name}: integrácia sa pripravuje.`;
 // ORSR now has a real implementation in orsr.provider.server.ts —
 // no placeholder needed here.
 
-export async function ruzFinancials(_ico: string): Promise<ProviderResult<import("@/lib/types").FinancialYear[]>> {
-  return unavailable<import("@/lib/types").FinancialYear[]>("ruz", "financials", [], "unavailable", soon("Register účtovných závierok"));
-}
-
 export async function rpvsBeneficialOwners(_ico: string): Promise<ProviderResult<CompanyPerson[]>> {
   return unavailable<CompanyPerson[]>("rpvs", "people", [], "unavailable", soon("RPVS"));
 }
