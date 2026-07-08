@@ -499,7 +499,10 @@ function CompanyProfileView({
                 </table>
               </div>
             </Card>
+
+            <AccountingStatementsCard statements={statements} />
           </TabsContent>
+
 
           {/* PEOPLE */}
           <TabsContent value="people" className="space-y-6">
