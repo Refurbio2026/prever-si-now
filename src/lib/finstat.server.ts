@@ -364,10 +364,78 @@ function computeRiskScore(raw: FinstatRawCompany): number {
 }
 
 function joinAddress(raw: FinstatRawCompany): { address: string; city: string } {
-  const address = [raw.Street, raw.StreetNumber].filter(Boolean).join(" ").trim();
-  const city = [raw.ZipCode, raw.City].filter(Boolean).join(" ").trim();
+  const streetName =
+    pickRawString(raw, ["Street", "StreetName", "Ulica", "Address", "AddressLine1"]) ?? "";
+  const streetNumber =
+    pickRawString(raw, ["StreetNumber", "HouseNumber", "OrientationNumber", "CisloDomu"]) ?? "";
+  const address = [streetName, streetNumber].filter(Boolean).join(" ").trim();
+  const zip = pickRawString(raw, ["ZipCode", "Zip", "PostalCode", "PSC"]) ?? "";
+  const cityName = pickRawString(raw, ["City", "Municipality", "Town", "Obec"]) ?? "";
+  const city = [zip, cityName].filter(Boolean).join(" ").trim();
   return { address: address || "—", city: city || "—" };
 }
+
+// ---------- Raw field helpers (defensive aliases) ----------
+
+/** Read the first non-empty string across a list of aliased keys, case-insensitive. */
+function pickRawString(raw: FinstatRawCompany, keys: string[]): string | undefined {
+  const bag = raw as Record<string, unknown>;
+  for (const k of keys) {
+    const s = nonEmptyString(bag[k]);
+    if (s) return s;
+    // Case-insensitive fallback (Finstat has mixed-case variants).
+    const lower = k.toLowerCase();
+    for (const rawKey of Object.keys(bag)) {
+      if (rawKey.toLowerCase() === lower) {
+        const v = nonEmptyString(bag[rawKey]);
+        if (v) return v;
+      }
+    }
+  }
+  return undefined;
+}
+
+function pickRawNumber(raw: FinstatRawCompany, keys: string[]): number | undefined {
+  const bag = raw as Record<string, unknown>;
+  for (const k of keys) {
+    const v = bag[k];
+    if (v == null || v === "") continue;
+    const n = typeof v === "number" ? v : Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+/** Real company website — never a Finstat profile URL. */
+function pickWebsite(raw: FinstatRawCompany): string | undefined {
+  const bag = raw as Record<string, unknown>;
+  // Explicit dedicated website fields only.
+  const candidates = [
+    "Website",
+    "WebSite",
+    "HomePage",
+    "Homepage",
+    "Web",
+    "WebPage",
+    "CompanyWebsite",
+    "WebUrl",
+  ];
+  for (const key of candidates) {
+    const s = nonEmptyString(bag[key]);
+    if (s && !isFinstatProfileUrl(s)) return s;
+  }
+  return undefined;
+}
+
+function isFinstatProfileUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "finstat.sk" || host.endsWith(".finstat.sk");
+  } catch {
+    return /finstat\.sk/i.test(url);
+  }
+}
+
 
 // ---------- Defensive VAT resolution ----------
 
