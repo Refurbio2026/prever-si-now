@@ -35,6 +35,8 @@ export function CompanyActions({ company }: Props) {
 
   const watched = !!watchQuery.data;
 
+  const watchFn = useServerFn(watchCompanyFn);
+
   const toggleWatch = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Nie ste prihlásený");
@@ -46,13 +48,13 @@ export function CompanyActions({ company }: Props) {
         if (error) throw error;
         return "removed" as const;
       }
-      const { error } = await supabase.from("watched_companies").insert({
-        user_id: user.id,
-        ico: company.ico,
-        company_name: company.name,
-        risk_score: company.riskScore,
+      await watchFn({
+        data: {
+          ico: company.ico,
+          companyName: company.name,
+          riskScore: company.riskScore,
+        },
       });
-      if (error) throw error;
       return "added" as const;
     },
     onSuccess: (result) => {
