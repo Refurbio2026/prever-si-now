@@ -10,7 +10,8 @@ export type ImportSource =
   | "crz"
   | "registry"
   | "people"
-  | "history";
+  | "history"
+  | "ai";
 
 export const SUPPORTED_SOURCES: readonly ImportSource[] = [
   "finstat",
@@ -20,7 +21,32 @@ export const SUPPORTED_SOURCES: readonly ImportSource[] = [
   "registry",
   "people",
   "history",
+  "ai",
 ] as const;
+
+/** Record success/failure of a source run against public.data_freshness. */
+async function recordFreshness(
+  ico: string,
+  source: ImportSource,
+  ok: boolean,
+  message?: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await supabaseAdmin
+    .from("data_freshness")
+    .upsert(
+      {
+        ico,
+        source,
+        last_attempt_at: now,
+        last_success_at: ok ? now : undefined,
+        status: ok ? "success" : "failed",
+        error_message: ok ? null : (message ?? "Neznáma chyba"),
+        updated_at: now,
+      },
+      { onConflict: "ico,source" },
+    );
+}
 
 const FINSTAT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
