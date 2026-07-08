@@ -154,7 +154,9 @@ function SearchResultsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-lg font-semibold">{c.name}</h3>
-                        {c.riskScore > 0 && <RiskBadge level={c.riskLevel} />}
+                        {c.riskScore !== undefined && c.riskScore > 0 && (
+                          <RiskBadge level={riskLevelFromScore(c.riskScore)} />
+                        )}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span>IČO {c.ico}</span>
