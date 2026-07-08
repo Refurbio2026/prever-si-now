@@ -18,6 +18,8 @@ export interface CompanySearchResult {
 }
 
 
+export type FieldConfidence = "confirmed" | "inferred" | "unknown";
+
 export interface Company {
   ico: string;
   dic?: string;
@@ -27,7 +29,10 @@ export interface Company {
   address: string;
   city: string;
   registrationDate: string;
-  vatPayer: boolean;
+  /** undefined = unknown (renders as "Nedostupné"). */
+  vatPayer?: boolean;
+  /** How confident we are in `vatPayer`. Default "unknown" when absent. */
+  vatPayerConfidence?: FieldConfidence;
   revenue: number;
   profit: number;
   riskScore: number; // 0-100 (higher = healthier)
