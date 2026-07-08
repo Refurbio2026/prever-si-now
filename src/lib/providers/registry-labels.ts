@@ -34,6 +34,7 @@ export const IMPLEMENTED_SOURCES: ReadonlySet<ProviderSourceId> = new Set<Provid
   "finstat",
   "orsr",
   "ruz",
+  "rpvs",
   "internal",
 ]);
 
