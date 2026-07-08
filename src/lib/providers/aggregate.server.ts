@@ -110,13 +110,15 @@ export async function runRiskProvider(
 export async function runPeopleProvider(
   ico: string,
   finstat: FinstatBundle,
+  orsrPeople: CompanyPerson[] = [],
 ): Promise<{ data: CompanyPerson[]; sources: ProviderSourceStatus[] }> {
   const rpvs = await safe(rpvsBeneficialOwners(ico), {
     data: [] as CompanyPerson[],
     status: err("rpvs"),
   });
+  // ORSR statutory reps take priority over Finstat's executives.
   return {
-    data: mergePeople(finstat.people.data, rpvs.data),
+    data: mergePeople(orsrPeople, finstat.people.data, rpvs.data),
     sources: [finstat.people.status, rpvs.status],
   };
 }
