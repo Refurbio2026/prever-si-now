@@ -2,17 +2,18 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Download, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Download, Loader2, CheckCircle2, XCircle, RotateCw, Users, History, Building2, PlayCircle } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  getCompanyRecordsFn,
+  getImportLogsFn,
   importCompanyRegistryFn,
   importCompanyPeopleFn,
   importCompanyHistoryFn,
+  type ImportLogEntry,
   type ImportJobResult,
 } from "@/lib/company-records.functions";
 
@@ -26,87 +27,64 @@ export const Route = createFileRoute("/admin/imports")({
   }),
 });
 
-type JobKey = "registry" | "people" | "history";
-
-interface JobRunState {
-  status: "idle" | "running" | "ok" | "error";
-  imported?: number;
-  error?: string;
-  finishedAt?: string;
-}
+type JobKind = "registry" | "people" | "history" | "all";
 
 function AdminImportsPage() {
   const [ico, setIco] = useState("");
-  const [jobs, setJobs] = useState<Record<JobKey, JobRunState>>({
-    registry: { status: "idle" },
-    people: { status: "idle" },
-    history: { status: "idle" },
-  });
-
   const qc = useQueryClient();
-  const fetchRecords = useServerFn(getCompanyRecordsFn);
+
+  const fetchLogs = useServerFn(getImportLogsFn);
   const runRegistry = useServerFn(importCompanyRegistryFn);
   const runPeople = useServerFn(importCompanyPeopleFn);
   const runHistory = useServerFn(importCompanyHistoryFn);
 
   const validIco = /^\d{6,8}$/.test(ico.trim());
 
-  const recordsQuery = useQuery({
-    queryKey: ["admin-imports-records", ico],
-    queryFn: () => fetchRecords({ data: { ico: ico.trim() } }),
-    enabled: validIco,
+  const logsQuery = useQuery({
+    queryKey: ["import-logs"],
+    queryFn: () => fetchLogs({ data: { limit: 100 } }),
+    refetchInterval: 5000,
     staleTime: 0,
   });
 
-  const registryCount = recordsQuery.data?.registry ? 1 : 0;
-  const peopleCount = recordsQuery.data?.people.length ?? 0;
-  const historyCount = recordsQuery.data?.history.length ?? 0;
+  const runners: Record<Exclude<JobKind, "all">, (args: { data: { ico: string } }) => Promise<ImportJobResult>> = {
+    registry: runRegistry,
+    people: runPeople,
+    history: runHistory,
+  };
 
   const mutation = useMutation({
-    mutationFn: async () => {
-      if (!validIco) throw new Error("Zadaj platné IČO (6–8 číslic).");
-      const trimmed = ico.trim();
-      setJobs({
-        registry: { status: "running" },
-        people: { status: "running" },
-        history: { status: "running" },
-      });
-      const [registry, people, history] = await Promise.all([
-        runRegistry({ data: { ico: trimmed } }),
-        runPeople({ data: { ico: trimmed } }),
-        runHistory({ data: { ico: trimmed } }),
-      ]);
-      return { registry, people, history };
+    mutationFn: async ({ ico: targetIco, kind }: { ico: string; kind: JobKind }) => {
+      if (!/^\d{6,8}$/.test(targetIco)) throw new Error("Neplatné IČO.");
+      if (kind === "all") {
+        await Promise.all([
+          runRegistry({ data: { ico: targetIco } }),
+          runPeople({ data: { ico: targetIco } }),
+          runHistory({ data: { ico: targetIco } }),
+        ]);
+      } else {
+        await runners[kind]({ data: { ico: targetIco } });
+      }
     },
-    onSuccess: (res) => {
-      const stamp = new Date().toISOString();
-      setJobs({
-        registry: toJobState(res.registry, stamp),
-        people: toJobState(res.people, stamp),
-        history: toJobState(res.history, stamp),
-      });
-      qc.invalidateQueries({ queryKey: ["admin-imports-records", ico] });
-      qc.invalidateQueries({ queryKey: ["company-records", ico.trim()] });
-    },
-    onError: (err) => {
-      const msg = (err as Error).message ?? "Import zlyhal.";
-      const stamp = new Date().toISOString();
-      setJobs({
-        registry: { status: "error", error: msg, finishedAt: stamp },
-        people: { status: "error", error: msg, finishedAt: stamp },
-        history: { status: "error", error: msg, finishedAt: stamp },
-      });
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["import-logs"] });
+      qc.invalidateQueries({ queryKey: ["company-records"] });
     },
   });
+
+  const trigger = (kind: JobKind, targetIco?: string) =>
+    mutation.mutate({ ico: (targetIco ?? ico).trim(), kind });
+
+  const pendingKind = mutation.isPending ? (mutation.variables?.kind ?? null) : null;
+  const pendingIco = mutation.isPending ? (mutation.variables?.ico ?? null) : null;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Import údajov z verejných registrov</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manuálne spustenie importných úloh (ORSR/RPO) pre konkrétne IČO.
-          Dáta sa uložia do interných tabuliek <code>company_registry</code>,{" "}
-          <code>company_people</code> a <code>company_history</code>.
+          Manuálne spustenie importných úloh (ORSR/RPO). Každý beh sa zaznamenáva do tabuľky{" "}
+          <code>import_logs</code>.
         </p>
       </div>
 
@@ -124,117 +102,180 @@ function AdminImportsPage() {
               className="mt-1"
             />
           </div>
-          <Button
-            onClick={() => mutation.mutate()}
-            disabled={!validIco || mutation.isPending}
-            className="rounded-xl"
-          >
-            {mutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importujem…
-              </>
-            ) : (
-              <>
-                <Download className="mr-2 h-4 w-4" /> Importovať údaje
-              </>
-            )}
-          </Button>
         </div>
         {!validIco && ico.length > 0 && (
           <p className="mt-2 text-xs text-destructive">IČO musí mať 6 až 8 číslic.</p>
         )}
-      </Card>
 
-      <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
-        <h2 className="mb-4 text-lg font-semibold">Stav importných úloh</h2>
-        <div className="space-y-3">
-          <JobRow name="importCompanyRegistry" state={jobs.registry} />
-          <JobRow name="importCompanyPeople" state={jobs.people} />
-          <JobRow name="importCompanyHistory" state={jobs.history} />
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            onClick={() => trigger("registry")}
+            disabled={!validIco || mutation.isPending}
+            variant="outline"
+            className="rounded-xl"
+          >
+            {pendingKind === "registry" && pendingIco === ico.trim() ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Building2 className="mr-2 h-4 w-4" />
+            )}
+            Import registry
+          </Button>
+          <Button
+            onClick={() => trigger("people")}
+            disabled={!validIco || mutation.isPending}
+            variant="outline"
+            className="rounded-xl"
+          >
+            {pendingKind === "people" && pendingIco === ico.trim() ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Users className="mr-2 h-4 w-4" />
+            )}
+            Import people
+          </Button>
+          <Button
+            onClick={() => trigger("history")}
+            disabled={!validIco || mutation.isPending}
+            variant="outline"
+            className="rounded-xl"
+          >
+            {pendingKind === "history" && pendingIco === ico.trim() ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <History className="mr-2 h-4 w-4" />
+            )}
+            Import history
+          </Button>
+          <Button
+            onClick={() => trigger("all")}
+            disabled={!validIco || mutation.isPending}
+            className="rounded-xl"
+          >
+            {pendingKind === "all" && pendingIco === ico.trim() ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <PlayCircle className="mr-2 h-4 w-4" />
+            )}
+            Import all
+          </Button>
         </div>
+        {mutation.isError && (
+          <p className="mt-3 text-sm text-destructive">
+            {(mutation.error as Error).message}
+          </p>
+        )}
       </Card>
 
       <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Aktuálny obsah databázy</h2>
-          {recordsQuery.isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          <h2 className="text-lg font-semibold">História importov</h2>
+          {logsQuery.isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
         </div>
-        {!validIco ? (
-          <p className="text-sm text-muted-foreground">Zadaj IČO na zobrazenie stavu.</p>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-3">
-            <StatBox label="company_registry" count={registryCount} />
-            <StatBox label="company_people" count={peopleCount} />
-            <StatBox label="company_history" count={historyCount} />
-          </div>
-        )}
-        {validIco && registryCount === 0 && peopleCount === 0 && historyCount === 0 && (
-          <p className="mt-4 text-sm text-muted-foreground">Dáta zatiaľ neboli importované.</p>
-        )}
+        <LogsTable
+          logs={logsQuery.data ?? []}
+          onReimport={(targetIco) => trigger("all", targetIco)}
+          isReimportingIco={pendingIco}
+        />
       </Card>
     </div>
   );
 }
 
-function toJobState(res: ImportJobResult, finishedAt: string): JobRunState {
-  if (res.ok) return { status: "ok", imported: res.imported, finishedAt };
-  return { status: "error", error: res.error, imported: res.imported, finishedAt };
-}
-
-function JobRow({ name, state }: { name: string; state: JobRunState }) {
+function LogsTable({
+  logs,
+  onReimport,
+  isReimportingIco,
+}: {
+  logs: ImportLogEntry[];
+  onReimport: (ico: string) => void;
+  isReimportingIco: string | null;
+}) {
+  if (logs.length === 0) {
+    return <p className="text-sm text-muted-foreground">Zatiaľ neboli spustené žiadne importy.</p>;
+  }
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-secondary/30 px-4 py-3">
-      <div className="flex items-center gap-3">
-        <StatusIcon status={state.status} />
-        <div>
-          <div className="font-mono text-sm">{name}</div>
-          {state.error && <div className="text-xs text-destructive">{state.error}</div>}
-          {state.finishedAt && (
-            <div className="text-[10px] text-muted-foreground">
-              {new Date(state.finishedAt).toLocaleString("sk-SK")}
-            </div>
-          )}
-        </div>
-      </div>
-      {state.status === "ok" && (
-        <Badge variant="secondary" className="rounded-full">
-          {state.imported} záznamov
-        </Badge>
-      )}
-      {state.status === "error" && (
-        <Badge variant="destructive" className="rounded-full">
-          Chyba
-        </Badge>
-      )}
-      {state.status === "running" && (
-        <Badge variant="outline" className="rounded-full">
-          Bežím…
-        </Badge>
-      )}
-      {state.status === "idle" && (
-        <Badge variant="outline" className="rounded-full">
-          Neaktívne
-        </Badge>
-      )}
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] text-sm">
+        <thead>
+          <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <th className="py-2 pr-3">IČO</th>
+            <th className="py-2 pr-3">Zdroj</th>
+            <th className="py-2 pr-3">Stav</th>
+            <th className="py-2 pr-3">Záznamov</th>
+            <th className="py-2 pr-3">Začiatok</th>
+            <th className="py-2 pr-3">Koniec</th>
+            <th className="py-2 pr-3">Chyba</th>
+            <th className="py-2 pr-3 text-right">Akcia</th>
+          </tr>
+        </thead>
+        <tbody>
+          {logs.map((log) => (
+            <tr key={log.id} className="border-b border-border/40 align-top">
+              <td className="py-2 pr-3 font-mono">{log.ico}</td>
+              <td className="py-2 pr-3">{log.source}</td>
+              <td className="py-2 pr-3"><StatusBadge status={log.status} /></td>
+              <td className="py-2 pr-3">{log.recordsCount}</td>
+              <td className="py-2 pr-3 text-xs text-muted-foreground">{fmt(log.startedAt)}</td>
+              <td className="py-2 pr-3 text-xs text-muted-foreground">{log.finishedAt ? fmt(log.finishedAt) : "—"}</td>
+              <td className="py-2 pr-3 text-xs text-destructive">{log.errorMessage ?? "—"}</td>
+              <td className="py-2 pr-3 text-right">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="rounded-lg"
+                  onClick={() => onReimport(log.ico)}
+                  disabled={isReimportingIco === log.ico}
+                >
+                  {isReimportingIco === log.ico ? (
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  ) : (
+                    <RotateCw className="mr-1 h-3 w-3" />
+                  )}
+                  Reimportovať
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function StatusIcon({ status }: { status: JobRunState["status"] }) {
-  if (status === "running") return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
-  if (status === "ok") return <CheckCircle2 className="h-4 w-4 text-success" />;
-  if (status === "error") return <XCircle className="h-4 w-4 text-destructive" />;
-  return <Download className="h-4 w-4 text-muted-foreground" />;
+function StatusBadge({ status }: { status: string }) {
+  if (status === "ok") {
+    return (
+      <Badge variant="secondary" className="rounded-full">
+        <CheckCircle2 className="mr-1 h-3 w-3 text-success" /> ok
+      </Badge>
+    );
+  }
+  if (status === "error") {
+    return (
+      <Badge variant="destructive" className="rounded-full">
+        <XCircle className="mr-1 h-3 w-3" /> error
+      </Badge>
+    );
+  }
+  if (status === "running") {
+    return (
+      <Badge variant="outline" className="rounded-full">
+        <Loader2 className="mr-1 h-3 w-3 animate-spin" /> running
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="rounded-full">
+      <Download className="mr-1 h-3 w-3" /> {status}
+    </Badge>
+  );
 }
 
-function StatBox({ label, count }: { label: string; count: number }) {
-  return (
-    <div className="rounded-xl border border-border/60 bg-secondary/30 p-4">
-      <div className="font-mono text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-2 text-2xl font-bold">{count}</div>
-      <div className="mt-1 text-xs text-muted-foreground">
-        {count === 0 ? "Dáta zatiaľ neboli importované" : "záznamov v databáze"}
-      </div>
-    </div>
-  );
+function fmt(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("sk-SK");
+  } catch {
+    return iso;
+  }
 }

@@ -257,6 +257,39 @@ export type Database = {
         }
         Relationships: []
       }
+      import_logs: {
+        Row: {
+          error_message: string | null
+          finished_at: string | null
+          ico: string
+          id: string
+          records_count: number
+          source: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          error_message?: string | null
+          finished_at?: string | null
+          ico: string
+          id?: string
+          records_count?: number
+          source: string
+          started_at?: string
+          status: string
+        }
+        Update: {
+          error_message?: string | null
+          finished_at?: string | null
+          ico?: string
+          id?: string
+          records_count?: number
+          source?: string
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_name: string | null

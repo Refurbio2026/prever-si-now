@@ -53,6 +53,18 @@ export interface ImportJobResult {
   error?: string;
 }
 
+export interface ImportLogEntry {
+  id: string;
+  ico: string;
+  source: string;
+  status: string;
+  recordsCount: number;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+
 export const getCompanyRecordsFn = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => icoSchema.parse(input))
   .handler(async ({ data }): Promise<CompanyRecordsResponse> => {
@@ -151,4 +163,30 @@ export const importCompanyHistoryFn = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<ImportJobResult> => {
     const { importCompanyHistory } = await import("./imports.server");
     return runImport(data.ico, importCompanyHistory);
+  });
+
+export const getImportLogsFn = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z.object({ ico: z.string().regex(/^\d{6,8}$/).optional(), limit: z.number().int().min(1).max(200).optional() }).parse(input),
+  )
+  .handler(async ({ data }): Promise<ImportLogEntry[]> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let q = supabaseAdmin
+      .from("import_logs")
+      .select("*")
+      .order("started_at", { ascending: false })
+      .limit(data.limit ?? 50);
+    if (data.ico) q = q.eq("ico", data.ico);
+    const { data: rows, error } = await q;
+    if (error) throw new Error(error.message);
+    return (rows ?? []).map((r) => ({
+      id: r.id,
+      ico: r.ico,
+      source: r.source,
+      status: r.status,
+      recordsCount: r.records_count ?? 0,
+      errorMessage: r.error_message,
+      startedAt: r.started_at,
+      finishedAt: r.finished_at,
+    }));
   });
