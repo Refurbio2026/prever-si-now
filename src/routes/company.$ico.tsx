@@ -428,8 +428,9 @@ function CompanyProfileView({
             <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
               <div className="mb-5 flex items-center justify-between gap-2">
                 <h3 className="text-lg font-semibold">Základné informácie</h3>
-                <SectionSourceBadge label="ORSR" />
+                <SectionSourceBadge label={dominantSourceLabel(fieldSources, ["legalForm", "industry", "skNaceCode", "vatPayer"], "ORSR")} />
               </div>
+
               {basic ? (
                 <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                   <InfoField label="Odvetvie" value={na(basic.industry)} source={fieldSources?.industry} />
