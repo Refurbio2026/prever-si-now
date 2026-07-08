@@ -180,20 +180,25 @@ function CompanyProfilePage() {
 
 
 function CompanyProfileView({
+  ico,
   company,
   financials,
   people,
   risks,
   sources,
   partial,
+  diagnostics,
 }: {
+  ico: string;
   company: Company;
   financials: FinancialYear[];
   people: CompanyPerson[];
   risks: RiskIndicator[];
   sources: ProviderSourceStatus[];
   partial: boolean;
+  diagnostics?: ProviderDiagnostic[];
 }) {
+
   const executives = people.filter((p) => p.role === "executive");
   const owners = people.filter((p) => p.role === "owner");
   const beneficials = people.filter((p) => p.role === "beneficial_owner");
