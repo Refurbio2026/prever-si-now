@@ -922,3 +922,114 @@ function DiagRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+// ---------- Účtovné závierky (RÚZ) ----------
+
+function AccountingStatementsCard({ statements }: { statements: AccountingStatement[] }) {
+  if (statements.length === 0) {
+    return (
+      <Card className="rounded-2xl border-dashed p-8 text-center text-sm text-muted-foreground">
+        Účtovné závierky nie sú k dispozícii.
+      </Card>
+    );
+  }
+  return (
+    <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+      <div className="mb-4 flex items-center gap-2">
+        <FileText className="h-4 w-4 text-primary" />
+        <h3 className="text-lg font-semibold">Účtovné závierky</h3>
+        <Badge variant="secondary" className="rounded-full">
+          {statements.length}
+        </Badge>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead>
+            <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+              <th className="py-3 text-left font-medium">Rok</th>
+              <th className="py-3 text-left font-medium">Typ</th>
+              <th className="py-3 text-left font-medium">Obdobie</th>
+              <th className="py-3 text-left font-medium">Podané</th>
+              <th className="py-3 text-right font-medium">Akcie</th>
+            </tr>
+          </thead>
+          <tbody>
+            {statements.map((s) => (
+              <tr key={s.id} className="border-b border-border/50 last:border-0">
+                <td className="py-3 font-medium">{s.year}</td>
+                <td className="py-3">
+                  <div className="flex items-center gap-2">
+                    <span>{s.type}</span>
+                    {s.consolidated && (
+                      <Badge variant="secondary" className="rounded-full text-[10px]">
+                        Konsolidovaná
+                      </Badge>
+                    )}
+                  </div>
+                </td>
+                <td className="py-3 text-muted-foreground">
+                  {formatPeriod(s.periodFrom, s.periodTo)}
+                </td>
+                <td className="py-3 text-muted-foreground">{formatDate(s.submittedAt)}</td>
+                <td className="py-3">
+                  <div className="flex justify-end gap-1">
+                    {s.detailUrl ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        asChild
+                        className="rounded-lg text-xs"
+                      >
+                        <a href={s.detailUrl} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="mr-1 h-3.5 w-3.5" /> Detail
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button variant="ghost" size="sm" disabled className="rounded-lg text-xs">
+                        <ExternalLink className="mr-1 h-3.5 w-3.5" /> Detail
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-lg text-xs"
+                      title="Stiahnuť PDF (čoskoro)"
+                      onClick={() => alert("Export do PDF bude čoskoro k dispozícii.")}
+                    >
+                      <Download className="mr-1 h-3.5 w-3.5" /> PDF
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-lg text-xs"
+                      title="Export do Excelu (čoskoro)"
+                      onClick={() => alert("Export do Excelu bude čoskoro k dispozícii.")}
+                    >
+                      <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Excel
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Zdroj: Register účtovných závierok (RÚZ).
+      </p>
+    </Card>
+  );
+}
+
+function formatPeriod(from?: string, to?: string): string {
+  if (!from && !to) return "—";
+  const fmt = (v?: string) => v?.replace(/^(\d{4})-(\d{2}).*/, "$2/$1") ?? "";
+  return [fmt(from), fmt(to)].filter(Boolean).join(" – ");
+}
+
+function formatDate(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("sk-SK");
+}
