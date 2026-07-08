@@ -412,7 +412,7 @@ function CompanyProfileView({
             <RegistryCard registry={registry} company={company} fieldSources={fieldSources} />
 
             <ProviderStatusSection ico={ico} sources={sources} diagnostics={diagnostics} />
-            {fieldAudit && fieldAudit.length > 0 && <DevDebugPanel audit={fieldAudit} />
+            {fieldAudit && fieldAudit.length > 0 && <DevDebugPanel audit={fieldAudit} />}
           </TabsContent>
 
 
