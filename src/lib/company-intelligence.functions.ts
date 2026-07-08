@@ -91,7 +91,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
         runFinancialProvider(ico, finstat),
         runStatementsProvider(ico, DEV ? diagnostics : undefined),
         runRiskProvider(ico, finstat),
-        runContractsProvider(ico),
+        runContractsProvider(ico, DEV ? diagnostics : undefined),
         runMonitoringProvider(ico),
       ]);
 
@@ -120,7 +120,10 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       financials: financials.data,
       statements: statements.data,
       people: people.data,
-      contracts: contracts.data,
+      contracts: contracts.contracts.data,
+      contractsState: contracts.contracts.state,
+      procurement: contracts.procurement.data,
+      procurementState: contracts.procurement.state,
     });
 
     const intel: CompanyIntelligence = {
@@ -130,7 +133,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       statements: statements.data,
       people: people.data,
       risks: risks.data,
-      contracts: contracts.data,
+      contracts: [],
       monitoring: monitoring.data,
       registry: company.registry,
       beneficialOwners: people.rpvs?.beneficialOwners ?? [],
@@ -145,6 +148,7 @@ export const getCompanyIntelligenceFn = createServerFn({ method: "POST" })
       fieldAudit: DEV ? audit : undefined,
       unified,
     };
+
 
 
 

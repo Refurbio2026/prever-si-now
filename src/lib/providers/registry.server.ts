@@ -31,13 +31,9 @@ export async function healthInsuranceRisks(_ico: string): Promise<ProviderResult
   return unavailable<RiskIndicator[]>("health_insurance", "risks", [], "unavailable", soon("Zdravotné poisťovne"));
 }
 
-export async function crzContracts(_ico: string): Promise<ProviderResult<GovContract[]>> {
-  return unavailable<GovContract[]>("crz", "contracts", [], "unavailable", soon("CRZ"));
-}
+// CRZ / ÚVO now have real implementations in crz.provider.server.ts and
+// uvo.provider.server.ts — no placeholders needed here.
 
-export async function uvoContracts(_ico: string): Promise<ProviderResult<GovContract[]>> {
-  return unavailable<GovContract[]>("uvo", "contracts", [], "unavailable", soon("ÚVO"));
-}
 
 export async function justiceRisks(_ico: string): Promise<ProviderResult<RiskIndicator[]>> {
   return unavailable<RiskIndicator[]>("justice", "risks", [], "unavailable", soon("Justice.gov.sk"));

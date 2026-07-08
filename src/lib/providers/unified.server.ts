@@ -11,9 +11,10 @@ import type {
   FinancialYear,
   ProcurementRecord,
   PublicContract,
+  SectionState,
   UnifiedCompany,
 } from "@/lib/types";
-import type { GovContract, RegistryDetails } from "./types";
+import type { RegistryDetails } from "./types";
 
 const DEV = process.env.NODE_ENV !== "production";
 
@@ -58,58 +59,29 @@ function toOwners(people: CompanyPerson[]): CompanyOwner[] {
   return owners;
 }
 
-function toContracts(all: GovContract[]): PublicContract[] {
-  return all
-    .filter((c) => c.source === "crz")
-    .map(({ id, title, counterparty, value, currency, signedAt, url }) => ({
-      id,
-      title,
-      counterparty,
-      value,
-      currency,
-      signedAt,
-      url,
-    }));
-}
-
-function toProcurement(all: GovContract[]): ProcurementRecord[] {
-  return all
-    .filter((c) => c.source === "uvo")
-    .map(({ id, title, counterparty, value, currency, signedAt, url }) => ({
-      id,
-      title,
-      counterparty,
-      value,
-      currency,
-      signedAt,
-      url,
-    }));
-}
-
 export function buildUnifiedCompany(input: {
   company: Company | undefined;
   registry: RegistryDetails | undefined;
   financials: FinancialYear[];
   statements: AccountingStatement[];
   people: CompanyPerson[];
-  contracts: GovContract[];
+  contracts: PublicContract[];
+  contractsState?: SectionState;
+  procurement: ProcurementRecord[];
+  procurementState?: SectionState;
 }): UnifiedCompany {
   return {
     basicInfo: { provider: "orsr", data: toBasicInfo(input.company, input.registry) },
     financials: { provider: "finstat", data: input.financials },
     owners: { provider: "rpvs", data: toOwners(input.people) },
     accounting: { provider: "ruz", data: input.statements },
-    contracts: { provider: "crz", data: toContracts(input.contracts) },
-    procurement: { provider: "uvo", data: toProcurement(input.contracts) },
+    contracts: { provider: "crz", data: input.contracts, state: input.contractsState },
+    procurement: { provider: "uvo", data: input.procurement, state: input.procurementState },
   };
 }
 
-/** Dev-only mock fallback — only used when a section has no data at all. */
+/** Dev-only mock fallback — reserved hook, no-op today. */
 export function withDevMockFallback(unified: UnifiedCompany): UnifiedCompany {
   if (!DEV) return unified;
-  // We intentionally leave sections empty in production so the UI shows
-  // "Nedostupné". In dev, still leave empty — mock is only enabled here for
-  // ad-hoc developer testing when explicitly requested. Kept as a hook so
-  // future dev-only seeding lives in one place.
   return unified;
 }

@@ -555,8 +555,9 @@ function CompanyProfileView({
             </Card>
 
             <AccountingStatementsCard statements={statements} />
-            <ContractsCard contracts={contracts} />
-            <ProcurementCard procurement={procurement} />
+            <ContractsCard contracts={contracts} state={unified.contracts.state} />
+            <ProcurementCard procurement={procurement} state={unified.procurement.state} />
+
           </TabsContent>
 
 
@@ -1260,7 +1261,13 @@ function OwnersCard({
 
 // ---------- Public contracts (CRZ) ----------
 
-function ContractsCard({ contracts }: { contracts: PublicContract[] }) {
+function ContractsCard({
+  contracts,
+  state,
+}: {
+  contracts: PublicContract[];
+  state?: "ok" | "empty" | "failed";
+}) {
   return (
     <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
       <div className="mb-4 flex items-center gap-2">
@@ -1271,26 +1278,47 @@ function ContractsCard({ contracts }: { contracts: PublicContract[] }) {
         </Badge>
         <SectionSourceBadge label="CRZ" />
       </div>
-      {contracts.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nedostupné</p>
+      {state === "failed" ? (
+        <p className="text-sm text-muted-foreground">Zdroj je momentálne nedostupný.</p>
+      ) : contracts.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenašli sa žiadne záznamy.</p>
       ) : (
         <ul className="divide-y divide-border/60 text-sm">
-          {contracts.map((c) => (
-            <li key={c.id} className="flex items-start justify-between gap-4 py-3">
-              <div className="min-w-0">
-                <div className="truncate font-medium">{c.title}</div>
-                <div className="text-xs text-muted-foreground">
-                  {c.counterparty}
-                  {c.signedAt ? ` • ${formatDate(c.signedAt)}` : ""}
+          {contracts.map((c) => {
+            const parties = [c.supplierName, c.customerName].filter(Boolean).join(" → ") ||
+              c.counterparty;
+            const date = c.signedDate ?? c.signedAt ?? c.publishedDate;
+            return (
+              <li key={c.id} className="flex items-start justify-between gap-4 py-3">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">
+                    {c.sourceUrl || c.url ? (
+                      <a
+                        href={c.sourceUrl ?? c.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline"
+                      >
+                        {c.title}
+                      </a>
+                    ) : (
+                      c.title
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {parties}
+                    {c.contractNumber ? ` • č. ${c.contractNumber}` : ""}
+                    {date ? ` • ${formatDate(date)}` : ""}
+                  </div>
                 </div>
-              </div>
-              {c.value !== undefined && (
-                <div className="text-right text-sm font-semibold">
-                  {formatCurrency(c.value)}
-                </div>
-              )}
-            </li>
-          ))}
+                {c.value !== undefined && (
+                  <div className="text-right text-sm font-semibold">
+                    {formatCurrency(c.value)}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </Card>
@@ -1299,7 +1327,13 @@ function ContractsCard({ contracts }: { contracts: PublicContract[] }) {
 
 // ---------- Public procurement (ÚVO) ----------
 
-function ProcurementCard({ procurement }: { procurement: ProcurementRecord[] }) {
+function ProcurementCard({
+  procurement,
+  state,
+}: {
+  procurement: ProcurementRecord[];
+  state?: "ok" | "empty" | "failed";
+}) {
   return (
     <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
       <div className="mb-4 flex items-center gap-2">
@@ -1310,31 +1344,53 @@ function ProcurementCard({ procurement }: { procurement: ProcurementRecord[] }) 
         </Badge>
         <SectionSourceBadge label="ÚVO" />
       </div>
-      {procurement.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nedostupné</p>
+      {state === "failed" ? (
+        <p className="text-sm text-muted-foreground">Zdroj je momentálne nedostupný.</p>
+      ) : procurement.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenašli sa žiadne záznamy.</p>
       ) : (
         <ul className="divide-y divide-border/60 text-sm">
-          {procurement.map((p) => (
-            <li key={p.id} className="flex items-start justify-between gap-4 py-3">
-              <div className="min-w-0">
-                <div className="truncate font-medium">{p.title}</div>
-                <div className="text-xs text-muted-foreground">
-                  {p.counterparty}
-                  {p.signedAt ? ` • ${formatDate(p.signedAt)}` : ""}
+          {procurement.map((p) => {
+            const parties = [p.buyerName, p.supplierName].filter(Boolean).join(" → ") ||
+              p.counterparty;
+            const date = p.awardDate ?? p.signedAt;
+            return (
+              <li key={p.id} className="flex items-start justify-between gap-4 py-3">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">
+                    {p.sourceUrl || p.url ? (
+                      <a
+                        href={p.sourceUrl ?? p.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline"
+                      >
+                        {p.title}
+                      </a>
+                    ) : (
+                      p.title
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {parties}
+                    {p.procedureType ? ` • ${p.procedureType}` : ""}
+                    {date ? ` • ${formatDate(date)}` : ""}
+                  </div>
                 </div>
-              </div>
-              {p.value !== undefined && (
-                <div className="text-right text-sm font-semibold">
-                  {formatCurrency(p.value)}
-                </div>
-              )}
-            </li>
-          ))}
+                {p.value !== undefined && (
+                  <div className="text-right text-sm font-semibold">
+                    {formatCurrency(p.value)}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </Card>
   );
 }
+
 
 
 // ---------- Developer debug panel (dev-only) ----------

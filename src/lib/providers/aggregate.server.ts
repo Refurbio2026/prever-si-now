@@ -5,7 +5,6 @@
 import type { Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
 import type {
   FieldMergeAudit,
-  GovContract,
   MonitoringSnapshot,
   ProviderDiagnostic,
   ProviderSourceId,
@@ -16,18 +15,17 @@ import type {
 import { finstatFetchAll } from "./finstat.provider.server";
 import { orsrRegistryDetails } from "./orsr.provider.server";
 import {
-  crzContracts,
   financialAdminRisks,
   healthInsuranceRisks,
   justiceRisks,
   ruzFinancials,
   socialInsuranceRisks,
-  uvoContracts,
   enforcementRisks,
   aiRiskAnalysis,
   cadastreCompanyInfo,
 } from "./registry.server";
 import { internalMonitoring } from "./monitoring.provider.server";
+
 
 interface FinstatBundle {
   company: Awaited<ReturnType<typeof finstatFetchAll>>["company"];
@@ -227,13 +225,39 @@ export async function runPeopleProvider(
 
 export async function runContractsProvider(
   ico: string,
-): Promise<{ data: GovContract[]; sources: ProviderSourceStatus[] }> {
+  diagnostics?: ProviderDiagnostic[],
+): Promise<{
+  contracts: {
+    data: import("@/lib/types").PublicContract[];
+    state: import("@/lib/types").SectionState;
+  };
+  procurement: {
+    data: import("@/lib/types").ProcurementRecord[];
+    state: import("@/lib/types").SectionState;
+  };
+  sources: ProviderSourceStatus[];
+}> {
+  const { crzContractsByIco } = await import("./crz.provider.server");
+  const { uvoProcurementByIco } = await import("./uvo.provider.server");
   const [crz, uvo] = await Promise.all([
-    safe(crzContracts(ico), { data: [] as GovContract[], status: err("crz") }),
-    safe(uvoContracts(ico), { data: [] as GovContract[], status: err("uvo") }),
+    safe(crzContractsByIco(ico, diagnostics), {
+      data: [] as import("@/lib/types").PublicContract[],
+      status: err("crz", "contracts"),
+    }),
+    safe(uvoProcurementByIco(ico, diagnostics), {
+      data: [] as import("@/lib/types").ProcurementRecord[],
+      status: err("uvo", "contracts"),
+    }),
   ]);
-  return { data: [...crz.data, ...uvo.data], sources: [crz.status, uvo.status] };
+  const stateOf = (s: ProviderSourceStatus): import("@/lib/types").SectionState =>
+    s.state === "ok" ? "ok" : s.state === "empty" ? "empty" : "failed";
+  return {
+    contracts: { data: crz.data, state: stateOf(crz.status) },
+    procurement: { data: uvo.data, state: stateOf(uvo.status) },
+    sources: [crz.status, uvo.status],
+  };
 }
+
 
 export async function runStatementsProvider(
   ico: string,
