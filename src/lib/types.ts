@@ -162,10 +162,20 @@ export interface CompanyOwner {
 export interface PublicContract {
   id: string;
   title: string;
+  /** Preferred: counterparty label combining both sides for legacy UI. */
   counterparty: string;
+  contractNumber?: string;
+  supplierName?: string;
+  customerName?: string;
   value?: number;
   currency?: string;
+  /** Preferred field per CRZ contract semantics. */
+  signedDate?: string;
+  publishedDate?: string;
+  /** Legacy alias — mirrors `signedDate`. */
   signedAt?: string;
+  sourceUrl?: string;
+  /** Legacy alias — mirrors `sourceUrl`. */
   url?: string;
 }
 
@@ -174,11 +184,21 @@ export interface ProcurementRecord {
   id: string;
   title: string;
   counterparty: string;
+  buyerName?: string;
+  supplierName?: string;
   value?: number;
   currency?: string;
+  procedureType?: string;
+  awardDate?: string;
+  /** Legacy alias — mirrors `awardDate`. */
   signedAt?: string;
+  sourceUrl?: string;
+  /** Legacy alias — mirrors `sourceUrl`. */
   url?: string;
 }
+
+/** Result state for a unified section — lets UI distinguish empty vs failed. */
+export type SectionState = "ok" | "empty" | "failed";
 
 /**
  * The single unified shape the UI consumes. Each section is tagged with the
@@ -190,9 +210,10 @@ export interface UnifiedCompany {
   financials: { provider: "finstat"; data: FinancialYear[] };
   owners: { provider: "rpvs"; data: CompanyOwner[] };
   accounting: { provider: "ruz"; data: AccountingStatement[] };
-  contracts: { provider: "crz"; data: PublicContract[] };
-  procurement: { provider: "uvo"; data: ProcurementRecord[] };
+  contracts: { provider: "crz"; data: PublicContract[]; state?: SectionState };
+  procurement: { provider: "uvo"; data: ProcurementRecord[]; state?: SectionState };
 }
+
 
 
 
