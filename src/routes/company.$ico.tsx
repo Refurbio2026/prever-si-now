@@ -421,7 +421,7 @@ function CompanyProfileView({
               </div>
             </Card>
 
-            <RegistryCard registry={registry} company={company} fieldSources={fieldSources} />
+            <RegistryCard basic={basic} fieldSources={fieldSources} />
 
             <ProviderStatusSection ico={ico} sources={sources} diagnostics={diagnostics} />
             {fieldAudit && fieldAudit.length > 0 && <DevDebugPanel audit={fieldAudit} />}
