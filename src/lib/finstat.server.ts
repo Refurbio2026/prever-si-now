@@ -12,6 +12,7 @@ import {
 import type {
   Company,
   CompanyPerson,
+  CompanySearchResult,
   FinancialYear,
   FinstatRawCompany,
   FinstatSearchHit,
