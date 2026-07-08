@@ -770,3 +770,144 @@ function initials(name: string): string {
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
 }
+
+// ---------- Provider status ----------
+
+function ProviderStatusSection({
+  ico,
+  sources,
+  diagnostics,
+  className,
+}: {
+  ico: string;
+  sources: ProviderSourceStatus[];
+  diagnostics?: ProviderDiagnostic[];
+  className?: string;
+}) {
+  const byId = new Map<string, ProviderSourceStatus[]>();
+  for (const s of sources) {
+    const arr = byId.get(s.source) ?? [];
+    arr.push(s);
+    byId.set(s.source, arr);
+  }
+  const anyNotWired = PROVIDER_META.some((m) => !IMPLEMENTED_SOURCES.has(m.id));
+
+  return (
+    <div className={className ?? "space-y-4"}>
+      <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Zdroje verejných registrov</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Stav napojenia na jednotlivé verejné registre pre IČO {ico}.
+            </p>
+          </div>
+        </div>
+
+        {anyNotWired && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+            <span>Niektoré verejné registre ešte nie sú napojené.</span>
+          </div>
+        )}
+
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {PROVIDER_META.map((meta) => {
+            const implemented = IMPLEMENTED_SOURCES.has(meta.id);
+            const statuses = byId.get(meta.id) ?? [];
+            const state = deriveDisplayState(implemented, statuses);
+            const cfg = STATE_CFG[state];
+            const Icon = cfg.icon;
+            return (
+              <div
+                key={meta.id}
+                className="flex items-start gap-3 rounded-xl border border-border/60 bg-background p-3"
+              >
+                <div
+                  className={`inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${cfg.cls}`}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="truncate text-sm font-medium">{meta.short}</div>
+                    <Badge variant="secondary" className={`rounded-full text-[10px] ${cfg.cls}`}>
+                      {cfg.label}
+                    </Badge>
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">{meta.label}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {diagnostics && diagnostics.length > 0 && (
+        <Card className="rounded-2xl border-dashed border-border/70 p-6 shadow-soft">
+          <div className="mb-3 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Diagnostika (dev mode)</h3>
+          </div>
+          <div className="space-y-3 text-xs">
+            {diagnostics.map((d, i) => (
+              <div key={i} className="rounded-lg border border-border/60 bg-secondary/30 p-3">
+                <div className="mb-1 grid gap-1 sm:grid-cols-2">
+                  <DiagRow label="IČO" value={ico} />
+                  <DiagRow label="Provider" value={d.source} />
+                  <DiagRow label="Endpoint" value={d.endpoint ?? "—"} />
+                  <DiagRow label="HTTP" value={d.httpStatus != null ? String(d.httpStatus) : "—"} />
+                  <DiagRow label="Kód chyby" value={d.errorCode ?? "—"} />
+                  <DiagRow label="Normalizovaná chyba" value={d.normalizedError ?? "—"} />
+                </div>
+                {d.finalUrlMasked && (
+                  <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
+                    URL: {d.finalUrlMasked}
+                  </div>
+                )}
+                {d.rawError && (
+                  <pre className="mt-2 max-h-40 overflow-auto rounded bg-background p-2 font-mono text-[10px]">
+                    {d.rawError}
+                  </pre>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+const STATE_CFG: Record<
+  "ok" | "empty" | "pending" | "unavailable" | "error",
+  { icon: typeof CheckCircle2; cls: string; label: string }
+> = {
+  ok: { icon: CheckCircle2, cls: "text-success bg-success/15", label: "Aktívne" },
+  empty: { icon: CheckCircle2, cls: "text-muted-foreground bg-secondary", label: "Bez dát" },
+  pending: { icon: Clock, cls: "text-muted-foreground bg-secondary", label: "Pripravuje sa" },
+  unavailable: { icon: AlertTriangle, cls: "text-warning-foreground bg-warning/20", label: "Nedostupné" },
+  error: { icon: XCircle, cls: "text-destructive bg-destructive/15", label: "Chyba" },
+};
+
+function deriveDisplayState(
+  implemented: boolean,
+  statuses: ProviderSourceStatus[],
+): "ok" | "empty" | "pending" | "unavailable" | "error" {
+  if (!implemented) return "pending";
+  if (statuses.length === 0) return "pending";
+  if (statuses.some((s) => s.state === "ok")) return "ok";
+  if (statuses.some((s) => s.state === "error")) return "error";
+  if (statuses.some((s) => s.state === "unavailable" || s.state === "not_configured"))
+    return "unavailable";
+  return "empty";
+}
+
+function DiagRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-2">
+      <span className="min-w-[110px] text-muted-foreground">{label}:</span>
+      <span className="min-w-0 flex-1 break-all font-medium">{value}</span>
+    </div>
+  );
+}
