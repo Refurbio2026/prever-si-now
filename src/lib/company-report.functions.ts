@@ -1,6 +1,6 @@
 // Server-side PDF report generation for company profiles.
-// Uses pdf-lib (pure JS, Cloudflare Worker-safe). Standard Helvetica does
-// not support Slovak diacritics — text is normalized to ASCII before drawing.
+// Uses pdf-lib + @pdf-lib/fontkit with an embedded Unicode TTF (Noto Sans)
+// so Slovak diacritics render correctly.
 
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
@@ -17,14 +17,26 @@ export interface CompanyReportPdfResponse {
 
 const MISSING = "Údaj nebol dostupný v čase generovania reportu.";
 
-function asciiSafe(input: string | number | null | undefined): string {
-  if (input == null) return MISSING;
-  const s = typeof input === "number" ? String(input) : input;
-  return s
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\x20-\x7E\n]/g, "?");
+const FONT_REGULAR_URL =
+  "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSans/NotoSans-Regular.ttf";
+const FONT_BOLD_URL =
+  "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSans/NotoSans-Bold.ttf";
+
+let cachedRegular: Uint8Array | null = null;
+let cachedBold: Uint8Array | null = null;
+
+async function loadFont(url: string, cached: Uint8Array | null): Promise<Uint8Array> {
+  if (cached) return cached;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
 }
+
+function safe(input: string | number | null | undefined): string {
+  if (input == null) return MISSING;
+  return typeof input === "number" ? String(input) : input;
+}
+
 
 function fmtEur(n: number | null | undefined): string {
   if (typeof n !== "number" || !Number.isFinite(n)) return MISSING;
@@ -78,7 +90,9 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<CompanyReportPdfResponse> => {
     const ico = data.ico;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+    const { PDFDocument, rgb } = await import("pdf-lib");
+    const fontkit = (await import("@pdf-lib/fontkit")).default;
+
 
     // Fetch everything in parallel.
     const [
@@ -120,8 +134,16 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
     pdf.setProducer("PreverSi.sk");
     pdf.setCreator("PreverSi.sk");
 
-    const helv = await pdf.embedFont(StandardFonts.Helvetica);
-    const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    pdf.registerFontkit(fontkit);
+    const [regularBytes, boldBytes] = await Promise.all([
+      loadFont(FONT_REGULAR_URL, cachedRegular),
+      loadFont(FONT_BOLD_URL, cachedBold),
+    ]);
+    cachedRegular = regularBytes;
+    cachedBold = boldBytes;
+    const helv = await pdf.embedFont(regularBytes, { subset: true });
+    const helvBold = await pdf.embedFont(boldBytes, { subset: true });
+
 
     const pageWidth = 595.28;
     const pageHeight = 841.89;
@@ -157,7 +179,7 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
       const color = opts.color ?? text;
       const startX = opts.x ?? marginX + (opts.indent ?? 0);
       const maxWidth = pageWidth - marginX - startX;
-      const lines = wrapText(asciiSafe(s), font, size, maxWidth);
+      const lines = wrapText(safe(s), font, size, maxWidth);
       for (const line of lines) {
         ensureSpace(size + 4);
         page.drawText(line, { x: startX, y: cursorY - size, size, font, color });
@@ -212,7 +234,7 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
         height: 16,
         color: brandAccent,
       });
-      page.drawText(asciiSafe(title), {
+      page.drawText(safe(title), {
         x: marginX + 10,
         y: cursorY - 14,
         size: 13,
@@ -233,14 +255,14 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
           rowTopY = cursorY;
         }
         const x = marginX + col * colWidth;
-        page.drawText(asciiSafe(k), {
+        page.drawText(safe(k), {
           x,
           y: rowTopY - 10,
           size: 8,
           font: helvBold,
           color: muted,
         });
-        const valueLines = wrapText(asciiSafe(v), helv, 10, colWidth - 8);
+        const valueLines = wrapText(safe(v), helv, 10, colWidth - 8);
         page.drawText(valueLines[0] ?? "", {
           x,
           y: rowTopY - 22,
@@ -265,7 +287,7 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
       for (const item of items) {
         ensureSpace(14);
         page.drawText("•", { x: marginX, y: cursorY - 10, size: 10, font: helvBold, color: brandAccent });
-        const lines = wrapText(asciiSafe(item), helv, 10, contentWidth - 14);
+        const lines = wrapText(safe(item), helv, 10, contentWidth - 14);
         for (let i = 0; i < lines.length; i += 1) {
           ensureSpace(14);
           page.drawText(lines[i]!, { x: marginX + 14, y: cursorY - 10, size: 10, font: helv, color: text });
@@ -280,12 +302,12 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
       x: marginX, y: pageHeight - 46,
       size: 22, font: helvBold, color: rgb(1, 1, 1),
     });
-    page.drawText(asciiSafe("Report o spoločnosti"), {
+    page.drawText(safe("Report o spoločnosti"), {
       x: marginX, y: pageHeight - 66,
       size: 11, font: helv, color: rgb(0.83, 0.86, 0.95),
     });
     const genOn = `Vygenerované: ${new Date().toLocaleString("sk-SK")}`;
-    const genOnAscii = asciiSafe(genOn);
+    const genOnAscii = safe(genOn);
     const genWidth = helv.widthOfTextAtSize(genOnAscii, 9);
     page.drawText(genOnAscii, {
       x: pageWidth - marginX - genWidth,
@@ -469,7 +491,7 @@ export const generateCompanyReportPdfFn = createServerFn({ method: "POST" })
 
     // ── FOOTER on every page ─────────────────────────────────────────────
     const pages = pdf.getPages();
-    const footer = asciiSafe(`PreverSi.sk · Report o spoločnosti ${displayName ?? ico} · ${new Date().toLocaleDateString("sk-SK")}`);
+    const footer = safe(`PreverSi.sk · Report o spoločnosti ${displayName ?? ico} · ${new Date().toLocaleDateString("sk-SK")}`);
     pages.forEach((p, i) => {
       p.drawText(footer, { x: marginX, y: 24, size: 8, font: helv, color: muted });
       const num = `Strana ${i + 1} / ${pages.length}`;
