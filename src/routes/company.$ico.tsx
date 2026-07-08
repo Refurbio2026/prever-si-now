@@ -933,7 +933,13 @@ function ProviderStatusSection({
           {PROVIDER_META.map((meta) => {
             const implemented = IMPLEMENTED_SOURCES.has(meta.id);
             const statuses = byId.get(meta.id) ?? [];
-            const state = deriveDisplayState(implemented, statuses);
+            // Anonymous users can't see monitoring — surface a login CTA
+            // instead of showing it as "Nedostupné".
+            const isMonitoring = meta.id === "internal";
+            const state =
+              isMonitoring && !isAuthenticated
+                ? "requires_auth"
+                : deriveDisplayState(implemented, statuses);
             const cfg = STATE_CFG[state];
             const Icon = cfg.icon;
             return (
@@ -954,11 +960,17 @@ function ProviderStatusSection({
                     </Badge>
                   </div>
                   <div className="truncate text-xs text-muted-foreground">{meta.label}</div>
+                  {state === "requires_auth" && (
+                    <Button asChild size="sm" variant="outline" className="mt-2 h-7 rounded-lg text-xs">
+                      <Link to="/auth">Prihlásiť sa</Link>
+                    </Button>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
+
       </Card>
 
       {diagnostics && diagnostics.length > 0 && (
