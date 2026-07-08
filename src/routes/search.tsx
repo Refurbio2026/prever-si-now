@@ -16,7 +16,7 @@ import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RiskBadge } from "@/components/risk-badge";
+import { RiskBadge, riskLevelFromScore } from "@/components/risk-badge";
 import { searchCompaniesFn } from "@/lib/finstat.functions";
 
 type SearchParams = { q?: string };
