@@ -187,15 +187,13 @@ function CompanyProfilePage() {
   return (
     <CompanyProfileView
       ico={ico}
+      unified={intel.unified}
       company={intel.company}
-      financials={intel.financials}
-      statements={intel.statements}
       people={intel.people}
       risks={intel.risks}
       sources={intel.sources}
       partial={intel.partial}
       diagnostics={intel.diagnostics}
-      registry={intel.registry}
       fieldSources={intel.fieldSources}
       fieldAudit={intel.fieldAudit}
     />
@@ -205,36 +203,40 @@ function CompanyProfilePage() {
 
 function CompanyProfileView({
   ico,
+  unified,
   company,
-  financials,
-  statements,
   people,
   risks,
   sources,
   partial,
   diagnostics,
-  registry,
   fieldSources,
   fieldAudit,
 }: {
   ico: string;
+  unified: UnifiedCompany;
   company: Company;
-  financials: FinancialYear[];
-  statements: AccountingStatement[];
   people: CompanyPerson[];
   risks: RiskIndicator[];
   sources: ProviderSourceStatus[];
   partial: boolean;
   diagnostics?: ProviderDiagnostic[];
-  registry?: RegistryDetails;
   fieldSources?: Record<string, ProviderSourceId>;
   fieldAudit?: FieldMergeAudit[];
 }) {
 
+  // All section data comes from the unified structure — never directly from
+  // ORSR / Finstat / RÚZ / RPVS / CRZ / ÚVO shapes.
+  const basic: BasicCompanyInfo | undefined = unified.basicInfo.data;
+  const financials: FinancialYear[] = unified.financials.data;
+  const statements: AccountingStatement[] = unified.accounting.data;
+  const owners: CompanyOwner[] = unified.owners.data;
+  const contracts: PublicContract[] = unified.contracts.data;
+  const procurement: ProcurementRecord[] = unified.procurement.data;
 
   const executives = people.filter((p) => p.role === "executive");
-  const owners = people.filter((p) => p.role === "owner");
-  const beneficials = people.filter((p) => p.role === "beneficial_owner");
+  const beneficials = owners.filter((o) => o.role === "beneficial_owner");
+  const partnersOwners = owners.filter((o) => o.role === "owner");
   const criticalRisks = risks.filter((r) => r.status !== "clear");
   const hasFinancials = financials.length > 0;
   const latestFin = hasFinancials ? financials[financials.length - 1] : undefined;
