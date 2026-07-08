@@ -981,6 +981,10 @@ function ProviderStatusSection({
           })}
         </div>
 
+        <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+          Údaje pochádzajú z verejných registrov a komerčných dátových zdrojov.
+          Niektoré zdroje môžu byť dočasne nedostupné.
+        </p>
       </Card>
 
       {diagnostics && diagnostics.length > 0 && (

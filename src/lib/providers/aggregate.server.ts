@@ -13,7 +13,8 @@ import type {
 } from "./types";
 
 import { finstatFetchAll } from "./finstat.provider.server";
-import { orsrRegistryDetails } from "./orsr.provider.server";
+// ORSR provider intentionally not imported — the live scraper is disabled.
+// See runCompanyProvider below.
 import {
   financialAdminRisks,
   healthInsuranceRisks,
@@ -45,7 +46,7 @@ async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
 export async function runCompanyProvider(
   ico: string,
   finstat: FinstatBundle,
-  diagnostics?: ProviderDiagnostic[],
+  _diagnostics?: ProviderDiagnostic[],
   audit?: FieldMergeAudit[],
 ): Promise<{
   data: Company | undefined;
@@ -53,10 +54,10 @@ export async function runCompanyProvider(
   fieldSources: Record<string, ProviderSourceId>;
   sources: ProviderSourceStatus[];
 }> {
-  const orsr = await safe(orsrRegistryDetails(ico, diagnostics), {
-    data: undefined as import("./orsr.provider.server").OrsrRegistryDetails | undefined,
-    status: { source: "orsr" as const, capability: "company" as const, state: "unavailable" as const },
-  });
+  // ORSR live scraping is intentionally disabled — the public ORSR site
+  // has no stable machine endpoint. It is marked "Pripravuje sa" in the
+  // status grid (IMPLEMENTED_SOURCES) until a real source is wired.
+  // Finstat remains the sole fallback for registry/legal fields.
   const cadastre = await safe(cadastreCompanyInfo(ico), {
     data: undefined,
     status: { source: "cadastre" as const, capability: "company" as const, state: "unavailable" as const },
@@ -103,24 +104,11 @@ export async function runCompanyProvider(
   if (base) {
     merged = {
       ...base,
-      // ORSR primary for registry/legal fields, Finstat fallback.
-      legalForm:
-        pick("legalForm", [
-          ["orsr", orsr.data?.legalForm],
-          ["finstat", base.legalForm],
-        ]) ?? "",
-      address:
-        pick("address", [
-          ["orsr", orsr.data?.registeredAddress],
-          ["finstat", base.address],
-        ]) ?? "",
-      registrationDate:
-        pick("registrationDate", [
-          ["orsr", orsr.data?.registrationDate],
-          ["finstat", base.registrationDate],
-        ]) ?? "",
+      // ORSR not implemented — Finstat is the only source for these fields.
+      legalForm: pick("legalForm", [["finstat", base.legalForm]]) ?? "",
+      address: pick("address", [["finstat", base.address]]) ?? "",
+      registrationDate: pick("registrationDate", [["finstat", base.registrationDate]]) ?? "",
       registrationNumberText: pick("registrationNumberText", [
-        ["orsr", orsr.data?.registrationNumber],
         ["finstat", base.registrationNumberText],
       ]),
     };
@@ -150,11 +138,14 @@ export async function runCompanyProvider(
 
   return {
     data: merged,
-    registry: orsr.data,
+    registry: undefined,
     fieldSources,
-    sources: [finstat.company.status, orsr.status, cadastre.status],
+    // Do NOT push an ORSR status here — the grid derives "Pripravuje sa"
+    // from IMPLEMENTED_SOURCES when no status entry is present.
+    sources: [finstat.company.status, cadastre.status],
   };
 }
+
 
 function toAuditValue(v: unknown): string | number | boolean | null {
   if (v == null) return null;
@@ -238,23 +229,22 @@ export async function runContractsProvider(
   sources: ProviderSourceStatus[];
 }> {
   const { crzContractsByIco } = await import("./crz.provider.server");
-  const { uvoProcurementByIco } = await import("./uvo.provider.server");
-  const [crz, uvo] = await Promise.all([
-    safe(crzContractsByIco(ico, diagnostics), {
-      data: [] as import("@/lib/types").PublicContract[],
-      status: err("crz", "contracts"),
-    }),
-    safe(uvoProcurementByIco(ico, diagnostics), {
-      data: [] as import("@/lib/types").ProcurementRecord[],
-      status: err("uvo", "contracts"),
-    }),
-  ]);
+  // ÚVO live scraping is intentionally disabled — no stable public endpoint
+  // is wired yet. The provider status grid marks it as "Pripravuje sa"
+  // via IMPLEMENTED_SOURCES; do NOT push an unavailable status here.
+  const crz = await safe(crzContractsByIco(ico, diagnostics), {
+    data: [] as import("@/lib/types").PublicContract[],
+    status: err("crz", "contracts"),
+  });
   const stateOf = (s: ProviderSourceStatus): import("@/lib/types").SectionState =>
     s.state === "ok" ? "ok" : s.state === "empty" ? "empty" : "failed";
   return {
     contracts: { data: crz.data, state: stateOf(crz.status) },
-    procurement: { data: uvo.data, state: stateOf(uvo.status) },
-    sources: [crz.status, uvo.status],
+    procurement: {
+      data: [] as import("@/lib/types").ProcurementRecord[],
+      state: "empty" as import("@/lib/types").SectionState,
+    },
+    sources: [crz.status],
   };
 }
 
