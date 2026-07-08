@@ -5,7 +5,6 @@
 import {
   buildSignedFinstatRequest,
   FinstatAuthError,
-  getFinstatCredentials,
   getFinstatEnvStatus,
   type FinstatEnvStatus,
 } from "./finstat/auth";
@@ -35,10 +34,20 @@ export class FinstatError extends Error {
   status?: number;
   rawResponse?: string;
   endpoint?: string;
+  finalUrlMasked?: string;
+  hashBaseMasked?: string;
+  generatedHash?: string;
   constructor(
     code: FinstatError["code"],
     message: string,
-    extra?: { status?: number; rawResponse?: string; endpoint?: string },
+    extra?: {
+      status?: number;
+      rawResponse?: string;
+      endpoint?: string;
+      finalUrlMasked?: string;
+      hashBaseMasked?: string;
+      generatedHash?: string;
+    },
   ) {
     super(message);
     this.code = code;
@@ -46,6 +55,9 @@ export class FinstatError extends Error {
     this.status = extra?.status;
     this.rawResponse = extra?.rawResponse;
     this.endpoint = extra?.endpoint;
+    this.finalUrlMasked = extra?.finalUrlMasked;
+    this.hashBaseMasked = extra?.hashBaseMasked;
+    this.generatedHash = extra?.generatedHash;
   }
 }
 
@@ -54,12 +66,18 @@ export function looksLikeIco(query: string): boolean {
 }
 
 
-function mapStatusFromResponse(status: number, endpoint: string, body: string): FinstatError {
+function mapStatusFromResponse(
+  status: number,
+  endpoint: string,
+  body: string,
+  signed: Pick<SignedDiagnostic, "finalUrlMasked" | "hashBaseMasked" | "generatedHash">,
+): FinstatError {
   if (status === 401 || status === 403) {
     return new FinstatError("unauthorized", "Invalid Finstat API credentials.", {
       status,
       endpoint,
       rawResponse: body,
+      ...signed,
     });
   }
   if (status === 404)
@@ -67,22 +85,34 @@ function mapStatusFromResponse(status: number, endpoint: string, body: string): 
       status,
       endpoint,
       rawResponse: body,
+      ...signed,
     });
   if (status === 429)
     return new FinstatError("rate_limit", "Finstat rate limit reached.", {
       status,
       endpoint,
       rawResponse: body,
+      ...signed,
     });
   return new FinstatError("server_error", `Finstat responded with HTTP ${status}.`, {
     status,
     endpoint,
     rawResponse: body,
+    ...signed,
   });
+}
+
+interface SignedDiagnostic {
+  finalUrlMasked: string;
+  hashBaseMasked: string;
+  generatedHash: string;
 }
 
 export interface FinstatFetchResult {
   endpoint: string;
+  finalUrlMasked: string;
+  hashBaseMasked: string;
+  generatedHash: string;
   status: number;
   rawResponse: string;
   parsed: unknown;
@@ -104,20 +134,30 @@ async function finstatFetchRaw(
   }
   let res: Response;
   try {
-    res = await fetch(signed.endpoint, {
+    res = await fetch(signed.finalUrl, {
       method: signed.method,
       headers: signed.headers,
-      body: signed.body,
     });
   } catch (err) {
     throw new FinstatError(
       "network_error",
       `Network error contacting Finstat: ${(err as Error).message}`,
-      { endpoint: signed.endpoint },
+      {
+        endpoint: signed.endpoint,
+        finalUrlMasked: signed.finalUrlMasked,
+        hashBaseMasked: signed.hashBaseMasked,
+        generatedHash: signed.hash,
+      },
     );
   }
   const text = await res.text();
-  if (!res.ok) throw mapStatusFromResponse(res.status, signed.endpoint, text);
+  if (!res.ok) {
+    throw mapStatusFromResponse(res.status, signed.endpoint, text, {
+      finalUrlMasked: signed.finalUrlMasked,
+      hashBaseMasked: signed.hashBaseMasked,
+      generatedHash: signed.hash,
+    });
+  }
   let parsed: unknown = null;
   if (text) {
     try {
@@ -127,10 +167,21 @@ async function finstatFetchRaw(
         status: res.status,
         endpoint: signed.endpoint,
         rawResponse: text,
+          finalUrlMasked: signed.finalUrlMasked,
+          hashBaseMasked: signed.hashBaseMasked,
+          generatedHash: signed.hash,
       });
     }
   }
-  return { endpoint: signed.endpoint, status: res.status, rawResponse: text, parsed };
+  return {
+    endpoint: signed.endpoint,
+    finalUrlMasked: signed.finalUrlMasked,
+    hashBaseMasked: signed.hashBaseMasked,
+    generatedHash: signed.hash,
+    status: res.status,
+    rawResponse: text,
+    parsed,
+  };
 }
 
 async function finstatFetch(
@@ -181,7 +232,11 @@ export interface FinstatDiagnostic {
   usingMock: boolean;
   envStatus: FinstatEnvStatus;
   endpoint: string | null;
+  hashBaseMasked: string | null;
+  generatedHash: string | null;
+  finalRequestUrlMasked: string | null;
   httpStatus: number | null;
+  rawResponse: string | null;
   rawResponsePreview: string | null;
   normalizedPreview: Company | null;
   errorMessage: string | null;
@@ -192,21 +247,25 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
   const envStatus = getFinstatEnvStatus();
   if (!envStatus.allSet) {
     return {
-      usingMock: true,
+      usingMock: false,
       envStatus,
       endpoint: null,
+      hashBaseMasked: null,
+      generatedHash: null,
+      finalRequestUrlMasked: null,
       httpStatus: null,
+      rawResponse: null,
       rawResponsePreview: null,
-      normalizedPreview: mockCompanyDetail(ico).company,
-      errorMessage: "Using mock data because Finstat API is not configured.",
+      normalizedPreview: null,
+      errorMessage: "Finstat API credentials are not configured. No mock request was used.",
       errorCode: "missing_credentials",
     };
   }
 
   try {
-    const { endpoint, status, rawResponse, parsed } = await finstatFetchRaw(
+    const { endpoint, finalUrlMasked, hashBaseMasked, generatedHash, status, rawResponse, parsed } = await finstatFetchRaw(
       "/detail",
-      { Ico: ico },
+      { ico },
       ico,
     );
 
@@ -216,7 +275,11 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
         usingMock: false,
         envStatus,
         endpoint,
+        hashBaseMasked,
+        generatedHash,
+        finalRequestUrlMasked: finalUrlMasked,
         httpStatus: status,
+        rawResponse,
         rawResponsePreview: rawResponse.slice(0, 500),
         normalizedPreview: null,
         errorMessage: `Company with IČO ${ico} not found.`,
@@ -227,7 +290,11 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
       usingMock: false,
       envStatus,
       endpoint,
+      hashBaseMasked,
+      generatedHash,
+      finalRequestUrlMasked: finalUrlMasked,
       httpStatus: status,
+      rawResponse,
       rawResponsePreview: rawResponse.slice(0, 500),
       normalizedPreview: normalizeDetail(raw).company,
       errorMessage: null,
@@ -235,17 +302,18 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
     };
   } catch (err) {
     const fe = err as FinstatError;
-    const shouldFallback = fe.code === "unauthorized" || fe.code === "missing_credentials";
     return {
-      usingMock: shouldFallback,
+      usingMock: false,
       envStatus,
       endpoint: fe.endpoint ?? null,
+      hashBaseMasked: fe.hashBaseMasked ?? null,
+      generatedHash: fe.generatedHash ?? null,
+      finalRequestUrlMasked: fe.finalUrlMasked ?? null,
       httpStatus: fe.status ?? null,
+      rawResponse: fe.rawResponse ?? null,
       rawResponsePreview: fe.rawResponse ? fe.rawResponse.slice(0, 500) : null,
-      normalizedPreview: shouldFallback ? mockCompanyDetail(ico).company : null,
-      errorMessage: shouldFallback
-        ? `Using mock data because Finstat API is not configured. (${fe.message})`
-        : fe.message ?? "Unknown error",
+      normalizedPreview: null,
+      errorMessage: fe.message ?? "Unknown error",
       errorCode: fe.code ?? "unknown",
     };
   }
@@ -262,7 +330,7 @@ export async function finstatSearchByName(query: string): Promise<FinstatSearchH
 }
 
 export async function finstatGetByIco(ico: string): Promise<FinstatRawCompany> {
-  const data = (await finstatFetch("/detail", { Ico: ico }, ico)) as FinstatRawCompany | null;
+  const data = (await finstatFetch("/detail", { ico }, ico)) as FinstatRawCompany | null;
   if (!data || !data.Ico) throw new FinstatError("not_found", `Company with IČO ${ico} not found.`);
   return data;
 }

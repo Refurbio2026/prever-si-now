@@ -6,20 +6,12 @@
 // exposes) and must NEVER read FINSTAT_* env vars, compute hashes, build
 // URLs, or serialize params on its own.
 //
-// The current hash + request shape below is a PLACEHOLDER kept from the
-// previous integration and is known to fail with:
-//     HTTP 403 — "Invalid verification hash."
-// It MUST be replaced with the algorithm described in the official
-// Finstat PREMIUM API documentation. When that happens, only this file
-// changes — callers stay the same.
-//
 // Server-only. Do not import from client-reachable modules.
 
 import { createHash } from "crypto";
 
 export const DEFAULT_FINSTAT_BASE_URL = "https://www.finstat.sk/api";
-export const FINSTAT_STATION_ID = "preversi-sk";
-export const FINSTAT_STATION_NAME = "PreverSi.sk";
+const FINSTAT_HASH_SALT = "SomeSalt";
 
 export interface FinstatCredentials {
   apiKey: string;
@@ -46,22 +38,22 @@ export class FinstatAuthError extends Error {
 
 /** Report presence (never values) of Finstat env variables. */
 export function getFinstatEnvStatus(): FinstatEnvStatus {
-  const apiKey = !!process.env.FINSTAT_API_KEY;
-  const privateKey = !!process.env.FINSTAT_PRIVATE_KEY;
-  const baseUrl = !!process.env.FINSTAT_BASE_URL;
+  const apiKey = !!process.env.FINSTAT_API_KEY?.trim();
+  const privateKey = !!process.env.FINSTAT_PRIVATE_KEY?.trim();
+  const baseUrl = !!process.env.FINSTAT_BASE_URL?.trim();
   return {
     FINSTAT_API_KEY: apiKey,
     FINSTAT_PRIVATE_KEY: privateKey,
     FINSTAT_BASE_URL: baseUrl,
     allSet: apiKey && privateKey,
-    baseUrl: process.env.FINSTAT_BASE_URL || DEFAULT_FINSTAT_BASE_URL,
+    baseUrl: process.env.FINSTAT_BASE_URL?.trim() || DEFAULT_FINSTAT_BASE_URL,
   };
 }
 
 /** Load credentials or throw. Never logs the values. */
 export function getFinstatCredentials(): FinstatCredentials {
-  const apiKey = process.env.FINSTAT_API_KEY;
-  const privateKey = process.env.FINSTAT_PRIVATE_KEY;
+  const apiKey = process.env.FINSTAT_API_KEY?.trim();
+  const privateKey = process.env.FINSTAT_PRIVATE_KEY?.trim();
   if (!apiKey || !privateKey) {
     throw new FinstatAuthError(
       "Finstat API credentials are not configured on the server.",
@@ -70,22 +62,35 @@ export function getFinstatCredentials(): FinstatCredentials {
   return {
     apiKey,
     privateKey,
-    baseUrl: process.env.FINSTAT_BASE_URL || DEFAULT_FINSTAT_BASE_URL,
+    baseUrl: process.env.FINSTAT_BASE_URL?.trim() || DEFAULT_FINSTAT_BASE_URL,
   };
 }
 
-/**
- * Request signing — compute the verification hash Finstat expects.
- *
- * ⚠️ PLACEHOLDER — currently rejected by the API (403 "Invalid verification
- * hash."). Replace strictly per the official PREMIUM API documentation.
- * Do not guess variations.
- */
-export function computeFinstatHash(value: string): string {
+function maskSecret(value: string): string {
+  if (!value) return "";
+  if (value.length <= 4) return "*****";
+  return `${value.slice(0, 2)}*****${value.slice(-2)}`;
+}
+
+/** Build the exact hash base string required by Finstat PREMIUM /api/detail. */
+export function buildFinstatHashBase(ico: string): string {
   const { apiKey, privateKey } = getFinstatCredentials();
+  return `${FINSTAT_HASH_SALT}+${apiKey}+${privateKey}++${ico}+ended`;
+}
+
+/** Masked hash base for diagnostics. Never exposes full keys. */
+export function buildMaskedFinstatHashBase(ico: string): string {
+  const { apiKey, privateKey } = getFinstatCredentials();
+  return `${FINSTAT_HASH_SALT}+${maskSecret(apiKey)}+${maskSecret(privateKey)}++${ico}+ended`;
+}
+
+/** Request signing — SHA256 of UTF-8 hash base, lowercase hex. */
+export function computeFinstatHash(ico: string): string {
+  const base = buildFinstatHashBase(ico);
   return createHash("sha256")
-    .update(`${apiKey}+${privateKey}+${value}`)
-    .digest("hex");
+    .update(base, "utf8")
+    .digest("hex")
+    .toLowerCase();
 }
 
 /** Build the fully-qualified endpoint URL for a Finstat API path. */
@@ -96,27 +101,20 @@ export function buildFinstatEndpoint(path: string): string {
   return `${normalizedBase}${normalizedPath}`;
 }
 
-/**
- * Serialize the request body Finstat expects (form-urlencoded), injecting
- * the API key and station identifiers. Every signed request goes through
- * this so the shape stays consistent.
- */
+/** Serialize query parameters after signing. Never use this before hashing. */
 export function serializeFinstatParams(params: Record<string, string>): string {
-  const { apiKey } = getFinstatCredentials();
-  return new URLSearchParams({
-    apiKey,
-    StationId: FINSTAT_STATION_ID,
-    StationName: FINSTAT_STATION_NAME,
-    Json: "1",
-    ...params,
-  }).toString();
+  return new URLSearchParams(params).toString();
 }
 
 export interface SignedFinstatRequest {
   endpoint: string;
-  method: "POST";
+  method: "GET";
   headers: Record<string, string>;
-  body: string;
+  hashBase: string;
+  hashBaseMasked: string;
+  hash: string;
+  finalUrl: string;
+  finalUrlMasked: string;
 }
 
 /**
@@ -130,15 +128,29 @@ export function buildSignedFinstatRequest(
   hashInput: string,
 ): SignedFinstatRequest {
   const endpoint = buildFinstatEndpoint(path);
+  const { apiKey } = getFinstatCredentials();
   const hash = computeFinstatHash(hashInput);
-  const body = serializeFinstatParams({ ...params, Hash: hash });
+  const queryParams = {
+    ...params,
+    apikey: apiKey,
+    hash,
+    json: "true",
+  };
+  const finalUrl = `${endpoint}?${serializeFinstatParams(queryParams)}`;
+  const finalUrlMasked = `${endpoint}?${serializeFinstatParams({
+    ...queryParams,
+    apikey: maskSecret(apiKey),
+  })}`;
   return {
     endpoint,
-    method: "POST",
+    method: "GET",
     headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
     },
-    body,
+    hashBase: buildFinstatHashBase(hashInput),
+    hashBaseMasked: buildMaskedFinstatHashBase(hashInput),
+    hash,
+    finalUrl,
+    finalUrlMasked,
   };
 }
