@@ -1005,6 +1005,14 @@ export function normalizeFinancials(raw: FinstatRawCompany): FinancialYear[] {
         assets: Number(r.Assets ?? 0),
         liabilities: Number(r.Liabilities ?? 0),
         source: "finstat" as const,
+        availableFields: ([
+          ["revenue", r.Sales],
+          ["profit", r.Profit],
+          ["assets", r.Assets],
+          ["liabilities", r.Liabilities],
+        ] as const)
+          .filter(([, value]) => value !== undefined && Number.isFinite(Number(value)))
+          .map(([field]) => field),
       };
     })
     .filter((r) =>
