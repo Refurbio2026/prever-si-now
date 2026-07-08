@@ -1077,40 +1077,21 @@ function AccountingStatementsCard({ statements }: { statements: AccountingStatem
                 <td className="py-3 text-muted-foreground">{formatDate(s.submittedAt)}</td>
                 <td className="py-3">
                   <div className="flex justify-end gap-1">
-                    {s.detailUrl ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        asChild
-                        className="rounded-lg text-xs"
-                      >
-                        <a href={s.detailUrl} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="mr-1 h-3.5 w-3.5" /> Detail
-                        </a>
-                      </Button>
-                    ) : (
-                      <Button variant="ghost" size="sm" disabled className="rounded-lg text-xs">
-                        <ExternalLink className="mr-1 h-3.5 w-3.5" /> Detail
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-lg text-xs"
-                      title="Stiahnuť PDF (čoskoro)"
-                      onClick={() => alert("Export do PDF bude čoskoro k dispozícii.")}
-                    >
-                      <Download className="mr-1 h-3.5 w-3.5" /> PDF
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-lg text-xs"
-                      title="Export do Excelu (čoskoro)"
-                      onClick={() => alert("Export do Excelu bude čoskoro k dispozícii.")}
-                    >
-                      <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> Excel
-                    </Button>
+                    <StatementLinkButton
+                      href={s.detailUrl}
+                      icon={<ExternalLink className="mr-1 h-3.5 w-3.5" />}
+                      label="Detail"
+                    />
+                    <StatementLinkButton
+                      href={s.pdfUrl}
+                      icon={<Download className="mr-1 h-3.5 w-3.5" />}
+                      label="PDF"
+                    />
+                    <StatementLinkButton
+                      href={s.excelUrl}
+                      icon={<FileSpreadsheet className="mr-1 h-3.5 w-3.5" />}
+                      label="Excel"
+                    />
                   </div>
                 </td>
               </tr>
