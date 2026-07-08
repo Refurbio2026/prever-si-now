@@ -51,6 +51,9 @@ import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
 import {
   getCompanyRecordsFn,
+  importCompanyRegistryFn,
+  importCompanyPeopleFn,
+  importCompanyHistoryFn,
   type CompanyHistoryRecord,
   type CompanyPersonRecord,
 } from "@/lib/company-records.functions";
@@ -280,7 +283,52 @@ function CompanyProfileView({
   });
   const dbPeople: CompanyPersonRecord[] = recordsQuery.data?.people ?? [];
   const dbHistory: CompanyHistoryRecord[] = recordsQuery.data?.history ?? [];
+  const dbRegistry = recordsQuery.data?.registry ?? null;
   const recordsLoading = recordsQuery.isLoading;
+
+  const qc = useQueryClient();
+  const runRegistry = useServerFn(importCompanyRegistryFn);
+  const runPeople = useServerFn(importCompanyPeopleFn);
+  const runHistory = useServerFn(importCompanyHistoryFn);
+  const autoImport = useMutation({
+    mutationFn: async () => {
+      const results = await Promise.all([
+        runRegistry({ data: { ico } }),
+        runPeople({ data: { ico } }),
+        runHistory({ data: { ico } }),
+      ]);
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length === results.length) {
+        throw new Error(failed[0]?.error ?? "Import zlyhal.");
+      }
+      return {
+        imported: results.reduce((s, r) => s + r.imported, 0),
+        partial: failed.length > 0,
+        firstError: failed[0]?.error,
+      };
+    },
+    onSuccess: (res) => {
+      if (res.partial) {
+        toast.warning("Import čiastočne úspešný", {
+          description: res.firstError ?? "Niektoré zdroje zlyhali.",
+        });
+      } else {
+        toast.success("Verejné registre boli načítané", {
+          description: `Importovaných ${res.imported} záznamov.`,
+        });
+      }
+      qc.invalidateQueries({ queryKey: ["company-records", ico] });
+      qc.invalidateQueries({ queryKey: ["import-logs"] });
+    },
+    onError: (err) => {
+      toast.error("Import zlyhal", { description: (err as Error).message });
+    },
+  });
+
+  const hasAnyDbData =
+    !!dbRegistry || dbPeople.length > 0 || dbHistory.length > 0;
+  const showImportBanner = !recordsLoading && !hasAnyDbData;
+
 
   // All section data comes from the unified structure — never directly from
   // ORSR / Finstat / RÚZ / RPVS / CRZ / ÚVO shapes.
@@ -397,6 +445,13 @@ function CompanyProfileView({
       </div>
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+        {showImportBanner && (
+          <ImportRegistriesBanner
+            isAuthenticated={isAuthenticated}
+            isPending={autoImport.isPending}
+            onImport={() => autoImport.mutate()}
+          />
+        )}
         <Tabs defaultValue="overview">
           <TabsList className="mb-6 flex h-auto w-full flex-wrap justify-start gap-1 rounded-2xl bg-secondary/60 p-1">
             {[
@@ -951,6 +1006,46 @@ function DbPeopleCard({
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+function ImportRegistriesBanner({
+  isAuthenticated,
+  isPending,
+  onImport,
+}: {
+  isAuthenticated: boolean;
+  isPending: boolean;
+  onImport: () => void;
+}) {
+  return (
+    <Card className="mb-6 rounded-2xl border-border/70 p-5 shadow-soft">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="font-semibold">Verejné registre zatiaľ neboli načítané</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {isAuthenticated
+              ? "Načítať údaje z ORSR / RPO pre osoby, históriu a základné údaje."
+              : "Pre načítanie verejných registrov sa prihláste."}
+          </p>
+        </div>
+        {isAuthenticated ? (
+          <Button onClick={onImport} disabled={isPending} className="rounded-xl">
+            {isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Načítavam…
+              </>
+            ) : (
+              "Načítať verejné registre"
+            )}
+          </Button>
+        ) : (
+          <Button asChild variant="outline" className="rounded-xl">
+            <Link to="/auth">Prihlásiť sa</Link>
+          </Button>
+        )}
+      </div>
     </Card>
   );
 }

@@ -255,11 +255,33 @@ function collectHistory(ico: string, detail: Record<string, unknown>): HistoryRo
   return events;
 }
 
+export class ImportAlreadyRunningError extends Error {
+  constructor(source: string) {
+    super(`Import '${source}' už prebieha.`);
+    this.name = "ImportAlreadyRunningError";
+  }
+}
+
+const RUNNING_LOCK_MS = 5 * 60 * 1000; // Treat older "running" rows as stale.
+
 async function withLog<T extends { imported: number }>(
   ico: string,
   source: string,
   run: () => Promise<T>,
 ): Promise<T> {
+  const cutoff = new Date(Date.now() - RUNNING_LOCK_MS).toISOString();
+  const { data: existing } = await supabaseAdmin
+    .from("import_logs")
+    .select("id")
+    .eq("ico", ico)
+    .eq("source", source)
+    .eq("status", "running")
+    .gte("started_at", cutoff)
+    .limit(1);
+  if (existing && existing.length > 0) {
+    throw new ImportAlreadyRunningError(source);
+  }
+
   const startedAt = new Date().toISOString();
   const { data: logRow } = await supabaseAdmin
     .from("import_logs")
@@ -294,6 +316,7 @@ async function withLog<T extends { imported: number }>(
     throw err;
   }
 }
+
 
 export async function importCompanyPeople(ico: string): Promise<{ imported: number }> {
   return withLog(ico, "ORSR:people", async () => {
