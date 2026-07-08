@@ -49,8 +49,14 @@ import { CompanyActions } from "@/components/company-actions";
 import { mockAlerts, mockHistory } from "@/lib/mock-data";
 import { getCompanyIntelligenceFn } from "@/lib/company-intelligence.functions";
 import type { AccountingStatement, Company, CompanyPerson, FinancialYear, RiskIndicator } from "@/lib/types";
-import type { ProviderSourceStatus, ProviderDiagnostic, RegistryDetails } from "@/lib/providers/types";
-import { PROVIDER_META, IMPLEMENTED_SOURCES } from "@/lib/providers/registry-labels";
+import type {
+  FieldMergeAudit,
+  ProviderSourceStatus,
+  ProviderDiagnostic,
+  ProviderSourceId,
+  RegistryDetails,
+} from "@/lib/providers/types";
+import { PROVIDER_META, IMPLEMENTED_SOURCES, providerMeta } from "@/lib/providers/registry-labels";
 
 
 export const Route = createFileRoute("/company/$ico")({
