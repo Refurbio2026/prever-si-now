@@ -29,14 +29,14 @@ export const PROVIDER_META: ProviderMeta[] = [
   { id: "internal", short: "Monitoring", label: "Interný monitoring", description: "Sledovanie zmien" },
 ];
 
-/** Sources that are actually wired up to real data. All others are placeholders. */
+/** Sources that are actually wired up to real data. All others show as
+ *  "Pripravuje sa" in the provider status grid. Only add an id here when the
+ *  provider makes a real, working request to its upstream source. */
 export const IMPLEMENTED_SOURCES: ReadonlySet<ProviderSourceId> = new Set<ProviderSourceId>([
   "finstat",
-  "orsr",
   "ruz",
   "rpvs",
   "crz",
-  "uvo",
   "internal",
 ]);
 
