@@ -44,8 +44,16 @@ export async function cadastreCompanyInfo(_ico: string): Promise<ProviderResult<
 }
 
 export async function aiRiskAnalysis(_ico: string): Promise<ProviderResult<undefined>> {
-  return unavailable("ai", "risks", undefined, "unavailable", soon("Interná AI analýza"));
+  // AI reports are generated on demand via Lovable AI Gateway. The provider
+  // status grid should show "Aktívne" whenever AI generation is available
+  // (LOVABLE_API_KEY configured) — cached reports live in
+  // public.company_ai_reports and are surfaced from the profile UI.
+  if (process.env.LOVABLE_API_KEY) {
+    return ok("ai", "risks", undefined);
+  }
+  return unavailable("ai", "risks", undefined, "unavailable", "AI generovanie nie je nakonfigurované.");
 }
+
 
 /** Registry lists what capabilities each source claims — useful for
  *  diagnostics and for the aggregator to display "13 sources checked". */
