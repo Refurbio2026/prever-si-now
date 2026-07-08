@@ -9,25 +9,14 @@
 
 import type { CompanyPerson } from "@/lib/types";
 import { empty, ok, unavailable, type ProviderResult } from "./base.server";
-import type { ProviderDiagnostic } from "./types";
+import type { ProviderDiagnostic, RegistryDetails } from "./types";
 
 const RPO_BASE = "https://api.statistics.sk/rpo/v2";
 const REQUEST_TIMEOUT_MS = 8000;
 const ALLOW_MOCK = process.env.NODE_ENV !== "production";
 
-import type { RegistryDetails } from "./types";
-
 export type OrsrRegistryDetails = RegistryDetails & { source: "orsr" };
 
-interface _OrsrRegistryDetailsUnused {
-  source: "orsr";
-  registrationNumber?: string;
-  legalForm?: string;
-  registeredAddress?: string;
-  registrationDate?: string;
-  status?: string;
-  statutoryRepresentatives: CompanyPerson[];
-}
 
 class OrsrError extends Error {
   code: "network_error" | "http_error" | "not_found" | "parse_error" | "timeout";
