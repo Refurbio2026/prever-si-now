@@ -38,6 +38,7 @@ const items: { title: string; url: string; icon: typeof LayoutDashboard; exact?:
 export function DashboardSidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const navigate = useNavigate();
+  const { isAdmin } = useRole();
 
   const isActive = (url: string, exact?: boolean) =>
     exact ? pathname === url : pathname === url || pathname.startsWith(url + "/");
@@ -72,7 +73,7 @@ export function DashboardSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              {useRoleGuardShown() && null}
+              
               {isAdmin && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive("/admin")} className="rounded-xl">
