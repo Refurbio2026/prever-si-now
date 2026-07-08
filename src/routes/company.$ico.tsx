@@ -283,7 +283,52 @@ function CompanyProfileView({
   });
   const dbPeople: CompanyPersonRecord[] = recordsQuery.data?.people ?? [];
   const dbHistory: CompanyHistoryRecord[] = recordsQuery.data?.history ?? [];
+  const dbRegistry = recordsQuery.data?.registry ?? null;
   const recordsLoading = recordsQuery.isLoading;
+
+  const qc = useQueryClient();
+  const runRegistry = useServerFn(importCompanyRegistryFn);
+  const runPeople = useServerFn(importCompanyPeopleFn);
+  const runHistory = useServerFn(importCompanyHistoryFn);
+  const autoImport = useMutation({
+    mutationFn: async () => {
+      const results = await Promise.all([
+        runRegistry({ data: { ico } }),
+        runPeople({ data: { ico } }),
+        runHistory({ data: { ico } }),
+      ]);
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length === results.length) {
+        throw new Error(failed[0]?.error ?? "Import zlyhal.");
+      }
+      return {
+        imported: results.reduce((s, r) => s + r.imported, 0),
+        partial: failed.length > 0,
+        firstError: failed[0]?.error,
+      };
+    },
+    onSuccess: (res) => {
+      if (res.partial) {
+        toast.warning("Import čiastočne úspešný", {
+          description: res.firstError ?? "Niektoré zdroje zlyhali.",
+        });
+      } else {
+        toast.success("Verejné registre boli načítané", {
+          description: `Importovaných ${res.imported} záznamov.`,
+        });
+      }
+      qc.invalidateQueries({ queryKey: ["company-records", ico] });
+      qc.invalidateQueries({ queryKey: ["import-logs"] });
+    },
+    onError: (err) => {
+      toast.error("Import zlyhal", { description: (err as Error).message });
+    },
+  });
+
+  const hasAnyDbData =
+    !!dbRegistry || dbPeople.length > 0 || dbHistory.length > 0;
+  const showImportBanner = !recordsLoading && !hasAnyDbData;
+
 
   // All section data comes from the unified structure — never directly from
   // ORSR / Finstat / RÚZ / RPVS / CRZ / ÚVO shapes.
