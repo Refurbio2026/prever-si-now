@@ -495,7 +495,7 @@ function CompanyProfileView({
                         fontSize={12}
                         axisLine={false}
                         tickLine={false}
-                        tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                        tickFormatter={(v) => formatShortCurrency(Number(v))}
                       />
                       <RTooltip
                         contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
@@ -524,7 +524,7 @@ function CompanyProfileView({
                         fontSize={12}
                         axisLine={false}
                         tickLine={false}
-                        tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                        tickFormatter={(v) => formatShortCurrency(Number(v))}
                       />
                       <RTooltip
                         contentStyle={{ borderRadius: 12, border: "1px solid oklch(0.92 0.015 255)" }}
@@ -885,6 +885,13 @@ function hasChartableSeries(financials: FinancialYear[], field: FinanceField): b
 
 function formatFinancialCell(row: FinancialYear, field: FinanceField): string {
   return hasFinancialField(row, field) ? formatCurrency(row[field]) : "Nedostupné";
+}
+
+function formatShortCurrency(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${Math.round(value / 1_000)}k`;
+  return String(Math.round(value));
 }
 
 function financeSourceLabel(financials: FinancialYear[]): string {
