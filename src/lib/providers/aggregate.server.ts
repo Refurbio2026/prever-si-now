@@ -20,7 +20,6 @@ import {
   financialAdminRisks,
   healthInsuranceRisks,
   justiceRisks,
-  rpvsBeneficialOwners,
   ruzFinancials,
   socialInsuranceRisks,
   uvoContracts,
