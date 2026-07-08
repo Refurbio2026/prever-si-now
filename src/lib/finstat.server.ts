@@ -320,20 +320,20 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
   }
 }
 
-export async function finstatSearchByName(query: string): Promise<FinstatSearchHit[]> {
-  // Official Finstat Premium endpoint (per FinStat PHP client `RequestAutoComplete`):
-  //   POST/GET https://www.finstat.sk/api/autocomplete
-  //   params: query
-  //   hash input: raw query string
-  //   response: { Results: [{ Ico, Name, City, Cancelled }], Suggestions: [] }
-  const data = (await finstatFetch("/autocomplete", { query }, query)) as
-    | { Results?: FinstatSearchHit[] }
-    | FinstatSearchHit[]
-    | null;
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  return data.Results ?? [];
+/** Raw search response — useful for debug pages. Never throws on parse issues. */
+export async function finstatSearchByNameRaw(query: string): Promise<unknown> {
+  return finstatFetch("/autocomplete", { query }, query);
 }
+
+export async function finstatSearchByName(query: string): Promise<CompanySearchResult[]> {
+  const raw = await finstatSearchByNameRaw(query);
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.log("[finstat] /autocomplete raw response:", JSON.stringify(raw));
+  }
+  return normalizeSearchResponse(raw);
+}
+
 
 export async function finstatGetByIco(ico: string): Promise<FinstatRawCompany> {
   const data = (await finstatFetch("/detail", { ico }, ico)) as FinstatRawCompany | null;
