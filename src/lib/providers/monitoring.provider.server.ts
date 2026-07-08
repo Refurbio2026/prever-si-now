@@ -1,7 +1,7 @@
 // Internal monitoring provider — reads from Supabase watched_companies with
 // the service-role client (aggregate stats only, no user PII in output).
 
-import { empty, ok, type ProviderResult } from "./base.server";
+import { ok, unavailable, type ProviderResult } from "./base.server";
 import type { MonitoringSnapshot } from "./types";
 
 export async function internalMonitoring(
@@ -15,10 +15,12 @@ export async function internalMonitoring(
     .eq("ico", ico);
 
   if (error) {
-    return empty(
+    // Real Supabase error — surface as "Nedostupné" in the provider grid.
+    return unavailable<MonitoringSnapshot>(
       "internal",
       "monitoring",
-      { isWatched: false, watchers: 0, changeCount: 0 } satisfies MonitoringSnapshot,
+      { isWatched: false, watchers: 0, changeCount: 0 },
+      "unavailable",
       error.message,
     );
   }
@@ -32,3 +34,4 @@ export async function internalMonitoring(
   };
   return ok("internal", "monitoring", snapshot);
 }
+

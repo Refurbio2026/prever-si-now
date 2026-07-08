@@ -37,8 +37,10 @@ export const IMPLEMENTED_SOURCES: ReadonlySet<ProviderSourceId> = new Set<Provid
   "ruz",
   "rpvs",
   "crz",
+  "ai",
   "internal",
 ]);
+
 
 
 

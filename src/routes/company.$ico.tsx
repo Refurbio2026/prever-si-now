@@ -1260,10 +1260,18 @@ function ProviderStatusSection({
           })}
         </div>
 
-        <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+        <div className="mt-4 space-y-2 rounded-xl border border-border/60 bg-secondary/30 p-3">
+          <p className="text-xs font-semibold text-foreground">Plán rozširovania dát</p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            PreverSi načítava údaje postupne. Aktuálne dostupné zdroje sa
+            používajú okamžite, ostatné registre budú dopĺňané importom.
+          </p>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
           Údaje pochádzajú z verejných registrov a komerčných dátových zdrojov.
           Niektoré zdroje môžu byť dočasne nedostupné.
         </p>
+
       </Card>
 
       {diagnostics && diagnostics.length > 0 && (
