@@ -13,7 +13,8 @@ import type {
 } from "./types";
 
 import { finstatFetchAll } from "./finstat.provider.server";
-import { orsrRegistryDetails } from "./orsr.provider.server";
+// ORSR provider intentionally not imported — the live scraper is disabled.
+// See runCompanyProvider below.
 import {
   financialAdminRisks,
   healthInsuranceRisks,
