@@ -1413,6 +1413,7 @@ function DevDebugPanel({ audit }: { audit: FieldMergeAudit[] }) {
               <th className="py-2 text-left font-medium">Pole</th>
               <th className="py-2 text-left font-medium">Zobrazená hodnota</th>
               <th className="py-2 text-left font-medium">Zdroj</th>
+              <th className="py-2 text-left font-medium">Confidence</th>
               <th className="py-2 text-left font-medium">Merge rozhodnutie</th>
               <th className="py-2 text-left font-medium">Kandidáti (raw)</th>
             </tr>
@@ -1431,17 +1432,41 @@ function DevDebugPanel({ audit }: { audit: FieldMergeAudit[] }) {
                 <td className="py-2 pr-3">
                   {a.chosenSource ? <SourceBadge source={a.chosenSource} /> : "—"}
                 </td>
+                <td className="py-2 pr-3 font-mono text-[10px]">
+                  {a.confidence ? (
+                    <span
+                      className={
+                        a.confidence === "confirmed"
+                          ? "text-emerald-600"
+                          : a.confidence === "inferred"
+                          ? "text-amber-600"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      {a.confidence}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className="py-2 pr-3 text-muted-foreground">{a.decision}</td>
                 <td className="py-2">
                   <ul className="space-y-0.5 font-mono text-[10px]">
                     {a.candidates.map((c, i) => (
                       <li key={i}>
-                        <span className="text-muted-foreground">{c.source}:</span>{" "}
-                        {c.value == null ? (
+                        <span className="text-muted-foreground">{c.source}</span>
+                        {c.rawField ? (
+                          <span className="text-muted-foreground">.{c.rawField}</span>
+                        ) : null}
+                        {": "}
+                        {c.value == null && c.rawValue == null ? (
                           <span className="text-muted-foreground italic">null</span>
                         ) : (
-                          <span>{String(c.value)}</span>
+                          <span>{String(c.value ?? c.rawValue)}</span>
                         )}
+                        {c.confidence ? (
+                          <span className="ml-1 text-muted-foreground">({c.confidence})</span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
