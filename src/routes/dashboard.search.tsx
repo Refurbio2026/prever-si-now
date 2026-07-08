@@ -2,11 +2,11 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Building2, Filter, Loader2, AlertCircle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RiskBadge } from "@/components/risk-badge";
+import { RiskBadge, riskLevelFromScore, formatCurrency } from "@/components/risk-badge";
 import { searchCompaniesFn } from "@/lib/finstat.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -39,19 +39,25 @@ function SearchPage() {
     const trimmed = query.trim();
     if (!trimmed) return;
     navigate({ search: { q: trimmed } });
-
-    if (user) {
-      await supabase.from("recent_searches").insert({
-        user_id: user.id,
-        query: trimmed,
-        ico: null,
-        company_name: null,
-      });
-    }
   }
 
   const items = results.data?.ok ? results.data.results : [];
   const apiError = results.data && !results.data.ok ? results.data : null;
+
+  // Save to recent_searches only after a successful non-empty result.
+  const successKey = results.data?.ok && items.length > 0 ? `${q}|${items[0].ico}` : null;
+  const savedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!successKey || !user || savedKeyRef.current === successKey) return;
+    savedKeyRef.current = successKey;
+    const top = items[0];
+    void supabase.from("recent_searches").insert({
+      user_id: user.id,
+      query: q ?? "",
+      ico: top?.ico ?? null,
+      company_name: top?.name ?? null,
+    });
+  }, [successKey, user, items, q]);
 
   return (
     <div className="space-y-6">
@@ -140,10 +146,23 @@ function SearchPage() {
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-semibold">{r.name}</div>
                         <div className="mt-0.5 text-xs text-muted-foreground">
-                          IČO {r.ico} · {r.city}
+                          IČO {r.ico}
+                          {r.address ? ` · ${r.address}` : ""}
+                          {r.legalForm ? ` · ${r.legalForm}` : ""}
                         </div>
+                        {(r.revenue || r.profit || r.warningIndicators?.length) ? (
+                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            {r.revenue ? <span>Tržby: {formatCurrency(r.revenue)}</span> : null}
+                            {r.profit ? <span>Zisk: {formatCurrency(r.profit)}</span> : null}
+                            {r.warningIndicators?.length ? (
+                              <span className="text-warning-foreground">
+                                {r.warningIndicators.length} upozornení
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
-                      {r.riskScore > 0 && (
+                      {r.riskScore !== undefined && r.riskScore > 0 && (
                         <div className="hidden text-right sm:block">
                           <div className="text-xs text-muted-foreground">Finančné skóre</div>
                           <div className="text-lg font-bold">
@@ -152,7 +171,9 @@ function SearchPage() {
                           </div>
                         </div>
                       )}
-                      {r.riskScore > 0 && <RiskBadge level={r.riskLevel} />}
+                      {r.riskScore !== undefined && r.riskScore > 0 && (
+                        <RiskBadge level={riskLevelFromScore(r.riskScore)} />
+                      )}
                     </div>
                   </Card>
                 </Link>

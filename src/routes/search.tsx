@@ -16,7 +16,7 @@ import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RiskBadge } from "@/components/risk-badge";
+import { RiskBadge, riskLevelFromScore } from "@/components/risk-badge";
 import { searchCompaniesFn } from "@/lib/finstat.functions";
 
 type SearchParams = { q?: string };
@@ -154,7 +154,9 @@ function SearchResultsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-lg font-semibold">{c.name}</h3>
-                        {c.riskScore > 0 && <RiskBadge level={c.riskLevel} />}
+                        {c.riskScore !== undefined && c.riskScore > 0 && (
+                          <RiskBadge level={riskLevelFromScore(c.riskScore)} />
+                        )}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span>IČO {c.ico}</span>
@@ -163,11 +165,12 @@ function SearchResultsPage() {
                             {c.legalForm}
                           </Badge>
                         )}
-                        <span className="inline-flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {c.address}
-                          {c.city && c.city !== "—" ? `, ${c.city}` : ""}
-                        </span>
+                        {c.address && (
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {c.address}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

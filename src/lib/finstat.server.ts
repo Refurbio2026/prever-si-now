@@ -12,6 +12,7 @@ import {
 import type {
   Company,
   CompanyPerson,
+  CompanySearchResult,
   FinancialYear,
   FinstatRawCompany,
   FinstatSearchHit,
@@ -320,7 +321,12 @@ export async function runFinstatDiagnostic(ico: string): Promise<FinstatDiagnost
 }
 
 export async function finstatSearchByName(query: string): Promise<FinstatSearchHit[]> {
-  const data = (await finstatFetch("/autocomplete-ext", { Query: query }, query)) as
+  // Official Finstat Premium endpoint (per FinStat PHP client `RequestAutoComplete`):
+  //   POST/GET https://www.finstat.sk/api/autocomplete
+  //   params: query
+  //   hash input: raw query string
+  //   response: { Results: [{ Ico, Name, City, Cancelled }], Suggestions: [] }
+  const data = (await finstatFetch("/autocomplete", { query }, query)) as
     | { Results?: FinstatSearchHit[] }
     | FinstatSearchHit[]
     | null;
@@ -424,19 +430,32 @@ function collectStrings(
   return out;
 }
 
-export function normalizeSearchHit(hit: FinstatSearchHit): Company {
+/** Light-weight search hit → CompanySearchResult (name search path). */
+export function normalizeSearchHit(hit: FinstatSearchHit): CompanySearchResult {
+  const addressParts = [hit.Street, hit.ZipCode, hit.City].filter(Boolean);
   return {
     ico: String(hit.Ico ?? ""),
     name: hit.Name ?? "Neznáma firma",
-    legalForm: "—",
-    address: hit.Street ?? "—",
-    city: [hit.ZipCode, hit.City].filter(Boolean).join(" ") || "—",
-    registrationDate: "",
-    vatPayer: false,
-    revenue: 0,
-    profit: 0,
-    riskScore: 0,
-    riskLevel: "medium",
+    address: addressParts.length ? addressParts.join(" ") : undefined,
+  };
+}
+
+/** Full Finstat detail → CompanySearchResult (IČO search path — includes financials, risks). */
+export function companyToSearchResult(
+  company: Company,
+  warningIndicators?: string[],
+): CompanySearchResult {
+  return {
+    name: company.name,
+    ico: company.ico,
+    dic: company.dic,
+    address: [company.address, company.city].filter((v) => v && v !== "—").join(", ") || undefined,
+    legalForm: company.legalForm && company.legalForm !== "—" ? company.legalForm : undefined,
+    riskScore: company.riskScore,
+    revenue: company.revenue || undefined,
+    profit: company.profit || undefined,
+    warningIndicators:
+      warningIndicators?.length ? warningIndicators : company.warnings,
   };
 }
 
