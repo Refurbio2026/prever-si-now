@@ -3,7 +3,7 @@
 // and can be replaced with real fetchers without any UI change.
 
 import type { CompanyPerson, RiskIndicator } from "@/lib/types";
-import { unavailable, type ProviderResult } from "./base.server";
+import { ok, unavailable, type ProviderResult } from "./base.server";
 import type { GovContract, ProviderSourceId } from "./types";
 
 const soon = (name: string) => `${name}: integrácia sa pripravuje.`;
