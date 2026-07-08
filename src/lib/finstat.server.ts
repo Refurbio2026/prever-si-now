@@ -709,16 +709,19 @@ export function normalizeRisks(raw: FinstatRawCompany): RiskIndicator[] {
       status: executions > 0 ? "critical" : "clear",
       detail: executions > 0 ? `${executions} aktívnych konaní` : "Bez konaní",
     },
-    {
-      key: "vat_reliability",
-      label: "Spoľahlivosť platiteľa DPH",
-      status: unreliable ? "warning" : "clear",
-      detail: unreliable
-        ? "Nespoľahlivý platiteľ DPH"
-        : raw.IcDph
-        ? "Spoľahlivý platiteľ"
-        : "Nie je platiteľom DPH",
-    },
+    (() => {
+      const vat = resolveVatStatus(raw);
+      let detail: string;
+      if (unreliable) detail = "Nespoľahlivý platiteľ DPH";
+      else if (vat.confidence === "confirmed" && vat.value === true) detail = "Spoľahlivý platiteľ";
+      else detail = "Stav DPH nedostupný";
+      return {
+        key: "vat_reliability" as const,
+        label: "Spoľahlivosť platiteľa DPH",
+        status: (unreliable ? "warning" : "clear") as "warning" | "clear",
+        detail,
+      };
+    })(),
   ];
 }
 
