@@ -535,7 +535,10 @@ function CompanyProfileView({
             </Card>
 
             <AccountingStatementsCard statements={statements} />
+            <ContractsCard contracts={contracts} />
+            <ProcurementCard procurement={procurement} />
           </TabsContent>
+
 
 
           {/* PEOPLE */}
