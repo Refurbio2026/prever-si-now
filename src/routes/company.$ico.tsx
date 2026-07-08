@@ -1717,3 +1717,94 @@ function FinstatRawInspector({
     </Card>
   );
 }
+
+function StatementLinkButton({
+  href,
+  icon,
+  label,
+}: {
+  href: string | undefined;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  if (href) {
+    return (
+      <Button variant="ghost" size="sm" asChild className="rounded-lg text-xs">
+        <a href={href} target="_blank" rel="noopener noreferrer">
+          {icon} {label}
+        </a>
+      </Button>
+    );
+  }
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="rounded-lg text-xs opacity-60"
+      onClick={() => toast.info("Dokument nie je dostupný.")}
+    >
+      {icon} {label}
+    </Button>
+  );
+}
+
+function RuzDiagnosticsPanel({
+  statements,
+}: {
+  statements: AccountingStatement[];
+}) {
+  return (
+    <Card className="rounded-2xl border-dashed border-border/70 p-6 shadow-soft">
+      <div className="mb-3 flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold">Developer — RÚZ diagnostika</h3>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-xs">
+          <thead>
+            <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+              <th className="py-2 text-left font-medium">Statement ID</th>
+              <th className="py-2 text-left font-medium">Detail endpoint</th>
+              <th className="py-2 text-left font-medium">Prílohy</th>
+              <th className="py-2 text-right font-medium">Numerické bunky</th>
+            </tr>
+          </thead>
+          <tbody>
+            {statements.map((s) => (
+              <tr key={s.id} className="border-b border-border/50 align-top last:border-0">
+                <td className="py-2 pr-3 font-mono">{s.statementId}</td>
+                <td className="py-2 pr-3 font-mono text-[10px] text-muted-foreground break-all">
+                  {s.detailUrl ?? "—"}
+                </td>
+                <td className="py-2 pr-3">
+                  {s.attachments && s.attachments.length > 0 ? (
+                    <ul className="space-y-1">
+                      {s.attachments.map((a) => (
+                        <li key={a.id} className="font-mono text-[10px]">
+                          <a
+                            href={a.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline"
+                          >
+                            {a.name}
+                          </a>{" "}
+                          <span className="text-muted-foreground">({a.mimeType})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="text-muted-foreground">žiadne</span>
+                  )}
+                </td>
+                <td className="py-2 pr-3 text-right font-mono">
+                  {s.parsedNumericRowsCount ?? 0}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
