@@ -54,7 +54,7 @@ import {
   detectCompanyChangesFn,
   getCompanyChangesFn,
 } from "@/lib/monitoring.functions";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
