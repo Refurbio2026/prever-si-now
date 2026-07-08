@@ -68,6 +68,7 @@ export interface FinancialYear {
   assets: number;
   liabilities: number;
   source?: "finstat" | "ruz";
+  availableFields?: FinanceField[];
 }
 
 export type FinanceField = "revenue" | "profit" | "assets" | "liabilities";
