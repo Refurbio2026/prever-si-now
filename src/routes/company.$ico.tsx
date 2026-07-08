@@ -555,8 +555,9 @@ function CompanyProfileView({
             </Card>
 
             <AccountingStatementsCard statements={statements} />
-            <ContractsCard contracts={contracts} />
-            <ProcurementCard procurement={procurement} />
+            <ContractsCard contracts={contracts} state={unified.contracts.state} />
+            <ProcurementCard procurement={procurement} state={unified.procurement.state} />
+
           </TabsContent>
 
 
