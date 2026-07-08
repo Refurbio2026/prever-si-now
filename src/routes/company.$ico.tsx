@@ -733,11 +733,13 @@ function PeopleCard({
   icon: Icon,
   people,
   showShare,
+  sourceBadge,
 }: {
   title: string;
   icon: typeof Users;
   people: CompanyPerson[];
   showShare?: boolean;
+  sourceBadge?: string;
 }) {
   return (
     <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
@@ -747,6 +749,11 @@ function PeopleCard({
         <Badge variant="secondary" className="rounded-full">
           {people.length}
         </Badge>
+        {sourceBadge && (
+          <Badge variant="outline" className="rounded-full text-[10px]">
+            Zdroj: {sourceBadge}
+          </Badge>
+        )}
       </div>
       <div className="divide-y divide-border/60">
         {people.map((p, i) => (
