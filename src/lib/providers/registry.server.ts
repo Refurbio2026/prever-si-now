@@ -12,8 +12,8 @@ export async function orsrCompanyInfo(_ico: string): Promise<ProviderResult<unde
   return unavailable("orsr", "company", undefined, "unavailable", soon("ORSR"));
 }
 
-export async function ruzFinancials(_ico: string) {
-  return unavailable<[]>("ruz", "financials", [], "unavailable", soon("Register účtovných závierok"));
+export async function ruzFinancials(_ico: string): Promise<ProviderResult<import("@/lib/types").FinancialYear[]>> {
+  return unavailable<import("@/lib/types").FinancialYear[]>("ruz", "financials", [], "unavailable", soon("Register účtovných závierok"));
 }
 
 export async function rpvsBeneficialOwners(_ico: string): Promise<ProviderResult<CompanyPerson[]>> {
