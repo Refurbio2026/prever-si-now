@@ -13,6 +13,7 @@ import type {
   Company,
   CompanyPerson,
   CompanySearchResult,
+  FieldConfidence,
   FinancialYear,
   FinstatRawCompany,
   FinstatSearchHit,
