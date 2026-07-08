@@ -79,6 +79,7 @@ export async function finstatFetchAll(
   financials: ProviderResult<FinancialYear[]>;
   people: ProviderResult<CompanyPerson[]>;
   risks: ProviderResult<RiskIndicator[]>;
+  raw?: import("@/lib/types").FinstatRawCompany;
 }> {
   const { normalizeDetail } = await loadFinstat();
 
@@ -101,6 +102,7 @@ export async function finstatFetchAll(
       financials: ok("finstat", "financials", bundle.financials),
       people: ok("finstat", "people", bundle.people),
       risks: ok("finstat", "risks", bundle.risks),
+      raw,
     };
   }
   if (mock) {
