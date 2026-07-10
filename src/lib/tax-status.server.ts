@@ -1,56 +1,30 @@
 // Server-only orchestrator for Financial Administration imports.
-// - Loads dataset importers (tax debtors, VAT register, reliability index)
-// - Upserts normalized records into `company_tax_status`
-// - Writes per-run diagnostics into `tax_import_runs`
-// - Updates `data_freshness` per dataset
-// - Emits change signals only for watched IČOs
-// Never throws — one failing dataset must not break the others.
+// Same lifecycle as insurance-debt.server.ts:
+//   run row → importer → validation → staging → RPC reconcile → monitoring.
+// The reconcile RPC uses pg_try_advisory_xact_lock so the same dataset cannot
+// reconcile twice concurrently, and runs inside a single transaction.
+// Records that vanish from the new dataset are ONLY marked is_current=false
+// with removed_at=now(); nothing is permanently deleted.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   TAX_DATASETS,
-  type JsonValue,
   type TaxDatasetId,
   type TaxImporterOutcome,
-  type TaxStatusRecord,
 } from "@/lib/tax-status.types";
 import { importTaxDebtors } from "@/lib/providers/tax-debtors.provider.server";
 import { importVatRegister } from "@/lib/providers/vat-register.provider.server";
 import { importTaxReliability } from "@/lib/providers/tax-reliability.provider.server";
+import {
+  cleanupStaging,
+  reconcileTax,
+  stageTax,
+  validateTax,
+} from "@/lib/reconcile.server";
 
 function admin(): SupabaseClient {
   return supabaseAdmin as unknown as SupabaseClient;
-}
-
-const CHUNK = 500;
-
-async function upsertRecords(
-  records: TaxStatusRecord[],
-): Promise<{ upserted: number; errorMessage: string | null }> {
-  if (records.length === 0) return { upserted: 0, errorMessage: null };
-  let upserted = 0;
-  for (let i = 0; i < records.length; i += CHUNK) {
-    const slice = records.slice(i, i + CHUNK).map((r) => ({
-      ico: r.ico,
-      source_dataset: r.dataset,
-      tax_debtor_found: r.taxDebtorFound,
-      tax_debt_amount: r.taxDebtAmount,
-      vat_registered: r.vatRegistered,
-      ic_dph: r.icDph,
-      vat_registration_date: r.vatRegistrationDate,
-      tax_reliability_index: r.taxReliabilityIndex,
-      source_record_date: r.sourceRecordDate,
-      source_url: r.sourceUrl,
-      raw_data: r.rawData,
-    }));
-    const { error } = await admin()
-      .from("company_tax_status")
-      .upsert(slice, { onConflict: "ico,source_dataset,source_record_date" });
-    if (error) return { upserted, errorMessage: error.message };
-    upserted += slice.length;
-  }
-  return { upserted, errorMessage: null };
 }
 
 async function writeFreshness(
@@ -75,69 +49,132 @@ async function writeFreshness(
     );
 }
 
-async function latestSuccessHash(
-  dataset: TaxDatasetId,
-): Promise<string | null> {
+async function latestSuccessHash(dataset: TaxDatasetId): Promise<string | null> {
   const { data } = await admin()
     .from("tax_import_runs")
     .select("content_hash")
     .eq("dataset", dataset)
-    .eq("status", "success")
+    .in("status", ["success", "empty", "unchanged"])
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   return (data as { content_hash: string | null } | null)?.content_hash ?? null;
 }
 
-async function recordRun(
-  outcome: TaxImporterOutcome,
+async function insertRunRow(
+  dataset: TaxDatasetId,
   startedAt: Date,
-  overrideMessage?: string | null,
-): Promise<void> {
-  await admin().from("tax_import_runs").insert({
-    dataset: outcome.dataset,
-    status: outcome.status,
-    source_url: outcome.sourceUrl,
-    content_hash: outcome.contentHash,
-    source_record_date: outcome.sourceRecordDate,
-    records_downloaded: outcome.recordsDownloaded,
-    records_normalized: outcome.recordsNormalized,
-    records_with_valid_ico: outcome.recordsWithValidIco,
-    error_message: overrideMessage ?? outcome.errorMessage,
-    started_at: startedAt.toISOString(),
-    finished_at: new Date().toISOString(),
-  });
+): Promise<string | null> {
+  const { data, error } = await admin()
+    .from("tax_import_runs")
+    .insert({
+      dataset,
+      status: "running",
+      started_at: startedAt.toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !data) return null;
+  return (data as { id: string }).id;
 }
 
-async function detectChanges(
+interface RunUpdate {
+  status?: string;
+  source_url?: string | null;
+  content_hash?: string | null;
+  previous_source_hash?: string | null;
+  source_record_date?: string | null;
+  records_downloaded?: number;
+  records_normalized?: number;
+  records_with_valid_ico?: number;
+  records_valid?: number;
+  records_invalid?: number;
+  records_inserted?: number;
+  records_updated?: number;
+  records_unchanged?: number;
+  records_deactivated?: number;
+  validation_status?: string | null;
+  error_message?: string | null;
+  finished_at?: string;
+}
+
+async function updateRunRow(runId: string, patch: RunUpdate): Promise<void> {
+  await admin().from("tax_import_runs").update(patch).eq("id", runId);
+}
+
+// ---------- change detection ----------
+
+interface WatchedSnapshot {
+  hash: string | null;
+  taxDebtAmount: number | null;
+  vatRegistered: boolean | null;
+  reliability: string | null;
+}
+
+async function snapshotWatched(
   dataset: TaxDatasetId,
-  records: TaxStatusRecord[],
-): Promise<void> {
-  const { data: prev } = await admin()
+): Promise<Map<string, WatchedSnapshot>> {
+  const { data: watched } = await admin().from("watched_companies").select("ico");
+  const icos = ((watched as Array<{ ico: string }> | null) ?? []).map((w) => w.ico);
+  const out = new Map<string, WatchedSnapshot>();
+  if (icos.length === 0) return out;
+  const { data } = await admin()
     .from("company_tax_status")
     .select(
-      "ico, tax_debtor_found, tax_debt_amount, vat_registered, tax_reliability_index, source_record_date",
+      "ico, source_record_hash, tax_debt_amount, vat_registered, tax_reliability_index",
     )
-    .eq("source_dataset", dataset);
-
-  interface PrevRow {
+    .eq("source_dataset", dataset)
+    .eq("is_current", true)
+    .in("ico", icos);
+  for (const row of (data as Array<{
     ico: string;
-    tax_debtor_found: boolean | null;
+    source_record_hash: string | null;
     tax_debt_amount: number | null;
     vat_registered: boolean | null;
     tax_reliability_index: string | null;
-    source_record_date: string | null;
+  }> | null) ?? []) {
+    out.set(row.ico, {
+      hash: row.source_record_hash,
+      taxDebtAmount: row.tax_debt_amount,
+      vatRegistered: row.vat_registered,
+      reliability: row.tax_reliability_index,
+    });
   }
-  const prevMap = new Map<string, PrevRow>();
-  for (const r of (prev as PrevRow[] | null) ?? []) {
-    const existing = prevMap.get(r.ico);
-    if (!existing || (r.source_record_date ?? "") > (existing.source_record_date ?? "")) {
-      prevMap.set(r.ico, r);
-    }
-  }
+  return out;
+}
 
-  const currMap = new Map<string, TaxStatusRecord>();
-  for (const r of records) if (r.ico) currMap.set(r.ico, r);
+async function emitChanges(
+  dataset: TaxDatasetId,
+  prev: Map<string, WatchedSnapshot>,
+): Promise<void> {
+  const { data: watched } = await admin().from("watched_companies").select("ico");
+  const watchedIcos = ((watched as Array<{ ico: string }> | null) ?? []).map((w) => w.ico);
+  if (watchedIcos.length === 0) return;
+
+  const { data: nowCurrent } = await admin()
+    .from("company_tax_status")
+    .select(
+      "ico, source_record_hash, tax_debt_amount, vat_registered, tax_reliability_index",
+    )
+    .eq("source_dataset", dataset)
+    .eq("is_current", true)
+    .in("ico", watchedIcos);
+
+  const curMap = new Map<string, WatchedSnapshot>();
+  for (const row of (nowCurrent as Array<{
+    ico: string;
+    source_record_hash: string | null;
+    tax_debt_amount: number | null;
+    vat_registered: boolean | null;
+    tax_reliability_index: string | null;
+  }> | null) ?? []) {
+    curMap.set(row.ico, {
+      hash: row.source_record_hash,
+      taxDebtAmount: row.tax_debt_amount,
+      vatRegistered: row.vat_registered,
+      reliability: row.tax_reliability_index,
+    });
+  }
 
   const changes: Array<{
     ico: string;
@@ -148,8 +185,8 @@ async function detectChanges(
   }> = [];
 
   if (dataset === "tax_debtors") {
-    for (const [ico, cur] of currMap) {
-      const before = prevMap.get(ico);
+    for (const [ico, cur] of curMap) {
+      const before = prev.get(ico);
       if (!before) {
         changes.push({
           ico,
@@ -164,18 +201,18 @@ async function detectChanges(
               ? "critical"
               : "warning",
         });
-      } else if ((before.tax_debt_amount ?? 0) !== (cur.taxDebtAmount ?? 0)) {
+      } else if (before.hash !== cur.hash) {
         changes.push({
           ico,
           change_type: "tax_debt_amount_changed",
           title: "Zmena výšky daňového nedoplatku",
-          description: `Predtým ${before.tax_debt_amount ?? "n/a"} €, aktuálne ${cur.taxDebtAmount ?? "n/a"} €.`,
+          description: `Predtým ${before.taxDebtAmount ?? "n/a"} €, aktuálne ${cur.taxDebtAmount ?? "n/a"} €.`,
           severity: "warning",
         });
       }
     }
-    for (const [ico] of prevMap) {
-      if (!currMap.has(ico)) {
+    for (const [ico] of prev) {
+      if (!curMap.has(ico)) {
         changes.push({
           ico,
           change_type: "tax_debt_removed_from_published_list",
@@ -187,8 +224,8 @@ async function detectChanges(
       }
     }
   } else if (dataset === "vat_registered") {
-    for (const [ico, cur] of currMap) {
-      const before = prevMap.get(ico);
+    for (const [ico, cur] of curMap) {
+      const before = prev.get(ico);
       if (!before && cur.vatRegistered === true) {
         changes.push({
           ico,
@@ -197,10 +234,7 @@ async function detectChanges(
           description: "Firma je uvedená v registri platiteľov DPH.",
           severity: "info",
         });
-      } else if (
-        before?.vat_registered === true &&
-        cur.vatRegistered === false
-      ) {
+      } else if (before?.vatRegistered === true && cur.vatRegistered === false) {
         changes.push({
           ico,
           change_type: "vat_registration_removed",
@@ -211,44 +245,39 @@ async function detectChanges(
         });
       }
     }
+    for (const [ico, before] of prev) {
+      if (!curMap.has(ico) && before.vatRegistered === true) {
+        changes.push({
+          ico,
+          change_type: "vat_registration_removed",
+          title: "Odstránené zo zverejneného registra DPH",
+          description:
+            "Firma už nie je uvedená v aktuálnom zverejnenom registri platiteľov DPH.",
+          severity: "warning",
+        });
+      }
+    }
   } else if (dataset === "tax_reliability") {
-    for (const [ico, cur] of currMap) {
-      const before = prevMap.get(ico);
-      if (
-        cur.taxReliabilityIndex &&
-        before?.tax_reliability_index !== cur.taxReliabilityIndex
-      ) {
+    for (const [ico, cur] of curMap) {
+      const before = prev.get(ico);
+      if (cur.reliability && before?.reliability !== cur.reliability) {
         changes.push({
           ico,
           change_type: "tax_reliability_changed",
           title: "Zmena indexu daňovej spoľahlivosti",
-          description: `Nová hodnota: ${cur.taxReliabilityIndex}${before?.tax_reliability_index ? ` (predtým: ${before.tax_reliability_index}).` : "."}`,
+          description: `Nová hodnota: ${cur.reliability}${before?.reliability ? ` (predtým: ${before.reliability}).` : "."}`,
           severity: "info",
         });
       }
     }
   }
 
-  if (changes.length === 0) return;
-  const icos = Array.from(new Set(changes.map((c) => c.ico)));
-  const { data: watched } = await admin()
-    .from("watched_companies")
-    .select("ico")
-    .in("ico", icos);
-  const watchedSet = new Set(
-    ((watched as Array<{ ico: string }> | null) ?? []).map((w) => w.ico),
-  );
-  const filtered = changes.filter((c) => watchedSet.has(c.ico));
-  if (filtered.length === 0) return;
-  await admin().from("company_changes").insert(filtered);
+  if (changes.length > 0) {
+    await admin().from("company_changes").insert(changes);
+  }
 }
 
-export interface TaxDatasetImportResult {
-  dataset: TaxDatasetId;
-  status: TaxImporterOutcome["status"];
-  recordsUpserted: number;
-  errorMessage: string | null;
-}
+// ---------- main flow ----------
 
 function runImporterFor(dataset: TaxDatasetId): Promise<TaxImporterOutcome> {
   switch (dataset) {
@@ -261,85 +290,210 @@ function runImporterFor(dataset: TaxDatasetId): Promise<TaxImporterOutcome> {
   }
 }
 
+export interface TaxDatasetImportResult {
+  dataset: TaxDatasetId;
+  status?: string;
+  recordsInserted: number;
+  recordsUpdated: number;
+  recordsUnchanged: number;
+  recordsDeactivated: number;
+  errorMessage: string | null;
+}
+
 export async function importOneDataset(
   dataset: TaxDatasetId,
 ): Promise<TaxDatasetImportResult> {
   const startedAt = new Date();
+  const runId = await insertRunRow(dataset, startedAt);
+  if (!runId) {
+    return {
+      dataset,
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: "Nepodarilo sa vytvoriť záznam behu.",
+    };
+  }
+
   let outcome: TaxImporterOutcome;
   try {
     outcome = await runImporterFor(dataset);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Neznáma chyba importu.";
-    const failed: TaxImporterOutcome = {
+    await updateRunRow(runId, {
+      status: "failed",
+      error_message: msg,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(dataset, false, msg);
+    return {
       dataset,
       status: "failed",
-      sourceUrl: "",
-      recordsDownloaded: 0,
-      recordsNormalized: 0,
-      recordsWithValidIco: 0,
-      contentHash: null,
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
       errorMessage: msg,
-      records: [],
-      sourceRecordDate: null,
     };
-    await recordRun(failed, startedAt);
-    await writeFreshness(dataset, false, msg);
-    return { dataset, status: "failed", recordsUpserted: 0, errorMessage: msg };
   }
 
-  // Skip when source hash unchanged since last successful run.
-  if (outcome.contentHash) {
-    const prevHash = await latestSuccessHash(dataset);
-    if (prevHash && prevHash === outcome.contentHash) {
-      const unchanged: TaxImporterOutcome = { ...outcome, status: "unchanged" };
-      await recordRun(unchanged, startedAt);
-      await writeFreshness(dataset, true, "Dataset nezmenený od posledného behu.");
-      return {
-        dataset,
-        status: "unchanged",
-        recordsUpserted: 0,
-        errorMessage: null,
-      };
-    }
-  }
+  const commonUpdate: RunUpdate = {
+    source_url: outcome.sourceUrl,
+    content_hash: outcome.contentHash,
+    source_record_date: outcome.sourceRecordDate,
+    records_downloaded: outcome.recordsDownloaded,
+    records_normalized: outcome.recordsNormalized,
+    records_with_valid_ico: outcome.recordsWithValidIco,
+  };
 
-  if (outcome.status === "not_implemented") {
-    await recordRun(outcome, startedAt);
+  if (outcome.status === "not_implemented" || outcome.status === "failed") {
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: outcome.status,
+      error_message: outcome.errorMessage,
+      finished_at: new Date().toISOString(),
+    });
     await writeFreshness(dataset, false, outcome.errorMessage);
     return {
       dataset,
-      status: "not_implemented",
-      recordsUpserted: 0,
+      status: outcome.status,
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
       errorMessage: outcome.errorMessage,
     };
   }
 
-  const { upserted, errorMessage: upsertErr } = await upsertRecords(
-    outcome.records,
-  );
-  const finalStatus: TaxImporterOutcome["status"] = upsertErr
-    ? "failed"
-    : outcome.status;
-  const finalMessage = upsertErr ?? outcome.errorMessage;
-
-  if (!upsertErr && outcome.records.length > 0) {
-    try {
-      await detectChanges(dataset, outcome.records);
-    } catch {
-      // Ignored — monitoring is best-effort.
-    }
+  const prevHash = await latestSuccessHash(dataset);
+  if (outcome.contentHash && prevHash && outcome.contentHash === prevHash) {
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "unchanged",
+      previous_source_hash: prevHash,
+      validation_status: "skipped",
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(dataset, true, "Dataset nezmenený od posledného behu.");
+    return {
+      dataset,
+      status: "unchanged",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: null,
+    };
   }
 
-  await recordRun(
-    { ...outcome, status: finalStatus, errorMessage: finalMessage },
-    startedAt,
-  );
-  await writeFreshness(dataset, finalStatus !== "failed", finalMessage);
+  const validation = validateTax(outcome.records, dataset);
+  if (!validation.ok) {
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "failed",
+      previous_source_hash: prevHash,
+      validation_status: "failed",
+      records_valid: validation.validCount,
+      records_invalid: validation.invalidCount,
+      error_message: validation.reason,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(dataset, false, validation.reason);
+    return {
+      dataset,
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: validation.reason,
+    };
+  }
+
+  const prevSnapshot = await snapshotWatched(dataset);
+
+  const staged = await stageTax(admin(), outcome.records, runId);
+  if (staged.errorMessage) {
+    await cleanupStaging(admin(), "staging_tax_records", runId);
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "failed",
+      previous_source_hash: prevHash,
+      validation_status: "failed",
+      records_valid: validation.validCount,
+      records_invalid: validation.invalidCount,
+      error_message: `Staging chyba: ${staged.errorMessage}`,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(dataset, false, staged.errorMessage);
+    return {
+      dataset,
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: staged.errorMessage,
+    };
+  }
+
+  const sourceDate = outcome.sourceRecordDate ?? new Date().toISOString().slice(0, 10);
+  const rec = await reconcileTax(admin(), dataset, runId, sourceDate);
+  if (rec.errorMessage || !rec.counts) {
+    await cleanupStaging(admin(), "staging_tax_records", runId);
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "failed",
+      previous_source_hash: prevHash,
+      validation_status: "failed",
+      records_valid: validation.validCount,
+      records_invalid: validation.invalidCount,
+      error_message: `Reconciliation zlyhal: ${rec.errorMessage ?? "unknown"}`,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(dataset, false, rec.errorMessage);
+    return {
+      dataset,
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: rec.errorMessage,
+    };
+  }
+
+  try {
+    await emitChanges(dataset, prevSnapshot);
+  } catch {
+    /* ignored */
+  }
+
+  await updateRunRow(runId, {
+    ...commonUpdate,
+    status: "success",
+    previous_source_hash: prevHash,
+    validation_status: "passed",
+    records_valid: validation.validCount,
+    records_invalid: validation.invalidCount,
+    records_inserted: rec.counts.inserted,
+    records_updated: rec.counts.updated,
+    records_unchanged: rec.counts.unchanged,
+    records_deactivated: rec.counts.deactivated,
+    finished_at: new Date().toISOString(),
+  });
+  await writeFreshness(dataset, true, null);
+
   return {
     dataset,
-    status: finalStatus,
-    recordsUpserted: upserted,
-    errorMessage: finalMessage,
+    status: "success",
+    recordsInserted: rec.counts.inserted,
+    recordsUpdated: rec.counts.updated,
+    recordsUnchanged: rec.counts.unchanged,
+    recordsDeactivated: rec.counts.deactivated,
+    errorMessage: null,
   };
 }
 
@@ -364,9 +518,11 @@ export async function importAllFinancialAdministrationData(): Promise<
       results.push({
         dataset: d,
         status: "failed",
-        recordsUpserted: 0,
-        errorMessage:
-          err instanceof Error ? err.message : "Neznáma chyba.",
+        recordsInserted: 0,
+        recordsUpdated: 0,
+        recordsUnchanged: 0,
+        recordsDeactivated: 0,
+        errorMessage: err instanceof Error ? err.message : "Neznáma chyba.",
       });
     }
   }
@@ -374,4 +530,3 @@ export async function importAllFinancialAdministrationData(): Promise<
 }
 
 export const GLOBAL_JOB_ICO = "__GLOBAL__";
-export type _JsonValueReExport = JsonValue;

@@ -121,6 +121,7 @@ export const getCompanyInsuranceDebtsFn = createServerFn({ method: "POST" })
           "provider, debt_amount, debtor_name, address, source_record_date, source_url, imported_at",
         )
         .eq("ico", ico)
+        .eq("is_current", true)
         .order("imported_at", { ascending: false })
         .limit(50),
       admin
@@ -160,6 +161,15 @@ export interface InsuranceRunSummary {
   recordsDownloaded: number;
   recordsNormalized: number;
   recordsWithIco: number;
+  recordsValid: number;
+  recordsInvalid: number;
+  recordsInserted: number;
+  recordsUpdated: number;
+  recordsUnchanged: number;
+  recordsDeactivated: number;
+  validationStatus: string | null;
+  previousSourceHash: string | null;
+  contentHash: string | null;
   startedAt: string;
   finishedAt: string | null;
   errorMessage: string | null;
@@ -179,18 +189,29 @@ export interface InsuranceAdminStatus {
   recentRuns: InsuranceRunSummary[];
 }
 
-function mapRun(row: {
+interface InsuranceRunRow {
   id: string;
   provider: string;
   status: string;
   records_downloaded: number | null;
   records_normalized: number | null;
   records_with_ico: number | null;
+  records_valid: number | null;
+  records_invalid: number | null;
+  records_inserted: number | null;
+  records_updated: number | null;
+  records_unchanged: number | null;
+  records_deactivated: number | null;
+  validation_status: string | null;
+  previous_source_hash: string | null;
+  content_hash: string | null;
   started_at: string;
   finished_at: string | null;
   error_message: string | null;
   source_url: string | null;
-}): InsuranceRunSummary {
+}
+
+function mapRun(row: InsuranceRunRow): InsuranceRunSummary {
   return {
     id: row.id,
     provider: row.provider as InsuranceProviderId,
@@ -198,12 +219,24 @@ function mapRun(row: {
     recordsDownloaded: row.records_downloaded ?? 0,
     recordsNormalized: row.records_normalized ?? 0,
     recordsWithIco: row.records_with_ico ?? 0,
+    recordsValid: row.records_valid ?? 0,
+    recordsInvalid: row.records_invalid ?? 0,
+    recordsInserted: row.records_inserted ?? 0,
+    recordsUpdated: row.records_updated ?? 0,
+    recordsUnchanged: row.records_unchanged ?? 0,
+    recordsDeactivated: row.records_deactivated ?? 0,
+    validationStatus: row.validation_status,
+    previousSourceHash: row.previous_source_hash,
+    contentHash: row.content_hash,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     errorMessage: row.error_message,
     sourceUrl: row.source_url,
   };
 }
+
+const RUN_COLUMNS =
+  "id, provider, status, records_downloaded, records_normalized, records_with_ico, records_valid, records_invalid, records_inserted, records_updated, records_unchanged, records_deactivated, validation_status, previous_source_hash, content_hash, started_at, finished_at, error_message, source_url";
 
 export const getInsuranceImportStatusFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -215,18 +248,17 @@ export const getInsuranceImportStatusFn = createServerFn({ method: "POST" })
     const [{ data: runs }, { data: counts }] = await Promise.all([
       admin
         .from("insurance_import_runs")
-        .select(
-          "id, provider, status, records_downloaded, records_normalized, records_with_ico, started_at, finished_at, error_message, source_url",
-        )
+        .select(RUN_COLUMNS)
         .order("started_at", { ascending: false })
         .limit(100),
       admin
         .from("company_insurance_debts")
-        .select("provider, ico"),
+        .select("provider, ico")
+        .eq("is_current", true),
     ]);
 
     const mappedRuns: InsuranceRunSummary[] = (
-      (runs as Parameters<typeof mapRun>[0][] | null) ?? []
+      (runs as InsuranceRunRow[] | null) ?? []
     ).map(mapRun);
 
     const debtorCount = new Map<InsuranceProviderId, number>();
@@ -242,7 +274,9 @@ export const getInsuranceImportStatusFn = createServerFn({ method: "POST" })
         mappedRuns.find(
           (r) =>
             r.provider === p &&
-            (r.status === "success" || r.status === "empty" || r.status === "unchanged"),
+            (r.status === "success" ||
+              r.status === "empty" ||
+              r.status === "unchanged"),
         ) ?? null;
       return {
         provider: p,
@@ -272,3 +306,55 @@ export const runAllInsuranceImportsFn = createServerFn({ method: "POST" })
     const { importAllInsuranceDebtors } = await import("@/lib/insurance-debt.server");
     return importAllInsuranceDebtors();
   });
+
+export interface DeactivatedInsuranceRow {
+  ico: string;
+  provider: InsuranceProviderId;
+  debtAmount: number | null;
+  debtorName: string | null;
+  validFrom: string | null;
+  validTo: string | null;
+  removedAt: string | null;
+  sourceRecordDate: string | null;
+}
+
+export const getDeactivatedInsuranceFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => providerSchema.parse(input))
+  .handler(async ({ data, context }): Promise<DeactivatedInsuranceRow[]> => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as unknown as SupabaseClient;
+    const { data: rows } = await admin
+      .from("company_insurance_debts")
+      .select(
+        "ico, provider, debt_amount, debtor_name, valid_from, valid_to, removed_at, source_record_date",
+      )
+      .eq("provider", data.provider)
+      .eq("is_current", false)
+      .not("removed_at", "is", null)
+      .order("removed_at", { ascending: false })
+      .limit(100);
+    return (
+      (rows as Array<{
+        ico: string;
+        provider: string;
+        debt_amount: number | null;
+        debtor_name: string | null;
+        valid_from: string | null;
+        valid_to: string | null;
+        removed_at: string | null;
+        source_record_date: string | null;
+      }> | null) ?? []
+    ).map((r) => ({
+      ico: r.ico,
+      provider: r.provider as InsuranceProviderId,
+      debtAmount: r.debt_amount,
+      debtorName: r.debtor_name,
+      validFrom: r.valid_from,
+      validTo: r.valid_to,
+      removedAt: r.removed_at,
+      sourceRecordDate: r.source_record_date,
+    }));
+  });
+
