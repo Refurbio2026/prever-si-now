@@ -695,6 +695,10 @@ export async function importOneDataset(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(dataset, false, validation.reason);
+    await reportProgress(progress, {
+      phase: "failed",
+      message: validation.reason ?? "Validácia zlyhala",
+    });
     return {
       dataset,
       status: "failed",
