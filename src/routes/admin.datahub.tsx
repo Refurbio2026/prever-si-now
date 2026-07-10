@@ -33,10 +33,10 @@ import {
   searchAndEnqueueFn,
 } from "@/lib/datahub.functions";
 import {
-  getSchedulerOverviewFn,
   runGlobalImportsNowFn,
   runQueueWorkerNowFn,
 } from "@/lib/scheduler.functions";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/admin/datahub")({
   component: DataHubPage,
@@ -568,25 +568,146 @@ const FALLBACK_JOBS = [
   },
 ] as const;
 
+type SchedulerJob = {
+  name: string;
+  schedule: string;
+  description: string;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastError: string | null;
+  running: boolean;
+  cronSchedule: string | null;
+  cronActive: boolean | null;
+  cronLastStart: string | null;
+  cronLastStatus: string | null;
+};
+
+async function fetchSchedulerOverview(): Promise<{
+  jobs: SchedulerJob[];
+  cronError: string | null;
+}> {
+  // Read everything the client can see under normal admin RLS + a
+  // SECURITY DEFINER RPC for cron metadata. No service-role required.
+  const [cronRes, settingsRes, freshRes, workerRes] = await Promise.all([
+    supabase.rpc("get_scheduler_status"),
+    supabase
+      .from("datahub_settings")
+      .select(
+        "global_import_running, global_import_started_at, global_import_last_finished_at",
+      )
+      .eq("id", true)
+      .maybeSingle(),
+    supabase
+      .from("data_freshness")
+      .select("source, last_attempt_at, status, error_message")
+      .eq("ico", "__GLOBAL__")
+      .order("last_attempt_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("datahub_worker_runs")
+      .select("started_at, finished_at, error_message")
+      .order("started_at", { ascending: false })
+      .limit(1),
+  ]);
+
+  const cronError = cronRes.error?.message ?? null;
+  const cronByName = new Map<
+    string,
+    {
+      schedule: string | null;
+      active: boolean | null;
+      last_run_start: string | null;
+      last_run_status: string | null;
+      last_error: string | null;
+    }
+  >();
+  for (const row of cronRes.data ?? []) {
+    cronByName.set(row.jobname, {
+      schedule: row.schedule,
+      active: row.active,
+      last_run_start: row.last_run_start,
+      last_run_status: row.last_run_status,
+      last_error: row.last_error,
+    });
+  }
+
+  const settings = settingsRes.data;
+  const freshRows = freshRes.data ?? [];
+  const anyFail = freshRows.find((r) => r.status && r.status !== "success");
+  const lastAttempt = freshRows[0]?.last_attempt_at ?? null;
+  const lastWorker = workerRes.data?.[0];
+
+  const buildJob = (
+    base: (typeof FALLBACK_JOBS)[number],
+    overrides: Partial<SchedulerJob>,
+  ): SchedulerJob => {
+    const cron = cronByName.get(base.name);
+    const merged: SchedulerJob = {
+      name: base.name,
+      schedule: base.schedule,
+      description: base.description,
+      lastRunAt: null,
+      lastStatus: null,
+      lastError: null,
+      running: false,
+      ...overrides,
+      cronSchedule: cron?.schedule ?? null,
+      cronActive: cron?.active ?? null,
+      cronLastStart: cron?.last_run_start ?? null,
+      cronLastStatus: cron?.last_run_status ?? null,
+    };
+    merged.lastError =
+      overrides.lastError ?? cron?.last_error ?? base.lastError ?? null;
+    return merged;
+  };
+
+  return {
+    cronError,
+    jobs: [
+      buildJob(FALLBACK_JOBS[0], {
+        lastRunAt:
+          settings?.global_import_last_finished_at ??
+          settings?.global_import_started_at ??
+          lastAttempt,
+        lastStatus: anyFail
+          ? `chyba: ${anyFail.source}`
+          : lastAttempt
+            ? "success"
+            : null,
+        lastError: anyFail?.error_message ?? null,
+        running: settings?.global_import_running ?? false,
+      }),
+      buildJob(FALLBACK_JOBS[1], {
+        lastRunAt: lastWorker?.started_at ?? null,
+        lastStatus: lastWorker
+          ? lastWorker.error_message
+            ? "failed"
+            : "success"
+          : null,
+        lastError: lastWorker?.error_message ?? null,
+        running: lastWorker ? lastWorker.finished_at === null : false,
+      }),
+    ],
+  };
+}
+
 function SchedulerOverview() {
-  const fetchOverview = useServerFn(getSchedulerOverviewFn);
   const runGlobal = useServerFn(runGlobalImportsNowFn);
   const runWorker = useServerFn(runQueueWorkerNowFn);
 
   const overview = useQuery({
     queryKey: ["scheduler-overview"],
-    queryFn: async () => {
+    queryFn: async () =>
       // Hard 10s timeout — never let the section spin forever.
-      return await Promise.race([
-        fetchOverview(),
+      Promise.race([
+        fetchSchedulerOverview(),
         new Promise<never>((_, reject) =>
           setTimeout(
             () => reject(new Error("Stav plánovača sa nepodarilo načítať")),
             10_000,
           ),
         ),
-      ]);
-    },
+      ]),
     refetchInterval: 15_000,
     retry: 1,
   });
@@ -619,7 +740,8 @@ function SchedulerOverview() {
 
   // Always show the two known jobs — manual "Spustiť teraz" must work even if
   // the cron / overview query fails.
-  const jobs = overview.data?.jobs ?? FALLBACK_JOBS;
+  const jobs: SchedulerJob[] =
+    overview.data?.jobs ?? (FALLBACK_JOBS as unknown as SchedulerJob[]);
   const cronNote =
     overview.data?.cronError ??
     (overview.isError ? "Stav plánovača sa nepodarilo načítať" : null);

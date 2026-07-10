@@ -1068,6 +1068,17 @@ export type Database = {
           schedule: string
         }[]
       }
+      get_scheduler_status: {
+        Args: never
+        Returns: {
+          active: boolean
+          jobname: string
+          last_error: string
+          last_run_start: string
+          last_run_status: string
+          schedule: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
