@@ -733,6 +733,10 @@ export async function importOneDataset(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(dataset, false, staged.errorMessage);
+    await reportProgress(progress, {
+      phase: "failed",
+      message: `Staging chyba: ${staged.errorMessage}`,
+    });
     return {
       dataset,
       status: "failed",
