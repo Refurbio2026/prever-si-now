@@ -1086,11 +1086,44 @@ export type Database = {
         }
         Returns: boolean
       }
+      reconcile_insurance_cleanup: {
+        Args: { _run_id: string }
+        Returns: undefined
+      }
+      reconcile_insurance_deactivate_batch: {
+        Args: {
+          _after_ico: string
+          _limit: number
+          _provider: string
+          _run_id: string
+        }
+        Returns: {
+          deactivated: number
+          last_ico: string
+          scanned: number
+        }[]
+      }
       reconcile_insurance_debts: {
         Args: { _provider: string; _run_id: string; _source_date: string }
         Returns: {
           deactivated: number
           inserted: number
+          unchanged: number
+          updated: number
+        }[]
+      }
+      reconcile_insurance_debts_batch: {
+        Args: {
+          _after_ico: string
+          _limit: number
+          _provider: string
+          _run_id: string
+          _source_date: string
+        }
+        Returns: {
+          inserted: number
+          last_ico: string
+          processed: number
           unchanged: number
           updated: number
         }[]
@@ -1102,6 +1135,39 @@ export type Database = {
           inserted: number
           unchanged: number
           updated: number
+        }[]
+      }
+      reconcile_tax_dataset_batch: {
+        Args: {
+          _after_ico: string
+          _dataset: string
+          _limit: number
+          _run_id: string
+          _source_date: string
+        }
+        Returns: {
+          inserted: number
+          last_ico: string
+          processed: number
+          unchanged: number
+          updated: number
+        }[]
+      }
+      reconcile_tax_dataset_cleanup: {
+        Args: { _run_id: string }
+        Returns: undefined
+      }
+      reconcile_tax_dataset_deactivate_batch: {
+        Args: {
+          _after_ico: string
+          _dataset: string
+          _limit: number
+          _run_id: string
+        }
+        Returns: {
+          deactivated: number
+          last_ico: string
+          scanned: number
         }[]
       }
     }
