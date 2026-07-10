@@ -313,7 +313,7 @@ async function reconcilePersons(
         is_current: true,
         first_seen_at: now,
         last_seen_at: now,
-        raw_data: row.raw_data,
+        raw_data: row.raw_data as never,
       });
       if (!error) {
         inserted += 1;
