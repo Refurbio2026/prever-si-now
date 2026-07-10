@@ -676,6 +676,7 @@ export async function importOneDataset(
     };
   }
 
+  await reportProgress(progress, { phase: "validation", message: "Validácia dát" });
   const validation = validateTax(outcome.records, dataset);
   logImport(
     dataset,
