@@ -173,6 +173,7 @@ export const getCompanyTaxStatusFn = createServerFn({ method: "POST" })
             "source_dataset, tax_debtor_found, tax_debt_amount, vat_registered, ic_dph, vat_registration_date, tax_reliability_index, source_record_date, source_url, imported_at",
           )
           .eq("ico", ico)
+          .eq("is_current", true)
           .order("imported_at", { ascending: false })
           .limit(50),
         admin
