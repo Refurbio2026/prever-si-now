@@ -89,145 +89,142 @@ export interface StreamFsXmlOptions {
   maxItems?: number;
   /** Keep up to N sample items in the returned meta (for diagnostics). */
   sampleCount?: number;
+  /** Short log label. Derived from the URL when omitted. */
+  logLabel?: string;
+  /** Filename inside temp dir. Defaults to `xmlSuffix.replace('.xml','.zip')`. */
+  tempFilename?: string;
+  /** Number of download attempts. Default 3. */
+  downloadAttempts?: number;
+  /** Backoff between attempts in ms. Default 30_000. */
+  downloadBackoffMs?: number;
 }
 
-/** Stream a FS OpenData ZIP-of-XML from `url`, invoking `onItem` for each
- *  `<ITEM>` block. Returns a metadata summary including the source hash. */
+/**
+ * Download an FS OpenData ZIP-of-XML fully to a temp file (with retry +
+ * progress logging), then stream-parse it from disk, invoking `onItem` for
+ * each `<ITEM>` block. Decoupling download from DB work protects the import
+ * from FS server idle-connection resets while slow reconciliation runs.
+ */
 export async function streamFsXml(opts: StreamFsXmlOptions): Promise<StreamSourceMeta> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-  const res = await fetch(opts.url, {
-    signal: ctrl.signal,
-    headers: {
-      "User-Agent": "PreverSi DataHub (+https://preversi.sk)",
-      Accept: "application/zip, */*",
-    },
-  }).finally(() => clearTimeout(timer));
+  const label = opts.logLabel ?? "fs-xml";
+  const filename = opts.tempFilename ?? opts.xmlSuffix.replace(/\.xml$/i, "") + ".zip";
+  const dl = await downloadToTempFile({
+    url: opts.url,
+    label,
+    filename,
+    attempts: opts.downloadAttempts,
+    backoffMs: opts.downloadBackoffMs,
+  });
 
   const meta: StreamSourceMeta = {
-    status: res.status,
-    contentType: res.headers.get("content-type") ?? "",
-    contentLength: Number(res.headers.get("content-length") ?? "0"),
-    lastModified: res.headers.get("last-modified"),
-    etag: res.headers.get("etag"),
-    bytesRead: 0,
-    contentHash: "",
+    status: dl.status,
+    contentType: dl.contentType,
+    contentLength: dl.contentLength,
+    lastModified: dl.lastModified,
+    etag: dl.etag,
+    bytesRead: dl.bytesRead,
+    contentHash: dl.contentHash,
     rootDate: null,
     itemCount: 0,
     sampleColumnNames: [],
     sampleItems: [],
   };
 
-  if (!res.ok || !res.body) {
-    meta.contentHash = createHash("sha256").update("").digest("hex");
-    return meta;
-  }
+  try {
+    let textBuf = "";
+    let rootDateFound = false;
+    let itemsDone = 0;
+    let aborted = false;
+    const sampleTarget = opts.sampleCount ?? 3;
 
-  const hasher: Hash = createHash("sha256");
-  let textBuf = "";
-  let rootDateFound = false;
-  let itemsDone = 0;
-  let aborted = false;
-  const sampleTarget = opts.sampleCount ?? 3;
+    const unzip = new Unzip();
+    unzip.register(UnzipInflate);
 
-  const unzip = new Unzip();
-  unzip.register(UnzipInflate);
+    const xmlChunks: Uint8Array[] = [];
+    let xmlFinal = false;
 
-  // Collect XML chunks from the target file inside the ZIP.
-  const xmlChunks: Uint8Array[] = [];
-  let xmlFinal = false;
-
-  unzip.onfile = (file) => {
-    if (!file.name.toLowerCase().endsWith(opts.xmlSuffix.toLowerCase())) return;
-    file.ondata = (err, data, final) => {
-      if (err) throw err;
-      if (data && data.length > 0) xmlChunks.push(data);
-      if (final) xmlFinal = true;
+    unzip.onfile = (file) => {
+      if (!file.name.toLowerCase().endsWith(opts.xmlSuffix.toLowerCase())) return;
+      file.ondata = (err, data, final) => {
+        if (err) throw err;
+        if (data && data.length > 0) xmlChunks.push(data);
+        if (final) xmlFinal = true;
+      };
+      file.start();
     };
-    file.start();
-  };
 
-  const flushXml = async (): Promise<void> => {
-    if (xmlChunks.length === 0) return;
-    // Concatenate accumulated chunks and reset.
-    let total = 0;
-    for (const c of xmlChunks) total += c.length;
-    const merged = new Uint8Array(total);
-    let off = 0;
-    for (const c of xmlChunks) {
-      merged.set(c, off);
-      off += c.length;
-    }
-    xmlChunks.length = 0;
-    textBuf += DECODER.decode(merged, { stream: !xmlFinal });
+    const flushXml = async (): Promise<void> => {
+      if (xmlChunks.length === 0) return;
+      let total = 0;
+      for (const c of xmlChunks) total += c.length;
+      const merged = new Uint8Array(total);
+      let off = 0;
+      for (const c of xmlChunks) {
+        merged.set(c, off);
+        off += c.length;
+      }
+      xmlChunks.length = 0;
+      textBuf += DECODER.decode(merged, { stream: !xmlFinal });
 
-    if (!rootDateFound) {
-      const d = extractRootDate(textBuf, opts.rootDateTag);
-      if (d) {
-        meta.rootDate = d;
-        rootDateFound = true;
-      }
-    }
-
-    // Emit every complete <ITEM>...</ITEM>.
-    while (true) {
-      if (aborted) return;
-      const open = textBuf.indexOf(ITEM_OPEN);
-      if (open === -1) {
-        // Retain last 1KB so a possible open tag isn't lost.
-        if (textBuf.length > 1024) textBuf = textBuf.slice(-1024);
-        return;
-      }
-      const close = textBuf.indexOf(ITEM_CLOSE, open + ITEM_OPEN.length);
-      if (close === -1) {
-        // Wait for more data.
-        textBuf = textBuf.slice(open);
-        return;
-      }
-      const raw = textBuf.slice(open + ITEM_OPEN.length, close);
-      textBuf = textBuf.slice(close + ITEM_CLOSE.length);
-      const fields = parseItem(raw);
-      itemsDone++;
-      if (meta.sampleItems.length < sampleTarget) {
-        meta.sampleItems.push(fields);
-        for (const k of Object.keys(fields)) {
-          if (!meta.sampleColumnNames.includes(k)) meta.sampleColumnNames.push(k);
+      if (!rootDateFound) {
+        const d = extractRootDate(textBuf, opts.rootDateTag);
+        if (d) {
+          meta.rootDate = d;
+          rootDateFound = true;
         }
       }
-      if (opts.onItem) await opts.onItem(fields);
-      if (opts.maxItems && itemsDone >= opts.maxItems) {
-        aborted = true;
-        return;
-      }
-    }
-  };
 
-  const reader = res.body.getReader();
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value && value.length > 0) {
-        meta.bytesRead += value.length;
-        hasher.update(value);
-        unzip.push(value, false);
+      while (true) {
+        if (aborted) return;
+        const open = textBuf.indexOf(ITEM_OPEN);
+        if (open === -1) {
+          if (textBuf.length > 1024) textBuf = textBuf.slice(-1024);
+          return;
+        }
+        const close = textBuf.indexOf(ITEM_CLOSE, open + ITEM_OPEN.length);
+        if (close === -1) {
+          textBuf = textBuf.slice(open);
+          return;
+        }
+        const raw = textBuf.slice(open + ITEM_OPEN.length, close);
+        textBuf = textBuf.slice(close + ITEM_CLOSE.length);
+        const fields = parseItem(raw);
+        itemsDone++;
+        if (meta.sampleItems.length < sampleTarget) {
+          meta.sampleItems.push(fields);
+          for (const k of Object.keys(fields)) {
+            if (!meta.sampleColumnNames.includes(k)) meta.sampleColumnNames.push(k);
+          }
+        }
+        if (opts.onItem) await opts.onItem(fields);
+        if (opts.maxItems && itemsDone >= opts.maxItems) {
+          aborted = true;
+          return;
+        }
+      }
+    };
+
+    // Stream the local file into fflate. Node ReadableStream is async-iterable.
+    const stream = createReadStream(dl.filePath, { highWaterMark: 256 * 1024 });
+    try {
+      for await (const chunk of stream as AsyncIterable<Buffer>) {
+        const u8 = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+        unzip.push(u8, false);
+        await flushXml();
+        if (aborted) break;
+      }
+      if (!aborted) {
+        unzip.push(new Uint8Array(0), true);
         await flushXml();
       }
-      if (aborted) break;
+    } finally {
+      stream.destroy();
     }
-    if (!aborted) {
-      unzip.push(new Uint8Array(0), true);
-      await flushXml();
-    }
-  } finally {
-    try {
-      await reader.cancel();
-    } catch {
-      /* ignore */
-    }
-  }
 
-  meta.contentHash = hasher.digest("hex");
-  meta.itemCount = itemsDone;
-  return meta;
+    meta.itemCount = itemsDone;
+    return meta;
+  } finally {
+    await dl.cleanup();
+  }
 }
+
