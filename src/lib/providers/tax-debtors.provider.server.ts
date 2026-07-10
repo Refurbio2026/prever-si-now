@@ -49,6 +49,8 @@ export async function importTaxDebtors(): Promise<TaxImporterOutcome> {
       url: configuredUrl,
       xmlSuffix: "ds_dsdd.xml",
       rootDateTag: "DatumAktualizacieZoznamu",
+      logLabel: "tax_debtors",
+      tempFilename: "preversi-tax-debtors.zip",
       onItem: (fields) => {
         downloaded++;
         // Deliberately not setting ico — dataset has no IČO field.
