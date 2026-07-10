@@ -4,8 +4,9 @@
 // whole thing — we stream the ZIP through fflate, decompressed chunks into a
 // small text state machine that yields one item's fields at a time.
 
-import { createHash, type Hash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { Unzip, UnzipInflate } from "fflate";
+import { downloadToTempFile } from "@/lib/providers/download-to-file.server";
 
 export interface StreamSourceMeta {
   status: number;
@@ -20,8 +21,6 @@ export interface StreamSourceMeta {
   sampleColumnNames: string[];
   sampleItems: Array<Record<string, string>>;
 }
-
-const FETCH_TIMEOUT_MS = 60_000;
 const DECODER = new TextDecoder("utf-8");
 const ITEM_OPEN = "<ITEM>";
 const ITEM_CLOSE = "</ITEM>";
