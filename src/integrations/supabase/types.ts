@@ -162,13 +162,21 @@ export type Database = {
           debt_amount: number | null
           debtor_found: boolean
           debtor_name: string | null
+          first_seen_at: string
           ico: string
           id: string
           imported_at: string
+          is_current: boolean
+          last_seen_at: string
           provider: string
           raw_data: Json | null
+          removed_at: string | null
+          source_import_run_id: string | null
           source_record_date: string | null
+          source_record_hash: string | null
           source_url: string | null
+          valid_from: string
+          valid_to: string | null
         }
         Insert: {
           address?: string | null
@@ -176,13 +184,21 @@ export type Database = {
           debt_amount?: number | null
           debtor_found: boolean
           debtor_name?: string | null
+          first_seen_at?: string
           ico: string
           id?: string
           imported_at?: string
+          is_current?: boolean
+          last_seen_at?: string
           provider: string
           raw_data?: Json | null
+          removed_at?: string | null
+          source_import_run_id?: string | null
           source_record_date?: string | null
+          source_record_hash?: string | null
           source_url?: string | null
+          valid_from?: string
+          valid_to?: string | null
         }
         Update: {
           address?: string | null
@@ -190,13 +206,21 @@ export type Database = {
           debt_amount?: number | null
           debtor_found?: boolean
           debtor_name?: string | null
+          first_seen_at?: string
           ico?: string
           id?: string
           imported_at?: string
+          is_current?: boolean
+          last_seen_at?: string
           provider?: string
           raw_data?: Json | null
+          removed_at?: string | null
+          source_import_run_id?: string | null
           source_record_date?: string | null
+          source_record_hash?: string | null
           source_url?: string | null
+          valid_from?: string
+          valid_to?: string | null
         }
         Relationships: []
       }
@@ -304,47 +328,71 @@ export type Database = {
       }
       company_tax_status: {
         Row: {
+          first_seen_at: string
           ic_dph: string | null
           ico: string
           id: string
           imported_at: string
+          is_current: boolean
+          last_seen_at: string
           raw_data: Json | null
+          removed_at: string | null
           source_dataset: string | null
+          source_import_run_id: string | null
           source_record_date: string | null
+          source_record_hash: string | null
           source_url: string | null
           tax_debt_amount: number | null
           tax_debtor_found: boolean | null
           tax_reliability_index: string | null
+          valid_from: string
+          valid_to: string | null
           vat_registered: boolean | null
           vat_registration_date: string | null
         }
         Insert: {
+          first_seen_at?: string
           ic_dph?: string | null
           ico: string
           id?: string
           imported_at?: string
+          is_current?: boolean
+          last_seen_at?: string
           raw_data?: Json | null
+          removed_at?: string | null
           source_dataset?: string | null
+          source_import_run_id?: string | null
           source_record_date?: string | null
+          source_record_hash?: string | null
           source_url?: string | null
           tax_debt_amount?: number | null
           tax_debtor_found?: boolean | null
           tax_reliability_index?: string | null
+          valid_from?: string
+          valid_to?: string | null
           vat_registered?: boolean | null
           vat_registration_date?: string | null
         }
         Update: {
+          first_seen_at?: string
           ic_dph?: string | null
           ico?: string
           id?: string
           imported_at?: string
+          is_current?: boolean
+          last_seen_at?: string
           raw_data?: Json | null
+          removed_at?: string | null
           source_dataset?: string | null
+          source_import_run_id?: string | null
           source_record_date?: string | null
+          source_record_hash?: string | null
           source_url?: string | null
           tax_debt_amount?: number | null
           tax_debtor_found?: boolean | null
           tax_reliability_index?: string | null
+          valid_from?: string
+          valid_to?: string | null
           vat_registered?: boolean | null
           vat_registration_date?: string | null
         }
@@ -533,39 +581,66 @@ export type Database = {
           error_message: string | null
           finished_at: string | null
           id: string
+          previous_source_hash: string | null
           provider: string
+          records_deactivated: number
           records_downloaded: number | null
+          records_inserted: number
+          records_invalid: number
           records_normalized: number | null
+          records_unchanged: number
+          records_updated: number
+          records_valid: number
           records_with_ico: number | null
+          source_record_date: string | null
           source_url: string | null
           started_at: string
           status: string
+          validation_status: string | null
         }
         Insert: {
           content_hash?: string | null
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          previous_source_hash?: string | null
           provider: string
+          records_deactivated?: number
           records_downloaded?: number | null
+          records_inserted?: number
+          records_invalid?: number
           records_normalized?: number | null
+          records_unchanged?: number
+          records_updated?: number
+          records_valid?: number
           records_with_ico?: number | null
+          source_record_date?: string | null
           source_url?: string | null
           started_at?: string
           status: string
+          validation_status?: string | null
         }
         Update: {
           content_hash?: string | null
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          previous_source_hash?: string | null
           provider?: string
+          records_deactivated?: number
           records_downloaded?: number | null
+          records_inserted?: number
+          records_invalid?: number
           records_normalized?: number | null
+          records_unchanged?: number
+          records_updated?: number
+          records_valid?: number
           records_with_ico?: number | null
+          source_record_date?: string | null
           source_url?: string | null
           started_at?: string
           status?: string
+          validation_status?: string | null
         }
         Relationships: []
       }
@@ -650,6 +725,90 @@ export type Database = {
         }
         Relationships: []
       }
+      staging_insurance_debts: {
+        Row: {
+          address: string | null
+          currency: string | null
+          debt_amount: number | null
+          debtor_name: string | null
+          ico: string
+          provider: string
+          raw_data: Json | null
+          run_id: string
+          source_record_hash: string
+          source_url: string | null
+        }
+        Insert: {
+          address?: string | null
+          currency?: string | null
+          debt_amount?: number | null
+          debtor_name?: string | null
+          ico: string
+          provider: string
+          raw_data?: Json | null
+          run_id: string
+          source_record_hash: string
+          source_url?: string | null
+        }
+        Update: {
+          address?: string | null
+          currency?: string | null
+          debt_amount?: number | null
+          debtor_name?: string | null
+          ico?: string
+          provider?: string
+          raw_data?: Json | null
+          run_id?: string
+          source_record_hash?: string
+          source_url?: string | null
+        }
+        Relationships: []
+      }
+      staging_tax_records: {
+        Row: {
+          dataset: string
+          ic_dph: string | null
+          ico: string
+          raw_data: Json | null
+          run_id: string
+          source_record_hash: string
+          source_url: string | null
+          tax_debt_amount: number | null
+          tax_debtor_found: boolean | null
+          tax_reliability_index: string | null
+          vat_registered: boolean | null
+          vat_registration_date: string | null
+        }
+        Insert: {
+          dataset: string
+          ic_dph?: string | null
+          ico: string
+          raw_data?: Json | null
+          run_id: string
+          source_record_hash: string
+          source_url?: string | null
+          tax_debt_amount?: number | null
+          tax_debtor_found?: boolean | null
+          tax_reliability_index?: string | null
+          vat_registered?: boolean | null
+          vat_registration_date?: string | null
+        }
+        Update: {
+          dataset?: string
+          ic_dph?: string | null
+          ico?: string
+          raw_data?: Json | null
+          run_id?: string
+          source_record_hash?: string
+          source_url?: string | null
+          tax_debt_amount?: number | null
+          tax_debtor_found?: boolean | null
+          tax_reliability_index?: string | null
+          vat_registered?: boolean | null
+          vat_registration_date?: string | null
+        }
+        Relationships: []
+      }
       tax_import_runs: {
         Row: {
           content_hash: string | null
@@ -657,13 +816,21 @@ export type Database = {
           error_message: string | null
           finished_at: string | null
           id: string
+          previous_source_hash: string | null
+          records_deactivated: number
           records_downloaded: number
+          records_inserted: number
+          records_invalid: number
           records_normalized: number
+          records_unchanged: number
+          records_updated: number
+          records_valid: number
           records_with_valid_ico: number
           source_record_date: string | null
           source_url: string | null
           started_at: string
           status: string
+          validation_status: string | null
         }
         Insert: {
           content_hash?: string | null
@@ -671,13 +838,21 @@ export type Database = {
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          previous_source_hash?: string | null
+          records_deactivated?: number
           records_downloaded?: number
+          records_inserted?: number
+          records_invalid?: number
           records_normalized?: number
+          records_unchanged?: number
+          records_updated?: number
+          records_valid?: number
           records_with_valid_ico?: number
           source_record_date?: string | null
           source_url?: string | null
           started_at?: string
           status: string
+          validation_status?: string | null
         }
         Update: {
           content_hash?: string | null
@@ -685,13 +860,21 @@ export type Database = {
           error_message?: string | null
           finished_at?: string | null
           id?: string
+          previous_source_hash?: string | null
+          records_deactivated?: number
           records_downloaded?: number
+          records_inserted?: number
+          records_invalid?: number
           records_normalized?: number
+          records_unchanged?: number
+          records_updated?: number
+          records_valid?: number
           records_with_valid_ico?: number
           source_record_date?: string | null
           source_url?: string | null
           started_at?: string
           status?: string
+          validation_status?: string | null
         }
         Relationships: []
       }
@@ -754,6 +937,24 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      reconcile_insurance_debts: {
+        Args: { _provider: string; _run_id: string; _source_date: string }
+        Returns: {
+          deactivated: number
+          inserted: number
+          unchanged: number
+          updated: number
+        }[]
+      }
+      reconcile_tax_dataset: {
+        Args: { _dataset: string; _run_id: string; _source_date: string }
+        Returns: {
+          deactivated: number
+          inserted: number
+          unchanged: number
+          updated: number
+        }[]
       }
     }
     Enums: {
