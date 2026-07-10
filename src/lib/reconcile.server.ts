@@ -481,16 +481,12 @@ async function closeRemovedInsuranceKeys(
     const batchNo = Math.floor(i / CLOSE_REMOVED_BATCH) + 1;
     const slice = removedKeys.slice(i, i + CLOSE_REMOVED_BATCH);
     logStatement(label, "close-removed", `chunk ${batchNo}/${totalBatches} keys=${slice.length}`);
-    const now = new Date().toISOString();
-    const { data, error } = await admin
-      .from("company_insurance_debts")
-      .update({ is_current: false, valid_to: now, removed_at: now })
-      .eq("provider", provider)
-      .eq("is_current", true)
-      .in("ico", slice)
-      .select("ico");
+    const { data, error } = await admin.rpc("close_removed_insurance_debt_keys", {
+      _provider: provider,
+      _icos: slice,
+    });
     if (error) throw new Error(`close removed chunk ${batchNo}: ${error.message}`);
-    const changed = ((data as Array<{ ico: string }> | null) ?? []).length;
+    const changed = Number(data ?? 0);
     deactivated += changed;
     logProgress(`${label} close-removed`, batchNo, { keys: slice.length, deactivated: changed });
     await reportProgress(progress, {
@@ -519,16 +515,12 @@ async function closeRemovedTaxKeys(
     const batchNo = Math.floor(i / CLOSE_REMOVED_BATCH) + 1;
     const slice = removedKeys.slice(i, i + CLOSE_REMOVED_BATCH);
     logStatement(label, "close-removed", `chunk ${batchNo}/${totalBatches} keys=${slice.length}`);
-    const now = new Date().toISOString();
-    const { data, error } = await admin
-      .from("company_tax_status")
-      .update({ is_current: false, valid_to: now, removed_at: now })
-      .eq("source_dataset", dataset)
-      .eq("is_current", true)
-      .in("ico", slice)
-      .select("ico");
+    const { data, error } = await admin.rpc("close_removed_tax_status_keys", {
+      _dataset: dataset,
+      _icos: slice,
+    });
     if (error) throw new Error(`close removed chunk ${batchNo}: ${error.message}`);
-    const changed = ((data as Array<{ ico: string }> | null) ?? []).length;
+    const changed = Number(data ?? 0);
     deactivated += changed;
     logProgress(`${label} close-removed`, batchNo, { keys: slice.length, deactivated: changed });
     await reportProgress(progress, {
