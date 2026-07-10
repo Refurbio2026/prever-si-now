@@ -436,18 +436,27 @@ export type Database = {
       }
       datahub_settings: {
         Row: {
+          global_import_last_finished_at: string | null
+          global_import_running: boolean
+          global_import_started_at: string | null
           id: boolean
           updated_at: string
           updated_by: string | null
           worker_paused: boolean
         }
         Insert: {
+          global_import_last_finished_at?: string | null
+          global_import_running?: boolean
+          global_import_started_at?: string | null
           id?: boolean
           updated_at?: string
           updated_by?: string | null
           worker_paused?: boolean
         }
         Update: {
+          global_import_last_finished_at?: string | null
+          global_import_running?: boolean
+          global_import_started_at?: string | null
           id?: boolean
           updated_at?: string
           updated_by?: string | null
