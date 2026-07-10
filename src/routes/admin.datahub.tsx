@@ -643,7 +643,13 @@ async function fetchSchedulerOverview(): Promise<{
   ): SchedulerJob => {
     const cron = cronByName.get(base.name);
     return {
-      ...base,
+      name: base.name,
+      schedule: base.schedule,
+      description: base.description,
+      lastRunAt: null,
+      lastStatus: null,
+      lastError: null,
+      running: false,
       ...overrides,
       cronSchedule: cron?.schedule ?? null,
       cronActive: cron?.active ?? null,
