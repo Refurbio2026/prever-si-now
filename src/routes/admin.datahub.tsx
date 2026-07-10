@@ -919,3 +919,115 @@ function SchedulerOverview() {
     </Card>
   );
 }
+
+function ProgressList({
+  rows,
+  runId,
+}: {
+  rows: ProgressRow[];
+  runId: string | null;
+}) {
+  if (!runId) return null;
+  const byId = new Map(rows.map((r) => [r.source, r] as const));
+  const sources = PROGRESS_SOURCES;
+  return (
+    <div className="mt-3 space-y-2 rounded-xl border border-border/60 bg-muted/30 p-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Živý postup (run {runId.slice(0, 8)}…)
+      </div>
+      {sources.map((s) => {
+        const row = byId.get(s.id);
+        return <ProgressLine key={s.id} label={s.label} row={row ?? null} />;
+      })}
+    </div>
+  );
+}
+
+function ProgressLine({
+  label,
+  row,
+}: {
+  label: string;
+  row: ProgressRow | null;
+}) {
+  if (!row) {
+    return (
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="font-medium">{label}</span>
+        <span className="text-xs text-muted-foreground">čaká…</span>
+      </div>
+    );
+  }
+  const pct =
+    row.total_batches && row.total_batches > 0 && row.current_batch != null
+      ? Math.min(100, Math.round((row.current_batch / row.total_batches) * 100))
+      : null;
+  const done = row.phase === "done";
+  const failed = row.phase === "failed";
+  const phaseLabel =
+    row.phase === "download"
+      ? "sťahovanie"
+      : row.phase === "validation"
+        ? "validácia"
+        : row.phase === "staging"
+          ? "staging"
+          : row.phase === "reconciliation"
+            ? "rekonciliácia"
+            : row.phase;
+  const batchText =
+    row.current_batch != null
+      ? row.total_batches
+        ? `dávka ${row.current_batch}/${row.total_batches}`
+        : `dávka ${row.current_batch}`
+      : null;
+  const recordsText =
+    row.records_processed != null
+      ? ` (${row.records_processed.toLocaleString("sk-SK")} záznamov)`
+      : "";
+  return (
+    <div className="space-y-1">
+      <div className="flex items-start justify-between gap-3 text-sm">
+        <div className="flex items-center gap-2">
+          {done ? (
+            <CheckCircle2 className="h-4 w-4 text-success" />
+          ) : failed ? (
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+          ) : (
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          )}
+          <span className="font-medium">{label}</span>
+          <span
+            className={
+              failed
+                ? "text-xs text-destructive"
+                : "text-xs text-muted-foreground"
+            }
+          >
+            — {phaseLabel}
+            {batchText ? `: ${batchText}` : ""}
+            {recordsText}
+          </span>
+        </div>
+      </div>
+      {row.message && (
+        <div
+          className={
+            failed
+              ? "pl-6 text-xs text-destructive"
+              : "pl-6 text-xs text-muted-foreground"
+          }
+        >
+          {row.message}
+        </div>
+      )}
+      {pct != null && !done && !failed && (
+        <div className="ml-6 h-1.5 overflow-hidden rounded-full bg-border/60">
+          <div
+            className="h-full bg-primary transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
