@@ -29,6 +29,7 @@ import { Route as AdminImportsRouteImport } from './routes/admin.imports'
 import { Route as AdminDatahubRouteImport } from './routes/admin.datahub'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
 import { Route as AdminApiDebugRouteImport } from './routes/admin.api-debug'
+import { Route as AdminDatahubInsuranceRouteImport } from './routes/admin.datahub.insurance'
 import { Route as ApiPublicHooksInsuranceWorkerRouteImport } from './routes/api/public/hooks/insurance-worker'
 import { Route as ApiPublicHooksDatahubWorkerRouteImport } from './routes/api/public/hooks/datahub-worker'
 
@@ -132,6 +133,11 @@ const AdminApiDebugRoute = AdminApiDebugRouteImport.update({
   path: '/api-debug',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminDatahubInsuranceRoute = AdminDatahubInsuranceRouteImport.update({
+  id: '/insurance',
+  path: '/insurance',
+  getParentRoute: () => AdminDatahubRoute,
+} as any)
 const ApiPublicHooksInsuranceWorkerRoute =
   ApiPublicHooksInsuranceWorkerRouteImport.update({
     id: '/api/public/hooks/insurance-worker',
@@ -154,7 +160,7 @@ export interface FileRoutesByFullPath {
   '/search': typeof SearchRoute
   '/admin/api-debug': typeof AdminApiDebugRoute
   '/admin/companies': typeof AdminCompaniesRoute
-  '/admin/datahub': typeof AdminDatahubRoute
+  '/admin/datahub': typeof AdminDatahubRouteWithChildren
   '/admin/imports': typeof AdminImportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
@@ -166,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/search': typeof DashboardSearchRoute
   '/admin/': typeof AdminIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/admin/datahub/insurance': typeof AdminDatahubInsuranceRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
 }
@@ -176,7 +183,7 @@ export interface FileRoutesByTo {
   '/search': typeof SearchRoute
   '/admin/api-debug': typeof AdminApiDebugRoute
   '/admin/companies': typeof AdminCompaniesRoute
-  '/admin/datahub': typeof AdminDatahubRoute
+  '/admin/datahub': typeof AdminDatahubRouteWithChildren
   '/admin/imports': typeof AdminImportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
@@ -188,6 +195,7 @@ export interface FileRoutesByTo {
   '/dashboard/search': typeof DashboardSearchRoute
   '/admin': typeof AdminIndexRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/admin/datahub/insurance': typeof AdminDatahubInsuranceRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
 }
@@ -201,7 +209,7 @@ export interface FileRoutesById {
   '/search': typeof SearchRoute
   '/admin/api-debug': typeof AdminApiDebugRoute
   '/admin/companies': typeof AdminCompaniesRoute
-  '/admin/datahub': typeof AdminDatahubRoute
+  '/admin/datahub': typeof AdminDatahubRouteWithChildren
   '/admin/imports': typeof AdminImportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
@@ -213,6 +221,7 @@ export interface FileRoutesById {
   '/dashboard/search': typeof DashboardSearchRoute
   '/admin/': typeof AdminIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/admin/datahub/insurance': typeof AdminDatahubInsuranceRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
 }
@@ -239,6 +248,7 @@ export interface FileRouteTypes {
     | '/dashboard/search'
     | '/admin/'
     | '/dashboard/'
+    | '/admin/datahub/insurance'
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
   fileRoutesByTo: FileRoutesByTo
@@ -261,6 +271,7 @@ export interface FileRouteTypes {
     | '/dashboard/search'
     | '/admin'
     | '/dashboard'
+    | '/admin/datahub/insurance'
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
   id:
@@ -285,6 +296,7 @@ export interface FileRouteTypes {
     | '/dashboard/search'
     | '/admin/'
     | '/dashboard/'
+    | '/admin/datahub/insurance'
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
   fileRoutesById: FileRoutesById
@@ -443,6 +455,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminApiDebugRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/datahub/insurance': {
+      id: '/admin/datahub/insurance'
+      path: '/insurance'
+      fullPath: '/admin/datahub/insurance'
+      preLoaderRoute: typeof AdminDatahubInsuranceRouteImport
+      parentRoute: typeof AdminDatahubRoute
+    }
     '/api/public/hooks/insurance-worker': {
       id: '/api/public/hooks/insurance-worker'
       path: '/api/public/hooks/insurance-worker'
@@ -460,10 +479,22 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminDatahubRouteChildren {
+  AdminDatahubInsuranceRoute: typeof AdminDatahubInsuranceRoute
+}
+
+const AdminDatahubRouteChildren: AdminDatahubRouteChildren = {
+  AdminDatahubInsuranceRoute: AdminDatahubInsuranceRoute,
+}
+
+const AdminDatahubRouteWithChildren = AdminDatahubRoute._addFileChildren(
+  AdminDatahubRouteChildren,
+)
+
 interface AdminRouteChildren {
   AdminApiDebugRoute: typeof AdminApiDebugRoute
   AdminCompaniesRoute: typeof AdminCompaniesRoute
-  AdminDatahubRoute: typeof AdminDatahubRoute
+  AdminDatahubRoute: typeof AdminDatahubRouteWithChildren
   AdminImportsRoute: typeof AdminImportsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminUsersRoute: typeof AdminUsersRoute
@@ -473,7 +504,7 @@ interface AdminRouteChildren {
 const AdminRouteChildren: AdminRouteChildren = {
   AdminApiDebugRoute: AdminApiDebugRoute,
   AdminCompaniesRoute: AdminCompaniesRoute,
-  AdminDatahubRoute: AdminDatahubRoute,
+  AdminDatahubRoute: AdminDatahubRouteWithChildren,
   AdminImportsRoute: AdminImportsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminUsersRoute: AdminUsersRoute,
