@@ -145,7 +145,7 @@ async function runStep(step: StepId, sb: SupabaseClient): Promise<GlobalStepResu
       step,
       ok:
         step === "tax_debtors"
-          ? r.status !== "crashed"
+          ? r.status !== "failed" && r.status !== "crashed"
           : r.status === "success" || r.status === "unchanged" || r.status === "empty",
       status: r.status ?? null,
       errorMessage: r.errorMessage ?? null,
