@@ -909,6 +909,9 @@ function SchedulerOverview() {
                   </div>
                 )}
               </div>
+              {isGlobal && (job.running || progressRows.length > 0) && (
+                <ProgressList rows={progressRows} runId={currentRunId} />
+              )}
             </div>
           );
         })}
