@@ -188,6 +188,7 @@ export async function importVatRegisterStreamed(
     run_id: string;
   }> = [];
 
+  const { reportProgress } = await import("@/lib/import-progress.server");
   const flush = async (): Promise<void> => {
     if (batch.length === 0 || stagingError) return;
     batchNo++;
@@ -196,10 +197,24 @@ export async function importVatRegisterStreamed(
     if (error) {
       stagingError = error.message;
       logVatError(`staging batch ${batchNo} failed: ${error.message}`);
+      await reportProgress(progress ?? null, {
+        phase: "staging",
+        currentBatch: batchNo,
+        totalBatches: null,
+        recordsProcessed: staged,
+        message: `Staging dávka ${batchNo} zlyhala: ${error.message}`,
+      });
       return;
     }
     staged += batch.length;
     logVat(`staging batch ${batchNo} rows=${rows} staged=${staged}`);
+    await reportProgress(progress ?? null, {
+      phase: "staging",
+      currentBatch: batchNo,
+      totalBatches: null,
+      recordsProcessed: staged,
+      message: `Staging dávka ${batchNo} (streamovanie, ${staged} záznamov)`,
+    });
     batch = [];
   };
 
