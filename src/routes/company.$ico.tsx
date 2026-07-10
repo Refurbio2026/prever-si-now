@@ -64,6 +64,7 @@ import {
 } from "@/lib/datahub-auto.functions";
 import { AiReportCard } from "@/components/ai-report-card";
 import { InsuranceDebtsSection } from "@/components/insurance-debts-section";
+import { TaxStatusSection } from "@/components/tax-status-section";
 import { SeverityBadge } from "@/components/severity-badge";
 import {
   detectCompanyChangesFn,
@@ -477,6 +478,7 @@ function CompanyProfileView({
           <TabsContent value="overview" className="space-y-6">
             <AiReportCard ico={ico} />
             <InsuranceDebtsSection ico={ico} />
+            <TaxStatusSection ico={ico} />
 
             {criticalRisks.length > 0 && (
               <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
