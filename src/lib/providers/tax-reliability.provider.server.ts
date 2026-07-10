@@ -68,7 +68,7 @@ export async function importTaxReliability(): Promise<TaxImporterOutcome> {
       recordsWithValidIco: 0,
       contentHash: null,
       errorMessage:
-        "Zdrojová URL Indexu daňovej spoľahlivosti nie je nakonfigurovaná (FS_TAX_RELIABILITY_URL). Bez oficiálneho odkazu neuvádzame žiadnu klasifikáciu.",
+        "Oficiálny individuálny dataset podľa IČO nebol potvrdený. Známe FS OpenData zdroje obsahujú len agregovanú štatistiku indexu spoľahlivosti — jednotlivé firmy zatiaľ neimportujeme.",
       records: [],
       sourceRecordDate: null,
     };
