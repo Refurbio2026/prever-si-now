@@ -1,0 +1,12 @@
+REVOKE ALL ON FUNCTION public.reconcile_insurance_debts_batch(text, uuid, date, text, int) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.reconcile_insurance_deactivate_batch(text, uuid, text, int) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.reconcile_insurance_cleanup(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.reconcile_tax_dataset_batch(text, uuid, date, text, int) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.reconcile_tax_dataset_deactivate_batch(text, uuid, text, int) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.reconcile_tax_dataset_cleanup(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reconcile_insurance_debts_batch(text, uuid, date, text, int) TO service_role;
+GRANT EXECUTE ON FUNCTION public.reconcile_insurance_deactivate_batch(text, uuid, text, int) TO service_role;
+GRANT EXECUTE ON FUNCTION public.reconcile_insurance_cleanup(uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.reconcile_tax_dataset_batch(text, uuid, date, text, int) TO service_role;
+GRANT EXECUTE ON FUNCTION public.reconcile_tax_dataset_deactivate_batch(text, uuid, text, int) TO service_role;
+GRANT EXECUTE ON FUNCTION public.reconcile_tax_dataset_cleanup(uuid) TO service_role;
