@@ -310,7 +310,7 @@ export async function importOneProvider(
   };
   logImport(
     provider,
-    `downloaded bytes=${outcome.recordsDownloaded} hash=${shortHash(outcome.contentHash)} status=${outcome.status}`,
+    `downloaded records=${outcome.recordsDownloaded} hash=${shortHash(outcome.contentHash)} status=${outcome.status}`,
   );
 
   // Early-exit statuses.
