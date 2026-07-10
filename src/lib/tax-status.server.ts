@@ -712,7 +712,13 @@ export async function importOneDataset(
 
   const prevSnapshot = await snapshotWatched(dataset);
 
-  const staged = await stageTax(admin(), outcome.records, runId, datasetLogLabel(dataset));
+  const staged = await stageTax(
+    admin(),
+    outcome.records,
+    runId,
+    datasetLogLabel(dataset),
+    progress,
+  );
   if (staged.errorMessage) {
     logImportError(dataset, `staging failed after ${staged.staged} rows: ${staged.errorMessage}`);
     await cleanupStaging(admin(), "staging_tax_records", runId);
