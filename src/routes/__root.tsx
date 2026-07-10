@@ -85,14 +85,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "Slovenská platforma pre biznis inteligenciu. Finančné zdravie, riziká, dlhy, konatelia a AI analýza firiem.",
       },
       { name: "author", content: "PreverSi.sk" },
-      { property: "og:title", content: "PreverSi.sk — Business intelligence pre slovenské firmy" },
+      { property: "og:title", content: "PreverSi.sk — Preverte si každú slovenskú firmu" },
       {
         property: "og:description",
         content:
-          "Finančné zdravie, riziká, dlhy, konatelia, monitoring a AI analýza firiem v jednom nástroji.",
+          "Slovenská platforma pre biznis inteligenciu. Finančné zdravie, riziká, dlhy, konatelia a AI analýza firiem.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "PreverSi.sk — Preverte si každú slovenskú firmu" },
+      { name: "twitter:description", content: "Slovenská platforma pre biznis inteligenciu. Finančné zdravie, riziká, dlhy, konatelia a AI analýza firiem." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/8e1b7517-be27-4f43-84bf-e00c8e926722/id-preview-bb533d5e--2a19b096-ded5-4f98-b01e-ebcff1046c4a.lovable.app-1783547471797.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/8e1b7517-be27-4f43-84bf-e00c8e926722/id-preview-bb533d5e--2a19b096-ded5-4f98-b01e-ebcff1046c4a.lovable.app-1783547471797.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
