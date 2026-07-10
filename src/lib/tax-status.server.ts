@@ -304,6 +304,167 @@ export interface TaxDatasetImportResult {
   errorMessage: string | null;
 }
 
+async function importVatStreamedFlow(
+  runId: string,
+): Promise<TaxDatasetImportResult> {
+  const prevHash = await latestSuccessHash("vat_registered");
+  const prevSnapshot = await snapshotWatched("vat_registered");
+  const summary = await importVatRegisterStreamed(admin(), runId);
+
+  const commonUpdate: RunUpdate = {
+    source_url: summary.sourceUrl,
+    content_hash: summary.contentHash || null,
+    previous_source_hash: prevHash,
+    source_record_date: summary.sourceRecordDate,
+    records_downloaded: summary.recordsDownloaded,
+    records_normalized: summary.recordsNormalized,
+    records_with_valid_ico: summary.recordsWithValidIco,
+  };
+
+  if (summary.errorMessage) {
+    await cleanupStaging(admin(), "staging_tax_records", runId);
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "failed",
+      validation_status: "failed",
+      error_message: summary.errorMessage,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness("vat_registered", false, summary.errorMessage);
+    return {
+      dataset: "vat_registered",
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: summary.errorMessage,
+    };
+  }
+
+  // Unchanged shortcut — same source hash as last successful run.
+  if (summary.contentHash && prevHash && summary.contentHash === prevHash) {
+    await cleanupStaging(admin(), "staging_tax_records", runId);
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "unchanged",
+      validation_status: "skipped",
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness("vat_registered", true, "Dataset nezmenený od posledného behu.");
+    return {
+      dataset: "vat_registered",
+      status: "unchanged",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: null,
+    };
+  }
+
+  // Validation gate — required columns and sanity thresholds.
+  const th = TAX_THRESHOLDS.vat_registered;
+  const invalid = summary.recordsDownloaded - summary.recordsWithValidIco;
+  const validRatio =
+    summary.recordsDownloaded > 0
+      ? summary.recordsWithValidIco / summary.recordsDownloaded
+      : 0;
+
+  const missingCols: string[] = [];
+  if (!summary.sampleColumnNames.includes("ICO")) missingCols.push("ICO");
+  if (!summary.sampleColumnNames.includes("IC_DPH")) missingCols.push("IC_DPH");
+
+  let validationError: string | null = null;
+  if (missingCols.length > 0) {
+    validationError = `Zdroj neobsahuje povinné polia: ${missingCols.join(", ")}.`;
+  } else if (summary.recordsStaged < th.minRecords) {
+    validationError = `Dataset obsahuje príliš málo záznamov s platným IČO (${summary.recordsStaged} < ${th.minRecords}).`;
+  } else if (summary.recordsDownloaded > 0 && validRatio < th.minValidIcoRatio) {
+    validationError = `Podiel záznamov s platným IČO je nízky (${(validRatio * 100).toFixed(1)}%).`;
+  } else if (summary.duplicateRatio > th.maxDuplicateRatio) {
+    validationError = `Podiel duplicít je vysoký (${(summary.duplicateRatio * 100).toFixed(1)}%). Zdroj vyzerá poškodený.`;
+  }
+
+  if (validationError) {
+    await cleanupStaging(admin(), "staging_tax_records", runId);
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "failed",
+      validation_status: "failed",
+      records_valid: summary.recordsWithValidIco,
+      records_invalid: invalid,
+      error_message: validationError,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness("vat_registered", false, validationError);
+    return {
+      dataset: "vat_registered",
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: validationError,
+    };
+  }
+
+  const sourceDate = summary.sourceRecordDate ?? new Date().toISOString().slice(0, 10);
+  const rec = await reconcileTax(admin(), "vat_registered", runId, sourceDate);
+  if (rec.errorMessage || !rec.counts) {
+    await cleanupStaging(admin(), "staging_tax_records", runId);
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "failed",
+      validation_status: "failed",
+      records_valid: summary.recordsWithValidIco,
+      records_invalid: invalid,
+      error_message: `Reconciliation zlyhal: ${rec.errorMessage ?? "unknown"}`,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness("vat_registered", false, rec.errorMessage);
+    return {
+      dataset: "vat_registered",
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: rec.errorMessage,
+    };
+  }
+
+  try {
+    await emitChanges("vat_registered", prevSnapshot);
+  } catch {
+    /* ignored */
+  }
+
+  await updateRunRow(runId, {
+    ...commonUpdate,
+    status: "success",
+    validation_status: "passed",
+    records_valid: summary.recordsWithValidIco,
+    records_invalid: invalid,
+    records_inserted: rec.counts.inserted,
+    records_updated: rec.counts.updated,
+    records_unchanged: rec.counts.unchanged,
+    records_deactivated: rec.counts.deactivated,
+    finished_at: new Date().toISOString(),
+  });
+  await writeFreshness("vat_registered", true, null);
+
+  return {
+    dataset: "vat_registered",
+    status: "success",
+    recordsInserted: rec.counts.inserted,
+    recordsUpdated: rec.counts.updated,
+    recordsUnchanged: rec.counts.unchanged,
+    recordsDeactivated: rec.counts.deactivated,
+    errorMessage: null,
+  };
+}
+
 export async function importOneDataset(
   dataset: TaxDatasetId,
 ): Promise<TaxDatasetImportResult> {
