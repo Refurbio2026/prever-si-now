@@ -228,6 +228,8 @@ export async function importVatRegisterStreamed(
       url: configuredUrl,
       xmlSuffix: "ds_dphs.xml",
       rootDateTag: "DatumAktualizacieZoznamu",
+      logLabel: "VAT",
+      tempFilename: "preversi-vat.zip",
       onItem: async (fields) => {
         if (stagingError) return;
         downloaded++;
