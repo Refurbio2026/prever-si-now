@@ -749,7 +749,7 @@ export async function importOneDataset(
   }
 
   const sourceDate = outcome.sourceRecordDate ?? new Date().toISOString().slice(0, 10);
-  const rec = await reconcileTax(admin(), dataset, runId, sourceDate);
+  const rec = await reconcileTax(admin(), dataset, runId, sourceDate, progress);
   if (rec.errorMessage || !rec.counts) {
     logImportError(dataset, `reconciliation failed: ${rec.errorMessage ?? "unknown"}`);
     await cleanupStaging(admin(), "staging_tax_records", runId);
