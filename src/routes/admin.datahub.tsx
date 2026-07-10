@@ -774,7 +774,7 @@ function SchedulerOverview() {
   const currentRunId = progress.data?.runId ?? settingsRunId;
 
   // When run flips to done/failed for all sources, refresh freshness overview.
-  const progressRows = progress.data ?? [];
+  const progressRows: ProgressRow[] = progress.data?.rows ?? [];
   const allTerminal =
     progressRows.length > 0 &&
     progressRows.every((r) => r.phase === "done" || r.phase === "failed");
