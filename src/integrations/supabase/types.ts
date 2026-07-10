@@ -263,6 +263,75 @@ export type Database = {
         }
         Relationships: []
       }
+      company_persons: {
+        Row: {
+          address: string | null
+          birth_date: string | null
+          created_at: string
+          first_seen_at: string
+          full_name: string
+          function_label: string | null
+          ico: string
+          id: string
+          is_current: boolean
+          last_seen_at: string
+          person_type: string
+          raw_data: Json | null
+          removed_at: string | null
+          share_amount: number | null
+          share_currency: string | null
+          share_percent: number | null
+          source: string
+          updated_at: string
+          valid_from: string | null
+          valid_to: string | null
+        }
+        Insert: {
+          address?: string | null
+          birth_date?: string | null
+          created_at?: string
+          first_seen_at?: string
+          full_name: string
+          function_label?: string | null
+          ico: string
+          id?: string
+          is_current?: boolean
+          last_seen_at?: string
+          person_type: string
+          raw_data?: Json | null
+          removed_at?: string | null
+          share_amount?: number | null
+          share_currency?: string | null
+          share_percent?: number | null
+          source?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_to?: string | null
+        }
+        Update: {
+          address?: string | null
+          birth_date?: string | null
+          created_at?: string
+          first_seen_at?: string
+          full_name?: string
+          function_label?: string | null
+          ico?: string
+          id?: string
+          is_current?: boolean
+          last_seen_at?: string
+          person_type?: string
+          raw_data?: Json | null
+          removed_at?: string | null
+          share_amount?: number | null
+          share_currency?: string | null
+          share_percent?: number | null
+          source?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_to?: string | null
+        }
+        Relationships: []
+      }
       company_registry: {
         Row: {
           address: string | null
@@ -300,6 +369,51 @@ export type Database = {
           name?: string | null
           registration_date?: string | null
           registration_number?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      company_registry_history: {
+        Row: {
+          change_type: string
+          created_at: string
+          effective_date: string | null
+          field_label: string | null
+          first_seen_at: string
+          ico: string
+          id: string
+          is_current: boolean
+          new_value: string | null
+          old_value: string | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          change_type: string
+          created_at?: string
+          effective_date?: string | null
+          field_label?: string | null
+          first_seen_at?: string
+          ico: string
+          id?: string
+          is_current?: boolean
+          new_value?: string | null
+          old_value?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          change_type?: string
+          created_at?: string
+          effective_date?: string | null
+          field_label?: string | null
+          first_seen_at?: string
+          ico?: string
+          id?: string
+          is_current?: boolean
+          new_value?: string | null
+          old_value?: string | null
           source?: string
           updated_at?: string
         }
