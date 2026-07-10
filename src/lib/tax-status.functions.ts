@@ -497,3 +497,147 @@ export const getDeactivatedTaxFn = createServerFn({ method: "POST" })
     }));
   });
 
+// ---------- source diagnostics ----------
+
+export interface DatasetSourceDiagnostic {
+  dataset: TaxDatasetId;
+  landingUrl: string;
+  configuredUrl: string | null;
+  httpStatus: number | null;
+  contentType: string | null;
+  contentLength: number | null;
+  lastModified: string | null;
+  etag: string | null;
+  detectedFormat: string | null;
+  sourceRecordDate: string | null;
+  sampleColumnNames: string[];
+  sampleItems: Array<Record<string, string>>;
+  requiredColumns: string[];
+  missingColumns: string[];
+  errorMessage: string | null;
+}
+
+const DATASET_META: Record<
+  TaxDatasetId,
+  { landing: string; envVar: string; xmlSuffix: string; required: string[] }
+> = {
+  tax_debtors: {
+    landing:
+      "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-dlznikov",
+    envVar: "FS_TAX_DEBTORS_URL",
+    xmlSuffix: "ds_dsdd.xml",
+    required: ["ICO", "NAZOV_SUBJEKTU", "CIASTKA"],
+  },
+  vat_registered: {
+    landing:
+      "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-subjektov-registrovanych-pre-dph1",
+    envVar: "FS_VAT_REGISTER_URL",
+    xmlSuffix: "ds_dphs.xml",
+    required: ["ICO", "IC_DPH", "DRUH_REG_DPH", "DATUM_REG"],
+  },
+  tax_reliability: {
+    landing:
+      "https://www.financnasprava.sk/sk/elektronicke-sluzby/verejne-sluzby/zoznamy",
+    envVar: "FS_TAX_RELIABILITY_URL",
+    xmlSuffix: "",
+    required: [],
+  },
+};
+
+export const getTaxSourceDiagnosticsFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<DatasetSourceDiagnostic[]> => {
+    await assertAdmin(context.supabase, context.userId);
+    const { streamFsXml, toIsoDate } = await import(
+      "@/lib/providers/fs-xml-stream.server"
+    );
+
+    const results: DatasetSourceDiagnostic[] = [];
+    for (const dataset of TAX_DATASETS) {
+      const meta = DATASET_META[dataset];
+      const configuredUrl =
+        (dataset === "tax_debtors" && process.env.FS_TAX_DEBTORS_URL) ||
+        (dataset === "vat_registered" && process.env.FS_VAT_REGISTER_URL) ||
+        (dataset === "tax_reliability" && process.env.FS_TAX_RELIABILITY_URL) ||
+        null;
+
+      if (!configuredUrl || !meta.xmlSuffix) {
+        results.push({
+          dataset,
+          landingUrl: meta.landing,
+          configuredUrl: configuredUrl || null,
+          httpStatus: null,
+          contentType: null,
+          contentLength: null,
+          lastModified: null,
+          etag: null,
+          detectedFormat: null,
+          sourceRecordDate: null,
+          sampleColumnNames: [],
+          sampleItems: [],
+          requiredColumns: meta.required,
+          missingColumns: meta.required,
+          errorMessage:
+            dataset === "tax_reliability"
+              ? "Oficiálny individuálny dataset podľa IČO nebol potvrdený."
+              : `Neuvedená URL (${meta.envVar}).`,
+        });
+        continue;
+      }
+
+      try {
+        const probe = await streamFsXml({
+          url: configuredUrl,
+          xmlSuffix: meta.xmlSuffix,
+          rootDateTag: "DatumAktualizacieZoznamu",
+          maxItems: 5,
+          sampleCount: 3,
+        });
+        const cols = probe.sampleColumnNames;
+        const missing = meta.required.filter((c) => !cols.includes(c));
+        results.push({
+          dataset,
+          landingUrl: meta.landing,
+          configuredUrl,
+          httpStatus: probe.status,
+          contentType: probe.contentType,
+          contentLength: probe.contentLength,
+          lastModified: probe.lastModified,
+          etag: probe.etag,
+          detectedFormat: probe.contentType.includes("zip")
+            ? "zip+xml"
+            : probe.contentType || null,
+          sourceRecordDate: toIsoDate(probe.rootDate),
+          sampleColumnNames: cols,
+          sampleItems: probe.sampleItems,
+          requiredColumns: meta.required,
+          missingColumns: missing,
+          errorMessage:
+            missing.length > 0
+              ? `Chýbajúce povinné polia: ${missing.join(", ")}.`
+              : null,
+        });
+      } catch (err) {
+        results.push({
+          dataset,
+          landingUrl: meta.landing,
+          configuredUrl,
+          httpStatus: null,
+          contentType: null,
+          contentLength: null,
+          lastModified: null,
+          etag: null,
+          detectedFormat: null,
+          sourceRecordDate: null,
+          sampleColumnNames: [],
+          sampleItems: [],
+          requiredColumns: meta.required,
+          missingColumns: meta.required,
+          errorMessage: err instanceof Error ? err.message : "Diagnostika zlyhala.",
+        });
+      }
+    }
+    return results;
+  });
+
+
