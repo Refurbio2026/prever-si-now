@@ -99,79 +99,23 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
   }
 
   const steps: GlobalStepResult[] = [];
+  const stepIds = ["social_insurance", "tax_debtors", "vat_registered"] as const;
 
   try {
-    // 1. Social Insurance
-    try {
-      const { importOneProvider } = await import("@/lib/insurance-debt.server");
-      const r = await importOneProvider("social_insurance");
-      steps.push({
-        step: "social_insurance",
-        ok: r.status === "success" || r.status === "unchanged" || r.status === "empty",
-        status: r.status ?? null,
-        errorMessage: r.errorMessage ?? null,
-        recordsInserted: r.recordsInserted,
-        recordsUpdated: r.recordsUpdated,
-        recordsUnchanged: r.recordsUnchanged,
-        recordsDeactivated: r.recordsDeactivated,
-      });
-    } catch (err) {
-      steps.push({
-        step: "social_insurance",
-        ok: false,
-        status: "crashed",
-        errorMessage: err instanceof Error ? err.message : "Neznáma chyba",
-      });
-    }
-
-    // 2. Tax debtors (download + validation + staging; reconciliation disabled)
-    try {
-      const { importOneDataset } = await import("@/lib/tax-status.server");
-      const r = await importOneDataset("tax_debtors");
-      steps.push({
-        step: "tax_debtors",
-        ok: r.status !== "failed" && r.status !== "crashed",
-        status: r.status ?? null,
-        errorMessage: r.errorMessage ?? null,
-        recordsInserted: r.recordsInserted,
-        recordsUpdated: r.recordsUpdated,
-        recordsUnchanged: r.recordsUnchanged,
-        recordsDeactivated: r.recordsDeactivated,
-      });
-    } catch (err) {
-      steps.push({
-        step: "tax_debtors",
-        ok: false,
-        status: "crashed",
-        errorMessage: err instanceof Error ? err.message : "Neznáma chyba",
-      });
-    }
-
-    // 3. VAT register
-    try {
-      const { importOneDataset } = await import("@/lib/tax-status.server");
-      const r = await importOneDataset("vat_registered");
-      steps.push({
-        step: "vat_registered",
-        ok: r.status === "success" || r.status === "unchanged" || r.status === "empty",
-        status: r.status ?? null,
-        errorMessage: r.errorMessage ?? null,
-        recordsInserted: r.recordsInserted,
-        recordsUpdated: r.recordsUpdated,
-        recordsUnchanged: r.recordsUnchanged,
-        recordsDeactivated: r.recordsDeactivated,
-      });
-    } catch (err) {
-      steps.push({
-        step: "vat_registered",
-        ok: false,
-        status: "crashed",
-        errorMessage: err instanceof Error ? err.message : "Neznáma chyba",
-      });
+    for (const step of stepIds) {
+      // eslint-disable-next-line no-console
+      console.log(`[global-imports] dispatching step=${step}`);
+      const stepResult = await runStepIsolated(step);
+      steps.push(stepResult);
+      // eslint-disable-next-line no-console
+      console.log(
+        `[global-imports] step=${step} ok=${stepResult.ok} status=${stepResult.status ?? "n/a"}`,
+      );
     }
   } finally {
     await releaseLock(sb);
   }
+
 
   const finishedAt = new Date();
   return {
