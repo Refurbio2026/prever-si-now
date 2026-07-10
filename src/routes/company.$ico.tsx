@@ -680,24 +680,12 @@ function CompanyProfileView({
 
           {/* PEOPLE */}
           <TabsContent value="people" className="space-y-6">
+            <RpoSection ico={ico} />
+
             <RpvsStatusCard
               status={rpvsStatus}
               registrationDate={rpvsRegistrationDate}
               authorizedPerson={authorizedPerson}
-            />
-            <DbPeopleCard
-              title="Štatutárny orgán / Konatelia"
-              icon={Users}
-              people={dbExecutives}
-              loading={recordsLoading}
-              emptyText="Dáta zatiaľ neboli importované."
-            />
-            <DbPeopleCard
-              title="Spoločníci"
-              icon={Crown}
-              people={dbOwners}
-              loading={recordsLoading}
-              emptyText="Dáta zatiaľ neboli importované."
             />
             <DbPeopleCard
               title="Koneční užívatelia výhod (KUV)"
