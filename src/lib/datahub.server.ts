@@ -226,6 +226,11 @@ export async function runSourceForIco(
       case "history":
         res = await runHistory(ico);
         break;
+      case "rpo": {
+        const { runRpoImport } = await import("./providers/rpo.provider.server");
+        res = await writeLog(ico, "RPO:persons", () => runRpoImport(ico));
+        break;
+      }
       case "ai":
         res = await writeLog(ico, "AI:report", () => runAi(ico));
         break;
