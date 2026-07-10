@@ -121,6 +121,7 @@ export const getCompanyInsuranceDebtsFn = createServerFn({ method: "POST" })
           "provider, debt_amount, debtor_name, address, source_record_date, source_url, imported_at",
         )
         .eq("ico", ico)
+        .eq("is_current", true)
         .order("imported_at", { ascending: false })
         .limit(50),
       admin
