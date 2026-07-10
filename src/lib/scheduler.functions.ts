@@ -26,10 +26,16 @@ export interface SchedulerJobStatus {
   lastStatus: string | null;
   lastError: string | null;
   running: boolean;
+  cronSchedule: string | null;
+  cronActive: boolean | null;
+  cronLastStart: string | null;
+  cronLastEnd: string | null;
+  cronLastStatus: string | null;
 }
 
 export interface SchedulerOverview {
   jobs: SchedulerJobStatus[];
+  cronError: string | null;
 }
 
 export const getSchedulerOverviewFn = createServerFn({ method: "GET" })
@@ -74,7 +80,42 @@ export const getSchedulerOverviewFn = createServerFn({ method: "GET" })
       .limit(1);
     const lastWorker = workerRuns?.[0];
 
+    // Cron metadata (best-effort — never fail the whole overview if this errors).
+    type CronRow = {
+      jobname: string;
+      schedule: string | null;
+      active: boolean | null;
+      last_start_time: string | null;
+      last_end_time: string | null;
+      last_status: string | null;
+    };
+    const cronByName = new Map<string, CronRow>();
+    let cronError: string | null = null;
+    try {
+      const { data: cronRows, error: cronErr } = await supabaseAdmin.rpc(
+        "admin_list_cron_jobs",
+      );
+      if (cronErr) throw new Error(cronErr.message);
+      for (const row of (cronRows ?? []) as CronRow[]) {
+        cronByName.set(row.jobname, row);
+      }
+    } catch (err) {
+      cronError = err instanceof Error ? err.message : String(err);
+    }
+
+    const cronFor = (name: string) => {
+      const c = cronByName.get(name);
+      return {
+        cronSchedule: c?.schedule ?? null,
+        cronActive: c?.active ?? null,
+        cronLastStart: c?.last_start_time ?? null,
+        cronLastEnd: c?.last_end_time ?? null,
+        cronLastStatus: c?.last_status ?? null,
+      };
+    };
+
     return {
+      cronError,
       jobs: [
         {
           name: "datahub-global-imports",
@@ -92,6 +133,7 @@ export const getSchedulerOverviewFn = createServerFn({ method: "GET" })
               : null,
           lastError: anyFail?.error_message ?? null,
           running: settings?.global_import_running ?? false,
+          ...cronFor("datahub-global-imports"),
         },
         {
           name: "datahub-queue-worker",
@@ -106,6 +148,7 @@ export const getSchedulerOverviewFn = createServerFn({ method: "GET" })
             : null,
           lastError: lastWorker?.error_message ?? null,
           running: lastWorker ? lastWorker.finished_at === null : false,
+          ...cronFor("datahub-queue-worker"),
         },
       ],
     };
