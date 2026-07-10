@@ -764,6 +764,10 @@ export async function importOneDataset(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(dataset, false, rec.errorMessage);
+    await reportProgress(progress, {
+      phase: "failed",
+      message: `Reconciliation zlyhal: ${rec.errorMessage ?? "unknown"}`,
+    });
     return {
       dataset,
       status: "failed",
