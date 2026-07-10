@@ -65,6 +65,7 @@ import {
 import { AiReportCard } from "@/components/ai-report-card";
 import { InsuranceDebtsSection } from "@/components/insurance-debts-section";
 import { TaxStatusSection } from "@/components/tax-status-section";
+import { RpoSection } from "@/components/rpo-section";
 import { SeverityBadge } from "@/components/severity-badge";
 import {
   detectCompanyChangesFn,
@@ -680,24 +681,12 @@ function CompanyProfileView({
 
           {/* PEOPLE */}
           <TabsContent value="people" className="space-y-6">
+            <RpoSection ico={ico} />
+
             <RpvsStatusCard
               status={rpvsStatus}
               registrationDate={rpvsRegistrationDate}
               authorizedPerson={authorizedPerson}
-            />
-            <DbPeopleCard
-              title="Štatutárny orgán / Konatelia"
-              icon={Users}
-              people={dbExecutives}
-              loading={recordsLoading}
-              emptyText="Dáta zatiaľ neboli importované."
-            />
-            <DbPeopleCard
-              title="Spoločníci"
-              icon={Crown}
-              people={dbOwners}
-              loading={recordsLoading}
-              emptyText="Dáta zatiaľ neboli importované."
             />
             <DbPeopleCard
               title="Koneční užívatelia výhod (KUV)"
@@ -1026,6 +1015,7 @@ const SOURCE_DISPLAY: Record<AutoSource, string> = {
   registry: "Register",
   people: "Osoby",
   history: "História",
+  rpo: "RPO",
   ai: "AI",
 };
 

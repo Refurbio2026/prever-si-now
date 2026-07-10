@@ -14,6 +14,7 @@ export const AUTO_SOURCES = [
   "registry",
   "people",
   "history",
+  "rpo",
   "ai",
 ] as const;
 export type AutoSource = (typeof AUTO_SOURCES)[number];
@@ -27,6 +28,7 @@ export const AUTO_TTL_MS: Record<AutoSource, number> = {
   registry: 30 * 24 * 60 * 60 * 1000,
   people: 30 * 24 * 60 * 60 * 1000,
   history: 30 * 24 * 60 * 60 * 1000,
+  rpo: 30 * 24 * 60 * 60 * 1000,
   ai: 30 * 24 * 60 * 60 * 1000,
 };
 
