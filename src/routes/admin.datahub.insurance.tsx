@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,9 +17,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  getDeactivatedInsuranceFn,
   getInsuranceImportStatusFn,
   runAllInsuranceImportsFn,
   runInsuranceImportFn,
+  type DeactivatedInsuranceRow,
   type InsuranceProviderStatus,
 } from "@/lib/insurance-debt.functions";
 import { INSURANCE_PROVIDERS } from "@/lib/insurance-debt.types";
