@@ -2,10 +2,14 @@
 // Called by pg_cron on a daily cadence. Runs all three datasets
 // (tax debtors, VAT register, tax reliability). Datasets whose source URL
 // is not configured return `not_implemented`. Never exposes company data.
+// Requires the shared X-Datahub-Secret header (DATAHUB_CRON_SECRET).
 
 import { createFileRoute } from "@tanstack/react-router";
+import { verifyDatahubSecret } from "@/lib/hooks-auth.server";
 
-async function run() {
+async function run(request: Request): Promise<Response> {
+  const denied = verifyDatahubSecret(request);
+  if (denied) return denied;
   const startedAt = new Date();
   try {
     const { importAllFinancialAdministrationData } = await import(
@@ -26,8 +30,8 @@ async function run() {
 export const Route = createFileRoute("/api/public/hooks/tax-worker")({
   server: {
     handlers: {
-      GET: () => run(),
-      POST: () => run(),
+      GET: ({ request }) => run(request),
+      POST: ({ request }) => run(request),
     },
   },
 });
