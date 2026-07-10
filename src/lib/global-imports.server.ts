@@ -186,8 +186,10 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
   void admin;
   const sb = await loadAdmin();
   const startedAt = new Date();
+  const runId = randomUUID();
+  logStep(`run start runId=${runId}`);
 
-  if (!(await tryAcquireLock(sb))) {
+  if (!(await tryAcquireLock(sb, runId))) {
     const finishedAt = new Date();
     return {
       ok: false,
@@ -204,7 +206,7 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
 
   try {
     for (const step of stepIds) {
-      const stepResult = await runStep(step, sb);
+      const stepResult = await runStep(step, sb, runId);
       steps.push(stepResult);
       logStep(`step=${step} ok=${stepResult.ok} status=${stepResult.status ?? "n/a"}`);
     }
