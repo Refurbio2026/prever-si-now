@@ -286,6 +286,14 @@ export interface TaxRunSummary {
   recordsDownloaded: number;
   recordsNormalized: number;
   recordsWithValidIco: number;
+  recordsValid: number;
+  recordsInvalid: number;
+  recordsInserted: number;
+  recordsUpdated: number;
+  recordsUnchanged: number;
+  recordsDeactivated: number;
+  validationStatus: string | null;
+  previousSourceHash: string | null;
   startedAt: string;
   finishedAt: string | null;
   errorMessage: string | null;
@@ -314,6 +322,14 @@ interface AdminRunRow {
   records_downloaded: number | null;
   records_normalized: number | null;
   records_with_valid_ico: number | null;
+  records_valid: number | null;
+  records_invalid: number | null;
+  records_inserted: number | null;
+  records_updated: number | null;
+  records_unchanged: number | null;
+  records_deactivated: number | null;
+  validation_status: string | null;
+  previous_source_hash: string | null;
   started_at: string;
   finished_at: string | null;
   error_message: string | null;
@@ -330,6 +346,14 @@ function mapRun(row: AdminRunRow): TaxRunSummary {
     recordsDownloaded: row.records_downloaded ?? 0,
     recordsNormalized: row.records_normalized ?? 0,
     recordsWithValidIco: row.records_with_valid_ico ?? 0,
+    recordsValid: row.records_valid ?? 0,
+    recordsInvalid: row.records_invalid ?? 0,
+    recordsInserted: row.records_inserted ?? 0,
+    recordsUpdated: row.records_updated ?? 0,
+    recordsUnchanged: row.records_unchanged ?? 0,
+    recordsDeactivated: row.records_deactivated ?? 0,
+    validationStatus: row.validation_status,
+    previousSourceHash: row.previous_source_hash,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     errorMessage: row.error_message,
@@ -338,6 +362,9 @@ function mapRun(row: AdminRunRow): TaxRunSummary {
     contentHash: row.content_hash,
   };
 }
+
+const TAX_RUN_COLUMNS =
+  "id, dataset, status, records_downloaded, records_normalized, records_with_valid_ico, records_valid, records_invalid, records_inserted, records_updated, records_unchanged, records_deactivated, validation_status, previous_source_hash, started_at, finished_at, error_message, source_url, source_record_date, content_hash";
 
 export const getTaxImportStatusFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -349,12 +376,13 @@ export const getTaxImportStatusFn = createServerFn({ method: "POST" })
     const [{ data: runs }, { data: counts }] = await Promise.all([
       admin
         .from("tax_import_runs")
-        .select(
-          "id, dataset, status, records_downloaded, records_normalized, records_with_valid_ico, started_at, finished_at, error_message, source_url, source_record_date, content_hash",
-        )
+        .select(TAX_RUN_COLUMNS)
         .order("started_at", { ascending: false })
         .limit(100),
-      admin.from("company_tax_status").select("source_dataset, ico"),
+      admin
+        .from("company_tax_status")
+        .select("source_dataset, ico")
+        .eq("is_current", true),
     ]);
 
     const mapped: TaxRunSummary[] = ((runs as AdminRunRow[] | null) ?? []).map(
@@ -408,3 +436,64 @@ export const runAllTaxImportsFn = createServerFn({ method: "POST" })
     );
     return importAllFinancialAdministrationData();
   });
+
+export interface DeactivatedTaxRow {
+  ico: string;
+  dataset: TaxDatasetId;
+  taxDebtorFound: boolean | null;
+  taxDebtAmount: number | null;
+  vatRegistered: boolean | null;
+  icDph: string | null;
+  taxReliabilityIndex: string | null;
+  validFrom: string | null;
+  validTo: string | null;
+  removedAt: string | null;
+  sourceRecordDate: string | null;
+}
+
+export const getDeactivatedTaxFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => datasetSchema.parse(input))
+  .handler(async ({ data, context }): Promise<DeactivatedTaxRow[]> => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as unknown as SupabaseClient;
+    const { data: rows } = await admin
+      .from("company_tax_status")
+      .select(
+        "ico, source_dataset, tax_debtor_found, tax_debt_amount, vat_registered, ic_dph, tax_reliability_index, valid_from, valid_to, removed_at, source_record_date",
+      )
+      .eq("source_dataset", data.dataset)
+      .eq("is_current", false)
+      .not("removed_at", "is", null)
+      .order("removed_at", { ascending: false })
+      .limit(100);
+    return (
+      (rows as Array<{
+        ico: string;
+        source_dataset: string;
+        tax_debtor_found: boolean | null;
+        tax_debt_amount: number | null;
+        vat_registered: boolean | null;
+        ic_dph: string | null;
+        tax_reliability_index: string | null;
+        valid_from: string | null;
+        valid_to: string | null;
+        removed_at: string | null;
+        source_record_date: string | null;
+      }> | null) ?? []
+    ).map((r) => ({
+      ico: r.ico,
+      dataset: r.source_dataset as TaxDatasetId,
+      taxDebtorFound: r.tax_debtor_found,
+      taxDebtAmount: r.tax_debt_amount,
+      vatRegistered: r.vat_registered,
+      icDph: r.ic_dph,
+      taxReliabilityIndex: r.tax_reliability_index,
+      validFrom: r.valid_from,
+      validTo: r.valid_to,
+      removedAt: r.removed_at,
+      sourceRecordDate: r.source_record_date,
+    }));
+  });
+
