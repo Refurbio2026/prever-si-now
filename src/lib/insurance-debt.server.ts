@@ -87,7 +87,7 @@ async function insertRunRow(
 }
 
 interface RunUpdate {
-  status: string;
+  status?: string;
   source_url?: string | null;
   content_hash?: string | null;
   previous_source_hash?: string | null;
@@ -230,7 +230,7 @@ function runImporterFor(provider: InsuranceProviderId): Promise<ImporterOutcome>
 
 export interface ProviderImportResult {
   provider: InsuranceProviderId;
-  status: string;
+  status?: string;
   recordsInserted: number;
   recordsUpdated: number;
   recordsUnchanged: number;

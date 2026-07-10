@@ -79,7 +79,7 @@ async function insertRunRow(
 }
 
 interface RunUpdate {
-  status: string;
+  status?: string;
   source_url?: string | null;
   content_hash?: string | null;
   previous_source_hash?: string | null;
@@ -292,7 +292,7 @@ function runImporterFor(dataset: TaxDatasetId): Promise<TaxImporterOutcome> {
 
 export interface TaxDatasetImportResult {
   dataset: TaxDatasetId;
-  status: string;
+  status?: string;
   recordsInserted: number;
   recordsUpdated: number;
   recordsUnchanged: number;
