@@ -11,7 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export interface GlobalStepResult {
   step: string;
   ok: boolean;
-  status: string;
+  status: string | null;
   errorMessage: string | null;
   recordsInserted?: number;
   recordsUpdated?: number;
