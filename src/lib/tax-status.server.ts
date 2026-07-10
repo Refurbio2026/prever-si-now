@@ -482,6 +482,12 @@ export async function importOneDataset(
     };
   }
 
+  // VAT register is streamed directly into staging (dataset is ~125 MB
+  // uncompressed and cannot be buffered).
+  if (dataset === "vat_registered") {
+    return importVatStreamedFlow(runId);
+  }
+
   let outcome: TaxImporterOutcome;
   try {
     outcome = await runImporterFor(dataset);
