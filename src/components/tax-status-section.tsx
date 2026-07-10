@@ -10,10 +10,8 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  getCompanyTaxStatusFn,
-  type CompanyTaxPayload,
-} from "@/lib/tax-status.functions";
+import { getCompanyTaxStatusFn } from "@/lib/tax-status.functions";
+import type { CompanyTaxPayload } from "@/lib/tax-status.types";
 
 function formatEur(amount: number | null): string | null {
   if (amount == null) return null;
