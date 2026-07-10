@@ -13,7 +13,20 @@ async function runWorker(limit: number, trigger: string) {
 
   const startedAt = new Date();
 
-  // Check pause switch first — never process jobs while paused.
+  // Idempotency: skip if a run is already in-flight (started in the last 55 s
+  // and not yet finished) — protects against overlapping pg_cron ticks.
+  const inflightSince = new Date(startedAt.getTime() - 55_000).toISOString();
+  const { data: inflight } = await supabaseAdmin
+    .from("datahub_worker_runs")
+    .select("id")
+    .is("finished_at", null)
+    .gte("started_at", inflightSince)
+    .limit(1);
+  if (inflight && inflight.length > 0) {
+    return Response.json({ ok: true, skipped: "already_running", processed: 0 });
+  }
+
+  // Check pause switch — never process jobs while paused.
   const { data: settings } = await supabaseAdmin
     .from("datahub_settings")
     .select("worker_paused")
