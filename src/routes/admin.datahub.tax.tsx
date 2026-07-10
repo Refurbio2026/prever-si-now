@@ -148,9 +148,14 @@ function TaxAdminPage() {
                     <TableHead>Čas</TableHead>
                     <TableHead>Dataset</TableHead>
                     <TableHead>Stav</TableHead>
-                    <TableHead className="text-right">Stiahnuté</TableHead>
+                    <TableHead>Validácia</TableHead>
+                    <TableHead className="text-right">Stiah.</TableHead>
                     <TableHead className="text-right">Norm.</TableHead>
-                    <TableHead className="text-right">Valid. IČO</TableHead>
+                    <TableHead className="text-right">Valid.</TableHead>
+                    <TableHead className="text-right">+ Ins</TableHead>
+                    <TableHead className="text-right">△ Upd</TableHead>
+                    <TableHead className="text-right">= Unc</TableHead>
+                    <TableHead className="text-right">− Deac</TableHead>
                     <TableHead>Dátum zdroja</TableHead>
                     <TableHead>Hash</TableHead>
                     <TableHead>Chyba</TableHead>
@@ -164,22 +169,29 @@ function TaxAdminPage() {
                       </TableCell>
                       <TableCell className="text-xs">{r.dataset}</TableCell>
                       <TableCell>{statusBadge(r.status)}</TableCell>
-                      <TableCell className="text-right">
-                        {r.recordsDownloaded}
+                      <TableCell className="text-xs text-muted-foreground">
+                        {r.validationStatus ?? "—"}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {r.recordsNormalized}
+                      <TableCell className="text-right">{r.recordsDownloaded}</TableCell>
+                      <TableCell className="text-right">{r.recordsNormalized}</TableCell>
+                      <TableCell className="text-right">{r.recordsValid}</TableCell>
+                      <TableCell className="text-right text-success">
+                        {r.recordsInserted}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {r.recordsWithValidIco}
+                      <TableCell className="text-right">{r.recordsUpdated}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {r.recordsUnchanged}
+                      </TableCell>
+                      <TableCell className="text-right text-destructive">
+                        {r.recordsDeactivated}
                       </TableCell>
                       <TableCell className="text-xs">
                         {r.sourceRecordDate ?? "—"}
                       </TableCell>
-                      <TableCell className="max-w-[120px] truncate text-[10px] text-muted-foreground">
-                        {r.contentHash?.slice(0, 12) ?? "—"}
+                      <TableCell className="max-w-[100px] truncate font-mono text-[10px] text-muted-foreground">
+                        {r.contentHash?.slice(0, 10) ?? "—"}
                       </TableCell>
-                      <TableCell className="max-w-[320px] truncate text-xs text-muted-foreground">
+                      <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">
                         {r.errorMessage ?? "—"}
                       </TableCell>
                     </TableRow>
@@ -188,9 +200,86 @@ function TaxAdminPage() {
               </Table>
             </div>
           </Card>
+
+          <DeactivatedTaxPanel />
         </>
       )}
     </div>
+  );
+}
+
+function DeactivatedTaxPanel() {
+  const [dataset, setDataset] = useState<(typeof TAX_DATASETS)[number]>(
+    TAX_DATASETS[0],
+  );
+  const fn = useServerFn(getDeactivatedTaxFn);
+  const q = useQuery({
+    queryKey: ["tax-deactivated", dataset],
+    queryFn: () => fn({ data: { dataset } }),
+  });
+  return (
+    <Card className="rounded-2xl p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold">Deaktivované záznamy</h2>
+          <p className="text-xs text-muted-foreground">
+            Firmy, ktoré už nie sú v aktuálnom zverejnenom datasete FS (nezmazané, verzované).
+          </p>
+        </div>
+        <select
+          className="rounded-xl border bg-background px-3 py-1.5 text-xs"
+          value={dataset}
+          onChange={(e) => setDataset(e.target.value as (typeof TAX_DATASETS)[number])}
+        >
+          {TAX_DATASETS.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>IČO</TableHead>
+              <TableHead>Dlh (€)</TableHead>
+              <TableHead>DPH</TableHead>
+              <TableHead>IČ DPH</TableHead>
+              <TableHead>Index</TableHead>
+              <TableHead>Dátum zdroja</TableHead>
+              <TableHead>Deaktivované</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(q.data ?? []).map((r: DeactivatedTaxRow) => (
+              <TableRow key={`${r.ico}-${r.removedAt}`}>
+                <TableCell className="font-mono text-xs">{r.ico}</TableCell>
+                <TableCell className="text-xs">
+                  {r.taxDebtAmount != null ? r.taxDebtAmount.toFixed(2) : "—"}
+                </TableCell>
+                <TableCell className="text-xs">
+                  {r.vatRegistered === true ? "áno" : r.vatRegistered === false ? "nie" : "—"}
+                </TableCell>
+                <TableCell className="font-mono text-[10px]">{r.icDph ?? "—"}</TableCell>
+                <TableCell className="text-xs">{r.taxReliabilityIndex ?? "—"}</TableCell>
+                <TableCell className="text-xs">{r.sourceRecordDate ?? "—"}</TableCell>
+                <TableCell className="text-xs">
+                  {r.removedAt ? formatDate(r.removedAt) : "—"}
+                </TableCell>
+              </TableRow>
+            ))}
+            {q.data && q.data.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-xs text-muted-foreground">
+                  Žiadne deaktivované záznamy pre {dataset}.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
   );
 }
 
