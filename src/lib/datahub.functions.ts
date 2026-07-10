@@ -13,6 +13,7 @@ const SOURCE_ENUM = z.enum([
   "registry",
   "people",
   "history",
+  "rpo",
   "ai",
 ]);
 
@@ -26,6 +27,7 @@ export const ALL_SOURCES: readonly ImportSourceId[] = [
   "registry",
   "people",
   "history",
+  "rpo",
   "ai",
 ] as const;
 
