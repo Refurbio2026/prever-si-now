@@ -26,10 +26,16 @@ export interface SchedulerJobStatus {
   lastStatus: string | null;
   lastError: string | null;
   running: boolean;
+  cronSchedule: string | null;
+  cronActive: boolean | null;
+  cronLastStart: string | null;
+  cronLastEnd: string | null;
+  cronLastStatus: string | null;
 }
 
 export interface SchedulerOverview {
   jobs: SchedulerJobStatus[];
+  cronError: string | null;
 }
 
 export const getSchedulerOverviewFn = createServerFn({ method: "GET" })
