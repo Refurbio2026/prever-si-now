@@ -1026,6 +1026,7 @@ const SOURCE_DISPLAY: Record<AutoSource, string> = {
   registry: "Register",
   people: "Osoby",
   history: "História",
+  rpo: "RPO",
   ai: "AI",
 };
 
