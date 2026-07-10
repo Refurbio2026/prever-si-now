@@ -56,6 +56,7 @@ const SOURCE_LABELS: Record<ImportSourceId, string> = {
   registry: "ORSR registry",
   people: "ORSR osoby",
   history: "ORSR história",
+  rpo: "RPO osoby + zmeny",
   ai: "AI report",
 };
 
