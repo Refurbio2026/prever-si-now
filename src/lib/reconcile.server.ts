@@ -150,7 +150,8 @@ export function validateTax(
 
 // ---------- Staging + reconcile ----------
 
-const STAGING_BATCH = 1000;
+const MAX_STATEMENT_ROWS = 1000;
+const STAGING_BATCH = MAX_STATEMENT_ROWS;
 
 function logDatahub(message: string): void {
   // eslint-disable-next-line no-console
@@ -313,8 +314,9 @@ export interface ReconcileCounts {
 // the Data API). Each batch is its own statement — a mid-run failure leaves
 // production consistent because we never DELETE from company_* tables, only
 // flip is_current/valid_to/removed_at.
-const RECONCILE_BATCH = 1000;
-const DEACTIVATE_BATCH = 5000;
+const RECONCILE_BATCH = MAX_STATEMENT_ROWS;
+const KEY_PAGE = MAX_STATEMENT_ROWS;
+const CLOSE_REMOVED_BATCH = MAX_STATEMENT_ROWS;
 const MAX_BATCHES = 10_000; // hard safety cap
 
 function logProgress(label: string, batch: number, extra: Record<string, number>): void {
@@ -322,6 +324,10 @@ function logProgress(label: string, batch: number, extra: Record<string, number>
     .map(([k, v]) => `${k}=${v}`)
     .join(" ");
   logDatahub(`${label} reconcile batch ${batch} ${parts}`);
+}
+
+function logStatement(label: string, phase: string, message: string): void {
+  logDatahub(`${label} reconcile ${phase} ${message}`);
 }
 
 function insuranceLabel(provider: InsuranceProviderId): string {
@@ -334,6 +340,208 @@ function taxLabel(dataset: TaxDatasetId): string {
     : dataset === "tax_debtors"
       ? "tax_debtors"
       : dataset;
+}
+
+async function fetchInsuranceCurrentKeys(
+  admin: SupabaseClient,
+  provider: InsuranceProviderId,
+  label: string,
+): Promise<Set<string>> {
+  const keys = new Set<string>();
+  let afterIco: string | null = null;
+  for (let page = 1; page <= MAX_BATCHES; page++) {
+    logStatement(label, "fetch-current", `page ${page} limit=${KEY_PAGE}`);
+    let query = admin
+      .from("company_insurance_debts")
+      .select("ico")
+      .eq("provider", provider)
+      .eq("is_current", true)
+      .order("ico", { ascending: true })
+      .limit(KEY_PAGE);
+    if (afterIco) query = query.gt("ico", afterIco);
+
+    const { data, error } = await query;
+    if (error) throw new Error(`fetch current keys page ${page}: ${error.message}`);
+    const rows = (data as Array<{ ico: string }> | null) ?? [];
+    if (rows.length === 0) return keys;
+    for (const row of rows) keys.add(row.ico);
+    afterIco = rows[rows.length - 1]?.ico ?? null;
+    if (rows.length < KEY_PAGE || !afterIco) return keys;
+  }
+  throw new Error("fetch current keys exceeded safety batch cap");
+}
+
+async function fetchInsuranceStagedKeys(
+  admin: SupabaseClient,
+  provider: InsuranceProviderId,
+  runId: string,
+  label: string,
+): Promise<Set<string>> {
+  const keys = new Set<string>();
+  let afterIco: string | null = null;
+  for (let page = 1; page <= MAX_BATCHES; page++) {
+    logStatement(label, "fetch-staged", `page ${page} limit=${KEY_PAGE}`);
+    let query = admin
+      .from("staging_insurance_debts")
+      .select("ico")
+      .eq("run_id", runId)
+      .eq("provider", provider)
+      .order("ico", { ascending: true })
+      .limit(KEY_PAGE);
+    if (afterIco) query = query.gt("ico", afterIco);
+
+    const { data, error } = await query;
+    if (error) throw new Error(`fetch staged keys page ${page}: ${error.message}`);
+    const rows = (data as Array<{ ico: string }> | null) ?? [];
+    if (rows.length === 0) return keys;
+    for (const row of rows) keys.add(row.ico);
+    afterIco = rows[rows.length - 1]?.ico ?? null;
+    if (rows.length < KEY_PAGE || !afterIco) return keys;
+  }
+  throw new Error("fetch staged keys exceeded safety batch cap");
+}
+
+async function fetchTaxCurrentKeys(
+  admin: SupabaseClient,
+  dataset: TaxDatasetId,
+  label: string,
+): Promise<Set<string>> {
+  const keys = new Set<string>();
+  let afterIco: string | null = null;
+  for (let page = 1; page <= MAX_BATCHES; page++) {
+    logStatement(label, "fetch-current", `page ${page} limit=${KEY_PAGE}`);
+    let query = admin
+      .from("company_tax_status")
+      .select("ico")
+      .eq("source_dataset", dataset)
+      .eq("is_current", true)
+      .order("ico", { ascending: true })
+      .limit(KEY_PAGE);
+    if (afterIco) query = query.gt("ico", afterIco);
+
+    const { data, error } = await query;
+    if (error) throw new Error(`fetch current keys page ${page}: ${error.message}`);
+    const rows = (data as Array<{ ico: string }> | null) ?? [];
+    if (rows.length === 0) return keys;
+    for (const row of rows) keys.add(row.ico);
+    afterIco = rows[rows.length - 1]?.ico ?? null;
+    if (rows.length < KEY_PAGE || !afterIco) return keys;
+  }
+  throw new Error("fetch current keys exceeded safety batch cap");
+}
+
+async function fetchTaxStagedKeys(
+  admin: SupabaseClient,
+  dataset: TaxDatasetId,
+  runId: string,
+  label: string,
+): Promise<Set<string>> {
+  const keys = new Set<string>();
+  let afterIco: string | null = null;
+  for (let page = 1; page <= MAX_BATCHES; page++) {
+    logStatement(label, "fetch-staged", `page ${page} limit=${KEY_PAGE}`);
+    let query = admin
+      .from("staging_tax_records")
+      .select("ico")
+      .eq("run_id", runId)
+      .eq("dataset", dataset)
+      .order("ico", { ascending: true })
+      .limit(KEY_PAGE);
+    if (afterIco) query = query.gt("ico", afterIco);
+
+    const { data, error } = await query;
+    if (error) throw new Error(`fetch staged keys page ${page}: ${error.message}`);
+    const rows = (data as Array<{ ico: string }> | null) ?? [];
+    if (rows.length === 0) return keys;
+    for (const row of rows) keys.add(row.ico);
+    afterIco = rows[rows.length - 1]?.ico ?? null;
+    if (rows.length < KEY_PAGE || !afterIco) return keys;
+  }
+  throw new Error("fetch staged keys exceeded safety batch cap");
+}
+
+function diffRemovedKeys(currentKeys: Set<string>, stagedKeys: Set<string>): string[] {
+  const removed: string[] = [];
+  for (const ico of currentKeys) {
+    if (!stagedKeys.has(ico)) removed.push(ico);
+  }
+  return removed;
+}
+
+async function closeRemovedInsuranceKeys(
+  admin: SupabaseClient,
+  provider: InsuranceProviderId,
+  removedKeys: string[],
+  label: string,
+  progress?: ProgressCtx | null,
+): Promise<number> {
+  let deactivated = 0;
+  const totalBatches = Math.max(1, Math.ceil(removedKeys.length / CLOSE_REMOVED_BATCH));
+  for (let i = 0; i < removedKeys.length; i += CLOSE_REMOVED_BATCH) {
+    const batchNo = Math.floor(i / CLOSE_REMOVED_BATCH) + 1;
+    const slice = removedKeys.slice(i, i + CLOSE_REMOVED_BATCH);
+    logStatement(label, "close-removed", `chunk ${batchNo}/${totalBatches} keys=${slice.length}`);
+    const now = new Date().toISOString();
+    const { data, error } = await admin
+      .from("company_insurance_debts")
+      .update({ is_current: false, valid_to: now, removed_at: now })
+      .eq("provider", provider)
+      .eq("is_current", true)
+      .in("ico", slice)
+      .select("ico");
+    if (error) throw new Error(`close removed chunk ${batchNo}: ${error.message}`);
+    const changed = ((data as Array<{ ico: string }> | null) ?? []).length;
+    deactivated += changed;
+    logProgress(`${label} close-removed`, batchNo, { keys: slice.length, deactivated: changed });
+    await reportProgress(progress, {
+      phase: "reconciliation",
+      currentBatch: batchNo,
+      totalBatches,
+      recordsProcessed: i + slice.length,
+      recordsTotal: removedKeys.length,
+      message: `Rekonciliácia (close-removed): dávka ${batchNo}/${totalBatches}`,
+    });
+  }
+  if (removedKeys.length === 0) logStatement(label, "close-removed", "chunk 0/0 keys=0");
+  return deactivated;
+}
+
+async function closeRemovedTaxKeys(
+  admin: SupabaseClient,
+  dataset: TaxDatasetId,
+  removedKeys: string[],
+  label: string,
+  progress?: ProgressCtx | null,
+): Promise<number> {
+  let deactivated = 0;
+  const totalBatches = Math.max(1, Math.ceil(removedKeys.length / CLOSE_REMOVED_BATCH));
+  for (let i = 0; i < removedKeys.length; i += CLOSE_REMOVED_BATCH) {
+    const batchNo = Math.floor(i / CLOSE_REMOVED_BATCH) + 1;
+    const slice = removedKeys.slice(i, i + CLOSE_REMOVED_BATCH);
+    logStatement(label, "close-removed", `chunk ${batchNo}/${totalBatches} keys=${slice.length}`);
+    const now = new Date().toISOString();
+    const { data, error } = await admin
+      .from("company_tax_status")
+      .update({ is_current: false, valid_to: now, removed_at: now })
+      .eq("source_dataset", dataset)
+      .eq("is_current", true)
+      .in("ico", slice)
+      .select("ico");
+    if (error) throw new Error(`close removed chunk ${batchNo}: ${error.message}`);
+    const changed = ((data as Array<{ ico: string }> | null) ?? []).length;
+    deactivated += changed;
+    logProgress(`${label} close-removed`, batchNo, { keys: slice.length, deactivated: changed });
+    await reportProgress(progress, {
+      phase: "reconciliation",
+      currentBatch: batchNo,
+      totalBatches,
+      recordsProcessed: i + slice.length,
+      recordsTotal: removedKeys.length,
+      message: `Rekonciliácia (close-removed): dávka ${batchNo}/${totalBatches}`,
+    });
+  }
+  if (removedKeys.length === 0) logStatement(label, "close-removed", "chunk 0/0 keys=0");
+  return deactivated;
 }
 
 export async function reconcileInsurance(
@@ -358,6 +566,7 @@ export async function reconcileInsurance(
   let afterIco: string | null = null;
   let applyProcessed = 0;
   for (let batch = 1; batch <= MAX_BATCHES; batch++) {
+    logStatement(label, "apply", `batch ${batch} limit=${RECONCILE_BATCH}`);
     const { data, error } = await admin.rpc("reconcile_insurance_debts_batch", {
       _provider: provider,
       _run_id: runId,
@@ -392,41 +601,35 @@ export async function reconcileInsurance(
     afterIco = row.last_ico as string;
   }
 
-  // Phase 2: deactivate current rows that no longer appear in staging.
-  afterIco = null;
-  let deactivateScanned = 0;
-  for (let batch = 1; batch <= MAX_BATCHES; batch++) {
-    const { data, error } = await admin.rpc("reconcile_insurance_deactivate_batch", {
-      _provider: provider,
-      _run_id: runId,
-      _after_ico: afterIco,
-      _limit: DEACTIVATE_BATCH,
-    });
-    if (error) return { counts: null, errorMessage: `deactivate batch ${batch}: ${error.message}` };
-    const row = Array.isArray(data) ? data[0] : data;
-    const scanned = Number(row?.scanned ?? 0);
-    if (!row || scanned === 0 || !row.last_ico) {
-      logProgress(`${label} deactivate`, batch, { scanned: 0, done: 1 });
-      break;
-    }
-    counts.deactivated += Number(row.deactivated ?? 0);
-    deactivateScanned += scanned;
-    logProgress(`${label} deactivate`, batch, {
-      scanned,
-      deactivated: Number(row.deactivated ?? 0),
-    });
-    await reportProgress(progress, {
-      phase: "reconciliation",
-      currentBatch: batch,
-      totalBatches: null,
-      recordsProcessed: deactivateScanned,
-      message: `Rekonciliácia (deactivate): dávka ${batch}`,
-    });
-    afterIco = row.last_ico as string;
+  // Phase 2: compute removed keys in app code, then close only those keys in
+  // chunks. No SQL statement performs anti-join over the whole production set.
+  try {
+    const [currentKeys, stagedKeys] = await Promise.all([
+      fetchInsuranceCurrentKeys(admin, provider, label),
+      fetchInsuranceStagedKeys(admin, provider, runId, label),
+    ]);
+    const removedKeys = diffRemovedKeys(currentKeys, stagedKeys);
+    logStatement(
+      label,
+      "close-removed",
+      `diff current=${currentKeys.size} staged=${stagedKeys.size} removed=${removedKeys.length}`,
+    );
+    counts.deactivated += await closeRemovedInsuranceKeys(
+      admin,
+      provider,
+      removedKeys,
+      label,
+      progress,
+    );
+  } catch (err) {
+    return {
+      counts: null,
+      errorMessage: err instanceof Error ? err.message : "close removed failed",
+    };
   }
 
-  // Phase 3: clear staging (small, single statement).
-  await admin.rpc("reconcile_insurance_cleanup", { _run_id: runId });
+  // Phase 3: clear staging in chunks, so cleanup cannot timeout on a large run.
+  await cleanupStaging(admin, "staging_insurance_debts", runId, `${label} cleanup`);
   logDatahub(`${label} reconciliation finished inserted=${counts.inserted} updated=${counts.updated} unchanged=${counts.unchanged} deactivated=${counts.deactivated}`);
 
   return { counts, errorMessage: null };
@@ -453,6 +656,7 @@ export async function reconcileTax(
   let afterIco: string | null = null;
   let applyProcessed = 0;
   for (let batch = 1; batch <= MAX_BATCHES; batch++) {
+    logStatement(label, "apply", `batch ${batch} limit=${RECONCILE_BATCH}`);
     const { data, error } = await admin.rpc("reconcile_tax_dataset_batch", {
       _dataset: dataset,
       _run_id: runId,
@@ -487,39 +691,32 @@ export async function reconcileTax(
     afterIco = row.last_ico as string;
   }
 
-  afterIco = null;
-  let deactivateScanned = 0;
-  for (let batch = 1; batch <= MAX_BATCHES; batch++) {
-    const { data, error } = await admin.rpc("reconcile_tax_dataset_deactivate_batch", {
-      _dataset: dataset,
-      _run_id: runId,
-      _after_ico: afterIco,
-      _limit: DEACTIVATE_BATCH,
-    });
-    if (error) return { counts: null, errorMessage: `deactivate batch ${batch}: ${error.message}` };
-    const row = Array.isArray(data) ? data[0] : data;
-    const scanned = Number(row?.scanned ?? 0);
-    if (!row || scanned === 0 || !row.last_ico) {
-      logProgress(`${label} deactivate`, batch, { scanned: 0, done: 1 });
-      break;
-    }
-    counts.deactivated += Number(row.deactivated ?? 0);
-    deactivateScanned += scanned;
-    logProgress(`${label} deactivate`, batch, {
-      scanned,
-      deactivated: Number(row.deactivated ?? 0),
-    });
-    await reportProgress(progress, {
-      phase: "reconciliation",
-      currentBatch: batch,
-      totalBatches: null,
-      recordsProcessed: deactivateScanned,
-      message: `Rekonciliácia (deactivate): dávka ${batch}`,
-    });
-    afterIco = row.last_ico as string;
+  try {
+    const [currentKeys, stagedKeys] = await Promise.all([
+      fetchTaxCurrentKeys(admin, dataset, label),
+      fetchTaxStagedKeys(admin, dataset, runId, label),
+    ]);
+    const removedKeys = diffRemovedKeys(currentKeys, stagedKeys);
+    logStatement(
+      label,
+      "close-removed",
+      `diff current=${currentKeys.size} staged=${stagedKeys.size} removed=${removedKeys.length}`,
+    );
+    counts.deactivated += await closeRemovedTaxKeys(
+      admin,
+      dataset,
+      removedKeys,
+      label,
+      progress,
+    );
+  } catch (err) {
+    return {
+      counts: null,
+      errorMessage: err instanceof Error ? err.message : "close removed failed",
+    };
   }
 
-  await admin.rpc("reconcile_tax_dataset_cleanup", { _run_id: runId });
+  await cleanupStaging(admin, "staging_tax_records", runId, `${label} cleanup`);
   logDatahub(`${label} reconciliation finished inserted=${counts.inserted} updated=${counts.updated} unchanged=${counts.unchanged} deactivated=${counts.deactivated}`);
 
   return { counts, errorMessage: null };
@@ -532,6 +729,34 @@ export async function cleanupStaging(
   admin: SupabaseClient,
   table: "staging_insurance_debts" | "staging_tax_records",
   runId: string,
+  label = "staging cleanup",
 ): Promise<void> {
-  await admin.from(table).delete().eq("run_id", runId);
+  for (let batch = 1; batch <= MAX_BATCHES; batch++) {
+    logDatahub(`${label} fetch chunk ${batch} limit=${KEY_PAGE}`);
+    const { data, error } = await admin
+      .from(table)
+      .select("ico")
+      .eq("run_id", runId)
+      .order("ico", { ascending: true })
+      .limit(KEY_PAGE);
+    if (error) {
+      logDatahub(`${label} fetch chunk ${batch} failed: ${error.message}`);
+      return;
+    }
+    const keys = ((data as Array<{ ico: string }> | null) ?? []).map((row) => row.ico);
+    if (keys.length === 0) return;
+
+    logDatahub(`${label} delete chunk ${batch} rows=${keys.length}`);
+    const { error: deleteError } = await admin
+      .from(table)
+      .delete()
+      .eq("run_id", runId)
+      .in("ico", keys);
+    if (deleteError) {
+      logDatahub(`${label} delete chunk ${batch} failed: ${deleteError.message}`);
+      return;
+    }
+    if (keys.length < KEY_PAGE) return;
+  }
+  logDatahub(`${label} exceeded safety batch cap`);
 }
