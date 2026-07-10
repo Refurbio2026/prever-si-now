@@ -43,6 +43,8 @@ export async function importTaxDebtors(): Promise<TaxImporterOutcome> {
   let downloaded = 0;
   let meta;
   try {
+    // eslint-disable-next-line no-console
+    console.log(`[datahub] tax_debtors download start url=${configuredUrl}`);
     meta = await streamFsXml({
       url: configuredUrl,
       xmlSuffix: "ds_dsdd.xml",
@@ -65,7 +67,16 @@ export async function importTaxDebtors(): Promise<TaxImporterOutcome> {
         });
       },
     });
+    // eslint-disable-next-line no-console
+    console.log(
+      `[datahub] tax_debtors downloaded bytes=${meta.bytesRead} hash=${meta.contentHash.slice(0, 12)} items=${meta.itemCount}`,
+    );
   } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[datahub] tax_debtors importer error",
+      err instanceof Error ? (err.stack ?? err.message) : err,
+    );
     return {
       dataset: "tax_debtors",
       status: "failed",
