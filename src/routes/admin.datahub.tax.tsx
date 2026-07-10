@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,9 +17,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  getDeactivatedTaxFn,
   getTaxImportStatusFn,
   runAllTaxImportsFn,
   runTaxImportFn,
+  type DeactivatedTaxRow,
   type TaxDatasetStatus,
 } from "@/lib/tax-status.functions";
 import { TAX_DATASETS } from "@/lib/tax-status.types";
