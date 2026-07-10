@@ -173,6 +173,7 @@ export async function importVatRegisterStreamed(
   let duplicates = 0;
   let stagingError: string | null = null;
   let batchNo = 0;
+  const effectiveBatchSize = Math.min(Math.max(1, batchSize), 1000);
   let batch: Array<{
     ico: string;
     dataset: "vat_registered";
@@ -252,7 +253,7 @@ export async function importVatRegisterStreamed(
           source_record_hash: taxRecordHash(rec),
           run_id: runId,
         });
-        if (batch.length >= batchSize) await flush();
+        if (batch.length >= effectiveBatchSize) await flush();
       },
     });
     await flush();
