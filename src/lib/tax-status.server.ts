@@ -803,6 +803,12 @@ export async function importOneDataset(
     dataset,
     `final status=success inserted=${rec.counts.inserted} updated=${rec.counts.updated} unchanged=${rec.counts.unchanged} deactivated=${rec.counts.deactivated}`,
   );
+  await reportProgress(progress, {
+    phase: "done",
+    message: `Hotovo: +${rec.counts.inserted} / ~${rec.counts.updated} / =${rec.counts.unchanged} / −${rec.counts.deactivated}`,
+    recordsProcessed:
+      rec.counts.inserted + rec.counts.updated + rec.counts.unchanged,
+  });
 
   return {
     dataset,
