@@ -33,10 +33,10 @@ import {
   searchAndEnqueueFn,
 } from "@/lib/datahub.functions";
 import {
-  getSchedulerOverviewFn,
   runGlobalImportsNowFn,
   runQueueWorkerNowFn,
 } from "@/lib/scheduler.functions";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/admin/datahub")({
   component: DataHubPage,
