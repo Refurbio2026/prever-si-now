@@ -29,6 +29,7 @@ import { Route as AdminImportsRouteImport } from './routes/admin.imports'
 import { Route as AdminDatahubRouteImport } from './routes/admin.datahub'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
 import { Route as AdminApiDebugRouteImport } from './routes/admin.api-debug'
+import { Route as ApiPublicHooksInsuranceWorkerRouteImport } from './routes/api/public/hooks/insurance-worker'
 import { Route as ApiPublicHooksDatahubWorkerRouteImport } from './routes/api/public/hooks/datahub-worker'
 
 const SearchRoute = SearchRouteImport.update({
@@ -131,6 +132,12 @@ const AdminApiDebugRoute = AdminApiDebugRouteImport.update({
   path: '/api-debug',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApiPublicHooksInsuranceWorkerRoute =
+  ApiPublicHooksInsuranceWorkerRouteImport.update({
+    id: '/api/public/hooks/insurance-worker',
+    path: '/api/public/hooks/insurance-worker',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksDatahubWorkerRoute =
   ApiPublicHooksDatahubWorkerRouteImport.update({
     id: '/api/public/hooks/datahub-worker',
@@ -160,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AdminIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
+  '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -181,6 +189,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminIndexRoute
   '/dashboard': typeof DashboardIndexRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
+  '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -205,6 +214,7 @@ export interface FileRoutesById {
   '/admin/': typeof AdminIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
+  '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -230,6 +240,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/dashboard/'
     | '/api/public/hooks/datahub-worker'
+    | '/api/public/hooks/insurance-worker'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -251,6 +262,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/dashboard'
     | '/api/public/hooks/datahub-worker'
+    | '/api/public/hooks/insurance-worker'
   id:
     | '__root__'
     | '/'
@@ -274,6 +286,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/dashboard/'
     | '/api/public/hooks/datahub-worker'
+    | '/api/public/hooks/insurance-worker'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -285,6 +298,7 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
   CompanyIcoRoute: typeof CompanyIcoRoute
   ApiPublicHooksDatahubWorkerRoute: typeof ApiPublicHooksDatahubWorkerRoute
+  ApiPublicHooksInsuranceWorkerRoute: typeof ApiPublicHooksInsuranceWorkerRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -429,6 +443,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminApiDebugRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/api/public/hooks/insurance-worker': {
+      id: '/api/public/hooks/insurance-worker'
+      path: '/api/public/hooks/insurance-worker'
+      fullPath: '/api/public/hooks/insurance-worker'
+      preLoaderRoute: typeof ApiPublicHooksInsuranceWorkerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/datahub-worker': {
       id: '/api/public/hooks/datahub-worker'
       path: '/api/public/hooks/datahub-worker'
@@ -492,6 +513,7 @@ const rootRouteChildren: RootRouteChildren = {
   SearchRoute: SearchRoute,
   CompanyIcoRoute: CompanyIcoRoute,
   ApiPublicHooksDatahubWorkerRoute: ApiPublicHooksDatahubWorkerRoute,
+  ApiPublicHooksInsuranceWorkerRoute: ApiPublicHooksInsuranceWorkerRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
