@@ -143,9 +143,15 @@ function InsuranceAdminPage() {
                     <TableHead>Čas</TableHead>
                     <TableHead>Poisťovňa</TableHead>
                     <TableHead>Stav</TableHead>
-                    <TableHead className="text-right">Stiahnuté</TableHead>
+                    <TableHead>Validácia</TableHead>
+                    <TableHead className="text-right">Stiah.</TableHead>
                     <TableHead className="text-right">Norm.</TableHead>
-                    <TableHead className="text-right">S IČO</TableHead>
+                    <TableHead className="text-right">Valid.</TableHead>
+                    <TableHead className="text-right">+ Ins</TableHead>
+                    <TableHead className="text-right">△ Upd</TableHead>
+                    <TableHead className="text-right">= Unc</TableHead>
+                    <TableHead className="text-right">− Deac</TableHead>
+                    <TableHead>Hash</TableHead>
                     <TableHead>Chyba</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -157,10 +163,26 @@ function InsuranceAdminPage() {
                       </TableCell>
                       <TableCell className="text-xs">{r.provider}</TableCell>
                       <TableCell>{statusBadge(r.status)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {r.validationStatus ?? "—"}
+                      </TableCell>
                       <TableCell className="text-right">{r.recordsDownloaded}</TableCell>
                       <TableCell className="text-right">{r.recordsNormalized}</TableCell>
-                      <TableCell className="text-right">{r.recordsWithIco}</TableCell>
-                      <TableCell className="max-w-[320px] truncate text-xs text-muted-foreground">
+                      <TableCell className="text-right">{r.recordsValid}</TableCell>
+                      <TableCell className="text-right text-success">
+                        {r.recordsInserted}
+                      </TableCell>
+                      <TableCell className="text-right">{r.recordsUpdated}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {r.recordsUnchanged}
+                      </TableCell>
+                      <TableCell className="text-right text-destructive">
+                        {r.recordsDeactivated}
+                      </TableCell>
+                      <TableCell className="max-w-[100px] truncate font-mono text-[10px] text-muted-foreground">
+                        {r.contentHash?.slice(0, 10) ?? "—"}
+                      </TableCell>
+                      <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">
                         {r.errorMessage ?? "—"}
                       </TableCell>
                     </TableRow>
@@ -169,6 +191,86 @@ function InsuranceAdminPage() {
               </Table>
             </div>
           </Card>
+
+          <DeactivatedInsurancePanel />
+        </>
+      )}
+    </div>
+  );
+}
+
+function DeactivatedInsurancePanel() {
+  const [provider, setProvider] = useState<(typeof INSURANCE_PROVIDERS)[number]>(
+    INSURANCE_PROVIDERS[0],
+  );
+  const fn = useServerFn(getDeactivatedInsuranceFn);
+  const q = useQuery({
+    queryKey: ["insurance-deactivated", provider],
+    queryFn: () => fn({ data: { provider } }),
+  });
+  return (
+    <Card className="rounded-2xl p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold">Deaktivované záznamy</h2>
+          <p className="text-xs text-muted-foreground">
+            Firmy, ktoré už nie sú v aktuálnom zverejnenom zozname (nezmazané, verzované).
+          </p>
+        </div>
+        <select
+          className="rounded-xl border bg-background px-3 py-1.5 text-xs"
+          value={provider}
+          onChange={(e) =>
+            setProvider(e.target.value as (typeof INSURANCE_PROVIDERS)[number])
+          }
+        >
+          {INSURANCE_PROVIDERS.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>IČO</TableHead>
+              <TableHead>Názov</TableHead>
+              <TableHead className="text-right">Suma (€)</TableHead>
+              <TableHead>Dátum zdroja</TableHead>
+              <TableHead>Deaktivované</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(q.data ?? []).map((r) => (
+              <TableRow key={`${r.ico}-${r.removedAt}`}>
+                <TableCell className="font-mono text-xs">{r.ico}</TableCell>
+                <TableCell className="text-xs">{r.debtorName ?? "—"}</TableCell>
+                <TableCell className="text-right text-xs">
+                  {r.debtAmount != null ? r.debtAmount.toFixed(2) : "—"}
+                </TableCell>
+                <TableCell className="text-xs">
+                  {r.sourceRecordDate ?? "—"}
+                </TableCell>
+                <TableCell className="text-xs">
+                  {r.removedAt ? formatDate(r.removedAt) : "—"}
+                </TableCell>
+              </TableRow>
+            ))}
+            {q.data && q.data.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-xs text-muted-foreground">
+                  Žiadne deaktivované záznamy pre {provider}.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
+  );
+}
         </>
       )}
     </div>
