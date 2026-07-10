@@ -137,6 +137,14 @@ interface WatchedSnapshot {
   hash: string | null;
 }
 
+const CHANGE_BATCH_SIZE = 1000;
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
 async function snapshotCurrentForWatched(
   provider: InsuranceProviderId,
 ): Promise<Map<string, WatchedSnapshot>> {
@@ -144,18 +152,22 @@ async function snapshotCurrentForWatched(
   const icos = ((watched as Array<{ ico: string }> | null) ?? []).map((w) => w.ico);
   const out = new Map<string, WatchedSnapshot>();
   if (icos.length === 0) return out;
-  const { data } = await admin()
-    .from("company_insurance_debts")
-    .select("ico, debt_amount, source_record_hash")
-    .eq("provider", provider)
-    .eq("is_current", true)
-    .in("ico", icos);
-  for (const row of (data as Array<{
-    ico: string;
-    debt_amount: number | null;
-    source_record_hash: string | null;
-  }> | null) ?? []) {
-    out.set(row.ico, { amount: row.debt_amount, hash: row.source_record_hash });
+  const icoChunks = chunkArray(icos, CHANGE_BATCH_SIZE);
+  for (let i = 0; i < icoChunks.length; i++) {
+    logImport(provider, `changes snapshot batch ${i + 1}/${icoChunks.length}`);
+    const { data } = await admin()
+      .from("company_insurance_debts")
+      .select("ico, debt_amount, source_record_hash")
+      .eq("provider", provider)
+      .eq("is_current", true)
+      .in("ico", icoChunks[i]);
+    for (const row of (data as Array<{
+      ico: string;
+      debt_amount: number | null;
+      source_record_hash: string | null;
+    }> | null) ?? []) {
+      out.set(row.ico, { amount: row.debt_amount, hash: row.source_record_hash });
+    }
   }
   return out;
 }
@@ -172,20 +184,24 @@ async function emitChanges(
   const watchedIcos = ((watched as Array<{ ico: string }> | null) ?? []).map((w) => w.ico);
   if (watchedIcos.length === 0) return;
 
-  const { data: nowCurrent } = await admin()
-    .from("company_insurance_debts")
-    .select("ico, debt_amount, source_record_hash")
-    .eq("provider", provider)
-    .eq("is_current", true)
-    .in("ico", watchedIcos);
-
   const curMap = new Map<string, WatchedSnapshot>();
-  for (const row of (nowCurrent as Array<{
-    ico: string;
-    debt_amount: number | null;
-    source_record_hash: string | null;
-  }> | null) ?? []) {
-    curMap.set(row.ico, { amount: row.debt_amount, hash: row.source_record_hash });
+  const icoChunks = chunkArray(watchedIcos, CHANGE_BATCH_SIZE);
+  for (let i = 0; i < icoChunks.length; i++) {
+    logImport(provider, `changes current batch ${i + 1}/${icoChunks.length}`);
+    const { data: nowCurrent } = await admin()
+      .from("company_insurance_debts")
+      .select("ico, debt_amount, source_record_hash")
+      .eq("provider", provider)
+      .eq("is_current", true)
+      .in("ico", icoChunks[i]);
+
+    for (const row of (nowCurrent as Array<{
+      ico: string;
+      debt_amount: number | null;
+      source_record_hash: string | null;
+    }> | null) ?? []) {
+      curMap.set(row.ico, { amount: row.debt_amount, hash: row.source_record_hash });
+    }
   }
 
   const changes: Array<{
@@ -232,8 +248,10 @@ async function emitChanges(
     }
   }
 
-  if (changes.length > 0) {
-    await admin().from("company_changes").insert(changes);
+  const changeChunks = chunkArray(changes, CHANGE_BATCH_SIZE);
+  for (let i = 0; i < changeChunks.length; i++) {
+    logImport(provider, `changes insert batch ${i + 1}/${changeChunks.length} rows=${changeChunks[i].length}`);
+    await admin().from("company_changes").insert(changeChunks[i]);
   }
 }
 
