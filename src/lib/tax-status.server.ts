@@ -661,6 +661,10 @@ export async function importOneDataset(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(dataset, true, "Dataset nezmenený od posledného behu.");
+    await reportProgress(progress, {
+      phase: "done",
+      message: "Dataset nezmenený od posledného behu.",
+    });
     return {
       dataset,
       status: "unchanged",
