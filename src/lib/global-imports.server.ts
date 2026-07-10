@@ -124,13 +124,17 @@ function logStepError(message: string, err?: unknown): void {
   );
 }
 
-async function runStep(step: StepId, sb: SupabaseClient): Promise<GlobalStepResult> {
+async function runStep(
+  step: StepId,
+  sb: SupabaseClient,
+  runId: string,
+): Promise<GlobalStepResult> {
   const started = Date.now();
   try {
     logStep(`step=${step} start`);
     if (step === "social_insurance") {
       const { importOneProvider } = await import("@/lib/insurance-debt.server");
-      const r = await importOneProvider("social_insurance");
+      const r = await importOneProvider("social_insurance", runId);
       return {
         step,
         ok: r.status === "success" || r.status === "unchanged" || r.status === "empty",
@@ -145,7 +149,7 @@ async function runStep(step: StepId, sb: SupabaseClient): Promise<GlobalStepResu
 
     const { importOneDataset } = await import("@/lib/tax-status.server");
     const dataset = step === "tax_debtors" ? "tax_debtors" : "vat_registered";
-    const r = await importOneDataset(dataset);
+    const r = await importOneDataset(dataset, runId);
     return {
       step,
       ok:
