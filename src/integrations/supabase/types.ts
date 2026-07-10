@@ -155,6 +155,51 @@ export type Database = {
         }
         Relationships: []
       }
+      company_insurance_debts: {
+        Row: {
+          address: string | null
+          currency: string | null
+          debt_amount: number | null
+          debtor_found: boolean
+          debtor_name: string | null
+          ico: string
+          id: string
+          imported_at: string
+          provider: string
+          raw_data: Json | null
+          source_record_date: string | null
+          source_url: string | null
+        }
+        Insert: {
+          address?: string | null
+          currency?: string | null
+          debt_amount?: number | null
+          debtor_found: boolean
+          debtor_name?: string | null
+          ico: string
+          id?: string
+          imported_at?: string
+          provider: string
+          raw_data?: Json | null
+          source_record_date?: string | null
+          source_url?: string | null
+        }
+        Update: {
+          address?: string | null
+          currency?: string | null
+          debt_amount?: number | null
+          debtor_found?: boolean
+          debtor_name?: string | null
+          ico?: string
+          id?: string
+          imported_at?: string
+          provider?: string
+          raw_data?: Json | null
+          source_record_date?: string | null
+          source_url?: string | null
+        }
+        Relationships: []
+      }
       company_people: {
         Row: {
           created_at: string
@@ -430,6 +475,48 @@ export type Database = {
           priority?: number
           source?: string
           started_at?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      insurance_import_runs: {
+        Row: {
+          content_hash: string | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          provider: string
+          records_downloaded: number | null
+          records_normalized: number | null
+          records_with_ico: number | null
+          source_url: string | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          content_hash?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          provider: string
+          records_downloaded?: number | null
+          records_normalized?: number | null
+          records_with_ico?: number | null
+          source_url?: string | null
+          started_at?: string
+          status: string
+        }
+        Update: {
+          content_hash?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          provider?: string
+          records_downloaded?: number | null
+          records_normalized?: number | null
+          records_with_ico?: number | null
+          source_url?: string | null
+          started_at?: string
           status?: string
         }
         Relationships: []
