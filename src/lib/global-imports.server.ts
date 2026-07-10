@@ -108,7 +108,7 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
       steps.push({
         step: "social_insurance",
         ok: r.status === "success" || r.status === "unchanged" || r.status === "empty",
-        status: r.status,
+        status: r.status ?? null,
         errorMessage: r.errorMessage ?? null,
         recordsInserted: r.recordsInserted,
         recordsUpdated: r.recordsUpdated,
@@ -131,7 +131,7 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
       steps.push({
         step: "tax_debtors",
         ok: r.status !== "failed" && r.status !== "crashed",
-        status: r.status,
+        status: r.status ?? null,
         errorMessage: r.errorMessage ?? null,
         recordsInserted: r.recordsInserted,
         recordsUpdated: r.recordsUpdated,
@@ -154,7 +154,7 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
       steps.push({
         step: "vat_registered",
         ok: r.status === "success" || r.status === "unchanged" || r.status === "empty",
-        status: r.status,
+        status: r.status ?? null,
         errorMessage: r.errorMessage ?? null,
         recordsInserted: r.recordsInserted,
         recordsUpdated: r.recordsUpdated,
