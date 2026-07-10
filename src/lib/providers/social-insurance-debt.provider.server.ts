@@ -4,8 +4,9 @@
 // ZIP containing CSV + fixed-width TXT files. This file only downloads
 // the ZIP, extracts the CSV, and normalizes rows.
 
-import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { unzipSync, strFromU8 } from "fflate";
+import { downloadToTempFile } from "@/lib/providers/download-to-file.server";
 import {
   type ImporterOutcome,
   type InsuranceDebtRecord,
