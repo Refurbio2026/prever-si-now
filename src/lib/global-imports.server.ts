@@ -42,7 +42,10 @@ async function loadAdmin(): Promise<SupabaseClient> {
   return supabaseAdmin as unknown as SupabaseClient;
 }
 
-async function tryAcquireLock(sb: SupabaseClient): Promise<boolean> {
+async function tryAcquireLock(
+  sb: SupabaseClient,
+  runId: string,
+): Promise<boolean> {
   const { data } = await sb
     .from("datahub_settings")
     .select("global_import_running, global_import_started_at")
@@ -67,6 +70,7 @@ async function tryAcquireLock(sb: SupabaseClient): Promise<boolean> {
         id: true,
         global_import_running: true,
         global_import_started_at: new Date().toISOString(),
+        global_import_current_run_id: runId,
       },
       { onConflict: "id" },
     );
