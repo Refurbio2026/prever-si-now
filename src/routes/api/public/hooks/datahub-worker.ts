@@ -92,11 +92,15 @@ export const Route = createFileRoute("/api/public/hooks/datahub-worker")({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        const denied = verifyDatahubSecret(request);
+        if (denied) return denied;
         const url = new URL(request.url);
         const trigger = url.searchParams.get("trigger") ?? "cron";
         return runWorker(parseLimit(url.searchParams.get("limit")), trigger);
       },
       POST: async ({ request }) => {
+        const denied = verifyDatahubSecret(request);
+        if (denied) return denied;
         const url = new URL(request.url);
         let body: { limit?: number; trigger?: string } = {};
         try {
