@@ -733,28 +733,45 @@ function SchedulerOverview() {
     retry: 1,
   });
 
-  const currentRunId = overview.data?.currentRunId ?? null;
+  const settingsRunId = overview.data?.currentRunId ?? null;
   const globalJobRunning =
     overview.data?.jobs?.find((j) => j.name === "datahub-global-imports")
       ?.running ?? false;
 
-  const progress = useQuery({
-    queryKey: ["scheduler-progress", currentRunId],
-    enabled: !!currentRunId,
-    refetchInterval: globalJobRunning ? 3_000 : false,
-    queryFn: async (): Promise<ProgressRow[]> => {
-      if (!currentRunId) return [];
+  const progress = useQuery<{ runId: string | null; rows: ProgressRow[] }>({
+    queryKey: ["scheduler-progress", settingsRunId],
+    refetchInterval: globalJobRunning ? 3_000 : 15_000,
+    queryFn: async () => {
+      // Discover the latest run_id directly from the progress table so we
+      // render live progress even when datahub_settings.current_run_id is
+      // stale or null (e.g. after releaseLock or a legacy run).
+      const latest = await supabase
+        .from("datahub_import_progress")
+        .select("run_id, updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const runId =
+        (latest.data?.run_id as string | undefined) ?? settingsRunId ?? null;
+      // eslint-disable-next-line no-console
+      console.log("[scheduler-progress] settingsRunId=", settingsRunId, "resolved=", runId, "latestErr=", latest.error?.message);
+      if (!runId) return { runId: null, rows: [] };
       const { data, error } = await supabase
         .from("datahub_import_progress")
         .select(
           "source, phase, current_batch, total_batches, records_processed, records_total, message, updated_at",
         )
-        .eq("run_id", currentRunId)
+        .eq("run_id", runId)
         .order("updated_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as ProgressRow[];
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("[scheduler-progress] read error", error);
+        throw error;
+      }
+      return { runId, rows: (data ?? []) as ProgressRow[] };
     },
   });
+  const currentRunId = progress.data?.runId ?? settingsRunId;
 
   // When run flips to done/failed for all sources, refresh freshness overview.
   const progressRows = progress.data ?? [];
