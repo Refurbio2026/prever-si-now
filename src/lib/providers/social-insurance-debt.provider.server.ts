@@ -4,8 +4,9 @@
 // ZIP containing CSV + fixed-width TXT files. This file only downloads
 // the ZIP, extracts the CSV, and normalizes rows.
 
-import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { unzipSync, strFromU8 } from "fflate";
+import { downloadToTempFile } from "@/lib/providers/download-to-file.server";
 import {
   type ImporterOutcome,
   type InsuranceDebtRecord,
@@ -127,20 +128,18 @@ export async function importSocialInsuranceDebtors(): Promise<ImporterOutcome> {
     sourceRecordDate: null,
   };
 
+  let dl: Awaited<ReturnType<typeof downloadToTempFile>> | null = null;
   try {
     logSp(`download start url=${DEFAULT_DOWNLOAD_URL}`);
-    const res = await fetchWithTimeout(DEFAULT_DOWNLOAD_URL);
-    if (!res.ok) {
-      logSpError(`download failed status=${res.status}`);
-      return {
-        ...base,
-        errorMessage: `HTTP ${res.status} pri sťahovaní SP datasetu.`,
-      };
-    }
-    const buf = new Uint8Array(await res.arrayBuffer());
-    const contentHash = createHash("sha256").update(buf).digest("hex");
+    dl = await downloadToTempFile({
+      url: DEFAULT_DOWNLOAD_URL,
+      label: "SP",
+      filename: "preversi-sp.zip",
+    });
+    const buf = await readFile(dl.filePath);
+    const contentHash = dl.contentHash;
     logSp(`downloaded bytes=${buf.byteLength} hash=${contentHash.slice(0, 12)}`);
-    const entries = unzipSync(buf);
+    const entries = unzipSync(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength));
     const csvName = Object.keys(entries).find((n) => n.toLowerCase().endsWith(".csv"));
     if (!csvName) {
       return { ...base, errorMessage: "V ZIP archíve chýba CSV súbor." };
@@ -224,5 +223,7 @@ export async function importSocialInsuranceDebtors(): Promise<ImporterOutcome> {
           : err.message
         : "Neznáma chyba pri sťahovaní SP datasetu.";
     return { ...base, errorMessage: msg };
+  } finally {
+    if (dl) await dl.cleanup();
   }
 }
