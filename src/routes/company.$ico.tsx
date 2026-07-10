@@ -476,6 +476,7 @@ function CompanyProfileView({
           {/* OVERVIEW */}
           <TabsContent value="overview" className="space-y-6">
             <AiReportCard ico={ico} />
+            <InsuranceDebtsSection ico={ico} />
 
             {criticalRisks.length > 0 && (
               <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
