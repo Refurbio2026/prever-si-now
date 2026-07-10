@@ -1,82 +1,13 @@
 // Orchestrator for the daily global DataHub imports.
 // Runs Social Insurance → Tax debtors (download+validation+staging only,
 // reconciliation stays disabled per provider spec) → VAT register.
-// Each importer is wrapped in its own try/catch and logged into
-// data_freshness by the underlying orchestrators. If one fails, the next
-// still runs. A row in datahub_settings acts as a lock to prevent duplicate
-// concurrent runs.
+// Each importer is wrapped in its own try/catch. If one fails, the next still
+// runs. A row in datahub_settings acts as a lock to prevent duplicate runs and
+// is released from a finally block no matter how the chain ends.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { loadDatahubSecret } from "@/lib/hooks-auth.server";
 
-const LOVABLE_PROJECT_ID = "2a19b096-ded5-4f98-b01e-ebcff1046c4a";
-const STEP_TIMEOUT_MS = 55_000;
 type StepId = "social_insurance" | "tax_debtors" | "vat_registered";
-
-function baseUrl(): string {
-  const explicit = process.env.DATAHUB_BASE_URL;
-  if (explicit) return explicit.replace(/\/+$/, "");
-  return `https://project--${LOVABLE_PROJECT_ID}.lovable.app`;
-}
-
-async function runStepIsolated(step: StepId): Promise<GlobalStepResult> {
-  const url = `${baseUrl()}/api/public/hooks/run-import-step`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), STEP_TIMEOUT_MS);
-  try {
-    const secret = await loadDatahubSecret();
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Datahub-Secret": secret,
-      },
-      body: JSON.stringify({ step }),
-      signal: controller.signal,
-    });
-    const text = await res.text();
-    let parsed: Record<string, unknown> = {};
-    try {
-      parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {};
-    } catch {
-      /* non-JSON body */
-    }
-    if (!res.ok) {
-      return {
-        step,
-        ok: false,
-        status: (parsed.status as string | null) ?? `http_${res.status}`,
-        errorMessage:
-          (parsed.errorMessage as string | null) ??
-          `Krok zlyhal (HTTP ${res.status}): ${text.slice(0, 200)}`,
-      };
-    }
-    return {
-      step,
-      ok: Boolean(parsed.ok),
-      status: (parsed.status as string | null) ?? null,
-      errorMessage: (parsed.errorMessage as string | null) ?? null,
-      recordsInserted: parsed.recordsInserted as number | undefined,
-      recordsUpdated: parsed.recordsUpdated as number | undefined,
-      recordsUnchanged: parsed.recordsUnchanged as number | undefined,
-      recordsDeactivated: parsed.recordsDeactivated as number | undefined,
-    };
-  } catch (err) {
-    const aborted = err instanceof Error && err.name === "AbortError";
-    return {
-      step,
-      ok: false,
-      status: aborted ? "timeout" : "dispatch_failed",
-      errorMessage: aborted
-        ? `Krok vypršal po ${Math.round(STEP_TIMEOUT_MS / 1000)}s.`
-        : err instanceof Error
-          ? err.message
-          : "Neznáma chyba pri dispatchi.",
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 export interface GlobalStepResult {
   step: string;
@@ -151,6 +82,97 @@ async function releaseLock(sb: SupabaseClient): Promise<void> {
     .eq("id", true);
 }
 
+function stepSource(step: StepId): string {
+  if (step === "social_insurance") return "social_insurance";
+  return `fs_${step}`;
+}
+
+async function writeFailureFreshness(
+  sb: SupabaseClient,
+  step: StepId,
+  message: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await sb.from("data_freshness").upsert(
+    {
+      ico: "__GLOBAL__",
+      source: stepSource(step),
+      last_attempt_at: now,
+      status: "failed",
+      error_message: message,
+      updated_at: now,
+    },
+    { onConflict: "ico,source" },
+  );
+}
+
+function logStep(message: string): void {
+  // eslint-disable-next-line no-console
+  console.log(`[global-imports] ${message}`);
+}
+
+function logStepError(message: string, err?: unknown): void {
+  // eslint-disable-next-line no-console
+  console.error(
+    `[global-imports] ${message}`,
+    err instanceof Error ? (err.stack ?? err.message) : (err ?? ""),
+  );
+}
+
+async function runStep(step: StepId, sb: SupabaseClient): Promise<GlobalStepResult> {
+  const started = Date.now();
+  try {
+    logStep(`step=${step} start`);
+    if (step === "social_insurance") {
+      const { importOneProvider } = await import("@/lib/insurance-debt.server");
+      const r = await importOneProvider("social_insurance");
+      return {
+        step,
+        ok: r.status === "success" || r.status === "unchanged" || r.status === "empty",
+        status: r.status ?? null,
+        errorMessage: r.errorMessage ?? null,
+        recordsInserted: r.recordsInserted,
+        recordsUpdated: r.recordsUpdated,
+        recordsUnchanged: r.recordsUnchanged,
+        recordsDeactivated: r.recordsDeactivated,
+      };
+    }
+
+    const { importOneDataset } = await import("@/lib/tax-status.server");
+    const dataset = step === "tax_debtors" ? "tax_debtors" : "vat_registered";
+    const r = await importOneDataset(dataset);
+    return {
+      step,
+      ok:
+        step === "tax_debtors"
+          ? r.status !== "crashed"
+          : r.status === "success" || r.status === "unchanged" || r.status === "empty",
+      status: r.status ?? null,
+      errorMessage: r.errorMessage ?? null,
+      recordsInserted: r.recordsInserted,
+      recordsUpdated: r.recordsUpdated,
+      recordsUnchanged: r.recordsUnchanged,
+      recordsDeactivated: r.recordsDeactivated,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Step crashed";
+    logStepError(`step=${step} crashed`, err);
+    try {
+      await writeFailureFreshness(sb, step, message);
+    } catch (freshnessErr) {
+      logStepError(`step=${step} failed to write data_freshness`, freshnessErr);
+    }
+    return {
+      step,
+      ok: false,
+      status: "crashed",
+      errorMessage: message,
+    };
+  } finally {
+    logStep(`step=${step} finished durationMs=${Date.now() - started}`);
+  }
+}
+
 export async function runGlobalImports(): Promise<GlobalImportResult> {
   void admin;
   const sb = await loadAdmin();
@@ -173,17 +195,17 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
 
   try {
     for (const step of stepIds) {
-      // eslint-disable-next-line no-console
-      console.log(`[global-imports] dispatching step=${step}`);
-      const stepResult = await runStepIsolated(step);
+      const stepResult = await runStep(step, sb);
       steps.push(stepResult);
-      // eslint-disable-next-line no-console
-      console.log(
-        `[global-imports] step=${step} ok=${stepResult.ok} status=${stepResult.status ?? "n/a"}`,
-      );
+      logStep(`step=${step} ok=${stepResult.ok} status=${stepResult.status ?? "n/a"}`);
     }
   } finally {
-    await releaseLock(sb);
+    try {
+      await releaseLock(sb);
+      logStep("lock released");
+    } catch (err) {
+      logStepError("lock release failed", err);
+    }
   }
 
 
