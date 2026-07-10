@@ -535,6 +535,39 @@ function fmt(iso: string): string {
   }
 }
 
+const FALLBACK_JOBS = [
+  {
+    name: "datahub-global-imports",
+    schedule: "denne o 04:00 Europe/Bratislava",
+    description:
+      "Sociálna poisťovňa → Zoznam daňových dlžníkov (stiahnutie + validácia + staging) → Register platiteľov DPH.",
+    lastRunAt: null,
+    lastStatus: null,
+    lastError: null,
+    running: false,
+    cronSchedule: null,
+    cronActive: null,
+    cronLastStart: null,
+    cronLastEnd: null,
+    cronLastStatus: null,
+  },
+  {
+    name: "datahub-queue-worker",
+    schedule: "každú minútu",
+    description:
+      "Spracuje čakajúce IČO úlohy z fronty datahub. Rešpektuje pauzu.",
+    lastRunAt: null,
+    lastStatus: null,
+    lastError: null,
+    running: false,
+    cronSchedule: null,
+    cronActive: null,
+    cronLastStart: null,
+    cronLastEnd: null,
+    cronLastStatus: null,
+  },
+] as const;
+
 function SchedulerOverview() {
   const fetchOverview = useServerFn(getSchedulerOverviewFn);
   const runGlobal = useServerFn(runGlobalImportsNowFn);
@@ -544,6 +577,7 @@ function SchedulerOverview() {
     queryKey: ["scheduler-overview"],
     queryFn: () => fetchOverview(),
     refetchInterval: 10_000,
+    retry: 1,
   });
 
   const globalMut = useMutation({
@@ -572,6 +606,13 @@ function SchedulerOverview() {
     onError: (e) => toast.error((e as Error).message),
   });
 
+  // Always show the two known jobs — manual "Spustiť teraz" must work even if
+  // the cron / overview query fails.
+  const jobs = overview.data?.jobs ?? FALLBACK_JOBS;
+  const cronNote =
+    overview.data?.cronError ??
+    (overview.isError ? "Stav plánovača sa nepodarilo načítať" : null);
+
   return (
     <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
       <div className="flex items-center justify-between gap-3">
@@ -584,9 +625,14 @@ function SchedulerOverview() {
         Naplánované úlohy sú spúšťané zo Supabase (pg_cron) cez podpísaný
         X-Datahub-Secret. Manuálne spustenie beží pod tvojím admin účtom.
       </p>
+      {cronNote && (
+        <p className="mt-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          {cronNote}
+        </p>
+      )}
 
       <div className="mt-4 space-y-3">
-        {overview.data?.jobs.map((job) => {
+        {jobs.map((job) => {
           const isGlobal = job.name === "datahub-global-imports";
           const busy = isGlobal ? globalMut.isPending : workerMut.isPending;
           return (
@@ -608,16 +654,28 @@ function SchedulerOverview() {
                     {job.lastStatus && !job.running && (
                       <Badge
                         variant={
-                          job.lastStatus === "success" ? "secondary" : "destructive"
+                          job.lastStatus === "success"
+                            ? "secondary"
+                            : "destructive"
                         }
                         className="rounded-full"
                       >
                         {job.lastStatus}
                       </Badge>
                     )}
+                    {job.cronActive === false && (
+                      <Badge variant="destructive" className="rounded-full">
+                        cron neaktívny
+                      </Badge>
+                    )}
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     {job.schedule}
+                    {job.cronSchedule && job.cronSchedule !== job.schedule && (
+                      <span className="ml-2 font-mono">
+                        ({job.cronSchedule})
+                      </span>
+                    )}
                   </div>
                 </div>
                 <Button
@@ -647,8 +705,17 @@ function SchedulerOverview() {
                     {job.lastRunAt ? fmt(job.lastRunAt) : "—"}
                   </span>
                 </div>
+                {job.cronLastStart && (
+                  <div>
+                    Posledný cron:{" "}
+                    <span className="font-mono">
+                      {fmt(job.cronLastStart)}
+                      {job.cronLastStatus ? ` · ${job.cronLastStatus}` : ""}
+                    </span>
+                  </div>
+                )}
                 {job.lastError && (
-                  <div className="text-destructive">
+                  <div className="text-destructive sm:col-span-2">
                     Chyba: {job.lastError}
                   </div>
                 )}
@@ -656,11 +723,6 @@ function SchedulerOverview() {
             </div>
           );
         })}
-        {!overview.data && !overview.isLoading && (
-          <p className="text-sm text-muted-foreground">
-            Plánovač zatiaľ nemá žiadne dáta.
-          </p>
-        )}
       </div>
     </Card>
   );
