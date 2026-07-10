@@ -585,6 +585,7 @@ type SchedulerJob = {
 async function fetchSchedulerOverview(): Promise<{
   jobs: SchedulerJob[];
   cronError: string | null;
+  currentRunId: string | null;
 }> {
   // Read everything the client can see under normal admin RLS + a
   // SECURITY DEFINER RPC for cron metadata. No service-role required.
@@ -593,7 +594,7 @@ async function fetchSchedulerOverview(): Promise<{
     supabase
       .from("datahub_settings")
       .select(
-        "global_import_running, global_import_started_at, global_import_last_finished_at",
+        "global_import_running, global_import_started_at, global_import_last_finished_at, global_import_current_run_id",
       )
       .eq("id", true)
       .maybeSingle(),
@@ -663,6 +664,7 @@ async function fetchSchedulerOverview(): Promise<{
 
   return {
     cronError,
+    currentRunId: settings?.global_import_current_run_id ?? null,
     jobs: [
       buildJob(FALLBACK_JOBS[0], {
         lastRunAt:
@@ -690,6 +692,24 @@ async function fetchSchedulerOverview(): Promise<{
     ],
   };
 }
+
+const PROGRESS_SOURCES: Array<{ id: string; label: string }> = [
+  { id: "social_insurance", label: "Sociálna poisťovňa" },
+  { id: "fs_tax_debtors", label: "Zoznam daňových dlžníkov" },
+  { id: "fs_vat_registered", label: "Register platiteľov DPH" },
+];
+
+interface ProgressRow {
+  source: string;
+  phase: string;
+  current_batch: number | null;
+  total_batches: number | null;
+  records_processed: number | null;
+  records_total: number | null;
+  message: string | null;
+  updated_at: string;
+}
+
 
 function SchedulerOverview() {
   const runGlobal = useServerFn(runGlobalImportsNowFn);
