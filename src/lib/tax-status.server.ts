@@ -142,6 +142,7 @@ interface WatchedSnapshot {
 }
 
 const CHANGE_BATCH_SIZE = 1000;
+const WATCHED_PAGE_SIZE = 1000;
 
 function chunkArray<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -149,11 +150,33 @@ function chunkArray<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
+async function fetchWatchedIcos(dataset: TaxDatasetId, phase: string): Promise<string[]> {
+  const out = new Set<string>();
+  let afterIco: string | null = null;
+  for (let page = 1; page <= 10000; page++) {
+    logImport(dataset, `changes ${phase} watched page ${page}`);
+    let query = admin()
+      .from("watched_companies")
+      .select("ico")
+      .order("ico", { ascending: true })
+      .limit(WATCHED_PAGE_SIZE);
+    if (afterIco) query = query.gt("ico", afterIco);
+
+    const { data, error } = await query;
+    if (error) throw new Error(`watched companies page ${page}: ${error.message}`);
+    const rows = (data as Array<{ ico: string }> | null) ?? [];
+    if (rows.length === 0) return [...out];
+    for (const row of rows) out.add(row.ico);
+    afterIco = rows[rows.length - 1]?.ico ?? null;
+    if (rows.length < WATCHED_PAGE_SIZE || !afterIco) return [...out];
+  }
+  throw new Error("watched companies exceeded safety page cap");
+}
+
 async function snapshotWatched(
   dataset: TaxDatasetId,
 ): Promise<Map<string, WatchedSnapshot>> {
-  const { data: watched } = await admin().from("watched_companies").select("ico");
-  const icos = ((watched as Array<{ ico: string }> | null) ?? []).map((w) => w.ico);
+  const icos = await fetchWatchedIcos(dataset, "snapshot");
   const out = new Map<string, WatchedSnapshot>();
   if (icos.length === 0) return out;
   const icoChunks = chunkArray(icos, CHANGE_BATCH_SIZE);
@@ -189,8 +212,7 @@ async function emitChanges(
   dataset: TaxDatasetId,
   prev: Map<string, WatchedSnapshot>,
 ): Promise<void> {
-  const { data: watched } = await admin().from("watched_companies").select("ico");
-  const watchedIcos = ((watched as Array<{ ico: string }> | null) ?? []).map((w) => w.ico);
+  const watchedIcos = await fetchWatchedIcos(dataset, "current");
   if (watchedIcos.length === 0) return;
 
   const curMap = new Map<string, WatchedSnapshot>();
