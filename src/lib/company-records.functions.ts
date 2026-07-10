@@ -194,3 +194,109 @@ export const getImportLogsFn = createServerFn({ method: "POST" })
       finishedAt: r.finished_at,
     }));
   });
+
+// ---------- RPO (Register právnických osôb) ----------
+
+export interface RpoPersonRecord {
+  id: string;
+  personType: "statutory_body" | "shareholder" | "founder" | "other";
+  functionLabel: string | null;
+  fullName: string;
+  address: string | null;
+  birthDate: string | null;
+  shareAmount: number | null;
+  shareCurrency: string | null;
+  sharePercent: number | null;
+  validFrom: string | null;
+  validTo: string | null;
+  isCurrent: boolean;
+}
+
+export interface RpoHistoryRecord {
+  id: string;
+  changeType:
+    | "name_changed"
+    | "address_changed"
+    | "legal_form_changed"
+    | "statutory_body_changed"
+    | "shareholder_changed"
+    | "other";
+  fieldLabel: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  effectiveDate: string | null;
+}
+
+export interface RpoFreshness {
+  status: "success" | "failed" | "not_found" | null;
+  lastSuccessAt: string | null;
+  lastAttemptAt: string | null;
+  errorMessage: string | null;
+}
+
+export interface RpoDataResponse {
+  persons: RpoPersonRecord[];
+  history: RpoHistoryRecord[];
+  freshness: RpoFreshness;
+}
+
+export const getRpoDataFn = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => icoSchema.parse(input))
+  .handler(async ({ data }): Promise<RpoDataResponse> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const ico = data.ico;
+
+    const [{ data: personRows }, { data: histRows }, { data: fresh }] = await Promise.all([
+      supabaseAdmin
+        .from("company_persons")
+        .select("*")
+        .eq("ico", ico)
+        .eq("source", "rpo")
+        .order("is_current", { ascending: false })
+        .order("valid_from", { ascending: false, nullsFirst: false }),
+      supabaseAdmin
+        .from("company_registry_history")
+        .select("*")
+        .eq("ico", ico)
+        .eq("source", "rpo")
+        .order("effective_date", { ascending: false, nullsFirst: false })
+        .limit(200),
+      supabaseAdmin
+        .from("data_freshness")
+        .select("status, last_success_at, last_attempt_at, error_message")
+        .eq("ico", ico)
+        .eq("source", "rpo")
+        .maybeSingle(),
+    ]);
+
+    return {
+      persons: (personRows ?? []).map((r) => ({
+        id: r.id,
+        personType: r.person_type as RpoPersonRecord["personType"],
+        functionLabel: r.function_label,
+        fullName: r.full_name,
+        address: r.address,
+        birthDate: r.birth_date,
+        shareAmount: r.share_amount,
+        shareCurrency: r.share_currency,
+        sharePercent: r.share_percent,
+        validFrom: r.valid_from,
+        validTo: r.valid_to,
+        isCurrent: r.is_current,
+      })),
+      history: (histRows ?? []).map((r) => ({
+        id: r.id,
+        changeType: r.change_type as RpoHistoryRecord["changeType"],
+        fieldLabel: r.field_label,
+        oldValue: r.old_value,
+        newValue: r.new_value,
+        effectiveDate: r.effective_date,
+      })),
+      freshness: {
+        status: (fresh?.status ?? null) as RpoFreshness["status"],
+        lastSuccessAt: fresh?.last_success_at ?? null,
+        lastAttemptAt: fresh?.last_attempt_at ?? null,
+        errorMessage: fresh?.error_message ?? null,
+      },
+    };
+  });
