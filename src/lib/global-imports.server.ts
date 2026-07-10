@@ -171,6 +171,15 @@ async function runStep(
     } catch (freshnessErr) {
       logStepError(`step=${step} failed to write data_freshness`, freshnessErr);
     }
+    try {
+      const { reportProgress } = await import("@/lib/import-progress.server");
+      await reportProgress(
+        { admin: sb, runId, source: stepSource(step) },
+        { phase: "failed", message },
+      );
+    } catch {
+      /* ignored */
+    }
     return {
       step,
       ok: false,
