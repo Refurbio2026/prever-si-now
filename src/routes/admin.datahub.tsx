@@ -203,6 +203,8 @@ function DataHubPage() {
         </p>
       </div>
 
+      <SchedulerOverview />
+
       {/* Source picker + options */}
       <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
         <h2 className="text-lg font-semibold">Zdroje</h2>
