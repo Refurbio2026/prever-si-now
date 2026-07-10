@@ -235,29 +235,87 @@ export interface ReconcileCounts {
   deactivated: number;
 }
 
+// Batch sizes chosen well under Postgres statement_timeout (typically 8s on
+// the Data API). Each batch is its own statement — a mid-run failure leaves
+// production consistent because we never DELETE from company_* tables, only
+// flip is_current/valid_to/removed_at.
+const RECONCILE_BATCH = 1000;
+const DEACTIVATE_BATCH = 5000;
+const MAX_BATCHES = 10_000; // hard safety cap
+
+function logProgress(label: string, batch: number, extra: Record<string, number>): void {
+  const parts = Object.entries(extra)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(" ");
+  // eslint-disable-next-line no-console
+  console.log(`[reconcile] ${label} batch ${batch} ${parts}`);
+}
+
 export async function reconcileInsurance(
   admin: SupabaseClient,
   provider: InsuranceProviderId,
   runId: string,
   sourceDate: string,
 ): Promise<{ counts: ReconcileCounts | null; errorMessage: string | null }> {
-  const { data, error } = await admin.rpc("reconcile_insurance_debts", {
-    _provider: provider,
-    _run_id: runId,
-    _source_date: sourceDate,
-  });
-  if (error) return { counts: null, errorMessage: error.message };
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row) return { counts: null, errorMessage: "RPC vrátila prázdny výsledok." };
-  return {
-    counts: {
+  const counts: ReconcileCounts = { inserted: 0, updated: 0, unchanged: 0, deactivated: 0 };
+
+  // Phase 1: apply staged rows (insert new / touch unchanged / close+reinsert changed).
+  let afterIco: string | null = null;
+  for (let batch = 1; batch <= MAX_BATCHES; batch++) {
+    const { data, error } = await admin.rpc("reconcile_insurance_debts_batch", {
+      _provider: provider,
+      _run_id: runId,
+      _source_date: sourceDate,
+      _after_ico: afterIco,
+      _limit: RECONCILE_BATCH,
+    });
+    if (error) return { counts: null, errorMessage: `stage batch ${batch}: ${error.message}` };
+    const row = Array.isArray(data) ? data[0] : data;
+    const processed = Number(row?.processed ?? 0);
+    if (!row || processed === 0 || !row.last_ico) {
+      logProgress(`insurance ${provider} stage`, batch, { processed: 0, done: 1 });
+      break;
+    }
+    counts.inserted += Number(row.inserted ?? 0);
+    counts.updated += Number(row.updated ?? 0);
+    counts.unchanged += Number(row.unchanged ?? 0);
+    logProgress(`insurance ${provider} stage`, batch, {
+      processed,
       inserted: Number(row.inserted ?? 0),
       updated: Number(row.updated ?? 0),
       unchanged: Number(row.unchanged ?? 0),
+    });
+    afterIco = row.last_ico as string;
+  }
+
+  // Phase 2: deactivate current rows that no longer appear in staging.
+  afterIco = null;
+  for (let batch = 1; batch <= MAX_BATCHES; batch++) {
+    const { data, error } = await admin.rpc("reconcile_insurance_deactivate_batch", {
+      _provider: provider,
+      _run_id: runId,
+      _after_ico: afterIco,
+      _limit: DEACTIVATE_BATCH,
+    });
+    if (error) return { counts: null, errorMessage: `deactivate batch ${batch}: ${error.message}` };
+    const row = Array.isArray(data) ? data[0] : data;
+    const scanned = Number(row?.scanned ?? 0);
+    if (!row || scanned === 0 || !row.last_ico) {
+      logProgress(`insurance ${provider} deactivate`, batch, { scanned: 0, done: 1 });
+      break;
+    }
+    counts.deactivated += Number(row.deactivated ?? 0);
+    logProgress(`insurance ${provider} deactivate`, batch, {
+      scanned,
       deactivated: Number(row.deactivated ?? 0),
-    },
-    errorMessage: null,
-  };
+    });
+    afterIco = row.last_ico as string;
+  }
+
+  // Phase 3: clear staging (small, single statement).
+  await admin.rpc("reconcile_insurance_cleanup", { _run_id: runId });
+
+  return { counts, errorMessage: null };
 }
 
 export async function reconcileTax(
@@ -266,23 +324,62 @@ export async function reconcileTax(
   runId: string,
   sourceDate: string,
 ): Promise<{ counts: ReconcileCounts | null; errorMessage: string | null }> {
-  const { data, error } = await admin.rpc("reconcile_tax_dataset", {
-    _dataset: dataset,
-    _run_id: runId,
-    _source_date: sourceDate,
-  });
-  if (error) return { counts: null, errorMessage: error.message };
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row) return { counts: null, errorMessage: "RPC vrátila prázdny výsledok." };
-  return {
-    counts: {
+  const counts: ReconcileCounts = { inserted: 0, updated: 0, unchanged: 0, deactivated: 0 };
+
+  let afterIco: string | null = null;
+  for (let batch = 1; batch <= MAX_BATCHES; batch++) {
+    const { data, error } = await admin.rpc("reconcile_tax_dataset_batch", {
+      _dataset: dataset,
+      _run_id: runId,
+      _source_date: sourceDate,
+      _after_ico: afterIco,
+      _limit: RECONCILE_BATCH,
+    });
+    if (error) return { counts: null, errorMessage: `stage batch ${batch}: ${error.message}` };
+    const row = Array.isArray(data) ? data[0] : data;
+    const processed = Number(row?.processed ?? 0);
+    if (!row || processed === 0 || !row.last_ico) {
+      logProgress(`tax ${dataset} stage`, batch, { processed: 0, done: 1 });
+      break;
+    }
+    counts.inserted += Number(row.inserted ?? 0);
+    counts.updated += Number(row.updated ?? 0);
+    counts.unchanged += Number(row.unchanged ?? 0);
+    logProgress(`tax ${dataset} stage`, batch, {
+      processed,
       inserted: Number(row.inserted ?? 0),
       updated: Number(row.updated ?? 0),
       unchanged: Number(row.unchanged ?? 0),
+    });
+    afterIco = row.last_ico as string;
+  }
+
+  afterIco = null;
+  for (let batch = 1; batch <= MAX_BATCHES; batch++) {
+    const { data, error } = await admin.rpc("reconcile_tax_dataset_deactivate_batch", {
+      _dataset: dataset,
+      _run_id: runId,
+      _after_ico: afterIco,
+      _limit: DEACTIVATE_BATCH,
+    });
+    if (error) return { counts: null, errorMessage: `deactivate batch ${batch}: ${error.message}` };
+    const row = Array.isArray(data) ? data[0] : data;
+    const scanned = Number(row?.scanned ?? 0);
+    if (!row || scanned === 0 || !row.last_ico) {
+      logProgress(`tax ${dataset} deactivate`, batch, { scanned: 0, done: 1 });
+      break;
+    }
+    counts.deactivated += Number(row.deactivated ?? 0);
+    logProgress(`tax ${dataset} deactivate`, batch, {
+      scanned,
       deactivated: Number(row.deactivated ?? 0),
-    },
-    errorMessage: null,
-  };
+    });
+    afterIco = row.last_ico as string;
+  }
+
+  await admin.rpc("reconcile_tax_dataset_cleanup", { _run_id: runId });
+
+  return { counts, errorMessage: null };
 }
 
 /** Best-effort cleanup — orphaned staging rows if a run crashed mid-flight. */
