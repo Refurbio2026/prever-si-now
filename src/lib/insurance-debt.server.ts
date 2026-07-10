@@ -1,58 +1,36 @@
 // Server-only orchestrator for insurance-debt imports.
-// Loads the per-provider importers, upserts normalized records into
-// public.company_insurance_debts, and writes per-run diagnostics into
-// public.insurance_import_runs. Never throws — one failing provider must
-// not break the others.
+// Full flow per provider:
+//   1. Create insurance_import_runs row (status='running') — get run_id.
+//   2. Run importer.
+//   3. If not_implemented / failed / unchanged (hash match) → mark run, return.
+//   4. Validate the outcome (min records, valid IČO ratio, duplicate ratio).
+//   5. Snapshot the previous current state (per-provider) for change detection.
+//   6. Insert normalized rows into staging_insurance_debts.
+//   7. Call reconcile_insurance_debts RPC (Postgres — advisory lock + txn).
+//   8. Emit monitoring changes for watched companies only.
+//   9. Update run row with final counters and status.
+// Never throws — one failing provider must not break the others.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   INSURANCE_PROVIDERS,
   type ImporterOutcome,
-  type InsuranceDebtRecord,
   type InsuranceProviderId,
-  type JsonValue,
 } from "@/lib/insurance-debt.types";
 import { importSocialInsuranceDebtors } from "@/lib/providers/social-insurance-debt.provider.server";
 import { importVszpDebtors } from "@/lib/providers/vszp-debt.provider.server";
 import { importDoveraDebtors } from "@/lib/providers/dovera-debt.provider.server";
 import { importUnionDebtors } from "@/lib/providers/union-debt.provider.server";
+import {
+  cleanupStaging,
+  reconcileInsurance,
+  stageInsurance,
+  validateInsurance,
+} from "@/lib/reconcile.server";
 
-// Untyped view over supabaseAdmin so we can access tables that were added
-// after types.ts was last regenerated. All reads/writes still validate at
-// runtime via Postgres constraints.
 function admin(): SupabaseClient {
   return supabaseAdmin as unknown as SupabaseClient;
-}
-
-const CHUNK = 500;
-
-async function upsertRecords(records: InsuranceDebtRecord[]): Promise<{
-  upserted: number;
-  errorMessage: string | null;
-}> {
-  if (records.length === 0) return { upserted: 0, errorMessage: null };
-  let upserted = 0;
-  for (let i = 0; i < records.length; i += CHUNK) {
-    const slice = records.slice(i, i + CHUNK).map((r) => ({
-      ico: r.ico,
-      provider: r.provider,
-      debtor_found: r.debtorFound,
-      debt_amount: r.debtAmount,
-      currency: r.currency,
-      debtor_name: r.debtorName,
-      address: r.address,
-      source_record_date: r.sourceRecordDate,
-      source_url: r.sourceUrl,
-      raw_data: r.rawData,
-    }));
-    const { error } = await admin()
-      .from("company_insurance_debts")
-      .upsert(slice, { onConflict: "ico,provider,source_record_date" });
-    if (error) return { upserted, errorMessage: error.message };
-    upserted += slice.length;
-  }
-  return { upserted, errorMessage: null };
 }
 
 async function writeFreshness(
@@ -77,49 +55,116 @@ async function writeFreshness(
     );
 }
 
-async function latestRunFor(
+async function latestSuccessHash(
   provider: InsuranceProviderId,
-): Promise<{ content_hash: string | null } | null> {
+): Promise<string | null> {
   const { data } = await admin()
     .from("insurance_import_runs")
     .select("content_hash")
     .eq("provider", provider)
-    .eq("status", "success")
+    .in("status", ["success", "empty", "unchanged"])
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data as { content_hash: string | null } | null) ?? null;
+  return (data as { content_hash: string | null } | null)?.content_hash ?? null;
 }
 
-async function detectChanges(
+async function insertRunRow(
   provider: InsuranceProviderId,
-  records: InsuranceDebtRecord[],
-): Promise<void> {
-  // Load previous "current" per-IČO record for this provider (latest one
-  // per IČO). If a previous positive record vanishes → removed; if amount
-  // changed → amount_changed; new IČO → added.
-  const { data: prev } = await admin()
+  startedAt: Date,
+): Promise<string | null> {
+  const { data, error } = await admin()
+    .from("insurance_import_runs")
+    .insert({
+      provider,
+      status: "running",
+      started_at: startedAt.toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !data) return null;
+  return (data as { id: string }).id;
+}
+
+interface RunUpdate {
+  status: string;
+  source_url?: string | null;
+  content_hash?: string | null;
+  previous_source_hash?: string | null;
+  source_record_date?: string | null;
+  records_downloaded?: number;
+  records_normalized?: number;
+  records_with_ico?: number;
+  records_valid?: number;
+  records_invalid?: number;
+  records_inserted?: number;
+  records_updated?: number;
+  records_unchanged?: number;
+  records_deactivated?: number;
+  validation_status?: string | null;
+  error_message?: string | null;
+  finished_at?: string;
+}
+
+async function updateRunRow(runId: string, patch: RunUpdate): Promise<void> {
+  await admin().from("insurance_import_runs").update(patch).eq("id", runId);
+}
+
+interface WatchedSnapshot {
+  amount: number | null;
+  hash: string | null;
+}
+
+async function snapshotCurrentForWatched(
+  provider: InsuranceProviderId,
+): Promise<Map<string, WatchedSnapshot>> {
+  const { data: watched } = await admin().from("watched_companies").select("ico");
+  const icos = ((watched as Array<{ ico: string }> | null) ?? []).map((w) => w.ico);
+  const out = new Map<string, WatchedSnapshot>();
+  if (icos.length === 0) return out;
+  const { data } = await admin()
     .from("company_insurance_debts")
-    .select("ico, debt_amount, source_record_date")
-    .eq("provider", provider);
-  const prevMap = new Map<string, { amount: number | null; date: string | null }>();
-  for (const row of (prev as Array<{
+    .select("ico, debt_amount, source_record_hash")
+    .eq("provider", provider)
+    .eq("is_current", true)
+    .in("ico", icos);
+  for (const row of (data as Array<{
     ico: string;
     debt_amount: number | null;
-    source_record_date: string | null;
+    source_record_hash: string | null;
   }> | null) ?? []) {
-    // Keep the newest snapshot per IČO.
-    const existing = prevMap.get(row.ico);
-    if (
-      !existing ||
-      (row.source_record_date ?? "") > (existing.date ?? "")
-    ) {
-      prevMap.set(row.ico, { amount: row.debt_amount, date: row.source_record_date });
-    }
+    out.set(row.ico, { amount: row.debt_amount, hash: row.source_record_hash });
   }
+  return out;
+}
 
-  const currentMap = new Map<string, number | null>();
-  for (const r of records) if (r.ico) currentMap.set(r.ico, r.debtAmount);
+async function emitChanges(
+  provider: InsuranceProviderId,
+  prev: Map<string, WatchedSnapshot>,
+): Promise<void> {
+  if (prev.size === 0) {
+    // Nothing to compare against for watched companies — but we still want to
+    // flag "newly added debts" for watched companies that had no prior record.
+  }
+  const { data: watched } = await admin().from("watched_companies").select("ico");
+  const watchedIcos = ((watched as Array<{ ico: string }> | null) ?? []).map((w) => w.ico);
+  if (watchedIcos.length === 0) return;
+
+  const { data: nowCurrent } = await admin()
+    .from("company_insurance_debts")
+    .select("ico, debt_amount, source_record_hash")
+    .eq("provider", provider)
+    .eq("is_current", true)
+    .in("ico", watchedIcos);
+
+  const curMap = new Map<string, WatchedSnapshot>();
+  for (const row of (nowCurrent as Array<{
+    ico: string;
+    debt_amount: number | null;
+    source_record_hash: string | null;
+  }> | null) ?? []) {
+    curMap.set(row.ico, { amount: row.debt_amount, hash: row.source_record_hash });
+  }
 
   const changes: Array<{
     ico: string;
@@ -129,31 +174,31 @@ async function detectChanges(
     severity: string;
   }> = [];
 
-  for (const [ico, amount] of currentMap) {
-    const before = prevMap.get(ico);
+  for (const [ico, cur] of curMap) {
+    const before = prev.get(ico);
     if (!before) {
       changes.push({
         ico,
         change_type: "insurance_debt_added",
         title: `Nový dlh voči poisťovni (${provider})`,
         description:
-          amount != null
-            ? `Firma bola pridaná do zverejneného zoznamu dlžníkov, dlh: ${amount.toFixed(2)} €.`
+          cur.amount != null
+            ? `Firma bola pridaná do zverejneného zoznamu dlžníkov, dlh: ${cur.amount.toFixed(2)} €.`
             : "Firma bola pridaná do zverejneného zoznamu dlžníkov.",
-        severity: amount != null && amount >= 1000 ? "critical" : "warning",
+        severity: cur.amount != null && cur.amount >= 1000 ? "critical" : "warning",
       });
-    } else if ((before.amount ?? 0) !== (amount ?? 0)) {
+    } else if (before.hash !== cur.hash) {
       changes.push({
         ico,
         change_type: "insurance_debt_amount_changed",
         title: `Zmena výšky dlhu (${provider})`,
-        description: `Predtým ${before.amount ?? "n/a"} €, aktuálne ${amount ?? "n/a"} €.`,
+        description: `Predtým ${before.amount ?? "n/a"} €, aktuálne ${cur.amount ?? "n/a"} €.`,
         severity: "warning",
       });
     }
   }
-  for (const [ico] of prevMap) {
-    if (!currentMap.has(ico)) {
+  for (const [ico] of prev) {
+    if (!curMap.has(ico)) {
       changes.push({
         ico,
         change_type: "insurance_debt_removed_from_published_list",
@@ -165,123 +210,9 @@ async function detectChanges(
     }
   }
 
-  // Only insert changes for IČOs we already monitor (watched_companies), to
-  // avoid flooding company_changes with unwatched national list churn.
-  if (changes.length === 0) return;
-  const icos = Array.from(new Set(changes.map((c) => c.ico)));
-  const { data: watched } = await admin()
-    .from("watched_companies")
-    .select("ico")
-    .in("ico", icos);
-  const watchedSet = new Set((watched as Array<{ ico: string }> | null ?? []).map((w) => w.ico));
-  const filtered = changes.filter((c) => watchedSet.has(c.ico));
-  if (filtered.length === 0) return;
-  await admin().from("company_changes").insert(filtered);
-}
-
-async function recordRun(
-  outcome: ImporterOutcome,
-  startedAt: Date,
-  extraMessage?: string,
-): Promise<void> {
-  await admin().from("insurance_import_runs").insert({
-    provider: outcome.provider,
-    status: outcome.status,
-    records_downloaded: outcome.recordsDownloaded,
-    records_normalized: outcome.recordsNormalized,
-    records_with_ico: outcome.recordsWithIco,
-    content_hash: outcome.contentHash,
-    source_url: outcome.sourceUrl,
-    error_message: extraMessage ?? outcome.errorMessage,
-    started_at: startedAt.toISOString(),
-    finished_at: new Date().toISOString(),
-  });
-}
-
-export interface ProviderImportResult {
-  provider: InsuranceProviderId;
-  status: ImporterOutcome["status"];
-  recordsUpserted: number;
-  errorMessage: string | null;
-}
-
-export async function importOneProvider(
-  provider: InsuranceProviderId,
-): Promise<ProviderImportResult> {
-  const startedAt = new Date();
-  let outcome: ImporterOutcome;
-  try {
-    outcome = await runImporterFor(provider);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Neznáma chyba importu.";
-    const failed: ImporterOutcome = {
-      provider,
-      status: "failed",
-      sourceUrl: "",
-      recordsDownloaded: 0,
-      recordsNormalized: 0,
-      recordsWithIco: 0,
-      contentHash: null,
-      errorMessage: msg,
-      records: [],
-      sourceRecordDate: null,
-    };
-    await recordRun(failed, startedAt);
-    await writeFreshness(provider, false, msg);
-    return { provider, status: "failed", recordsUpserted: 0, errorMessage: msg };
+  if (changes.length > 0) {
+    await admin().from("company_changes").insert(changes);
   }
-
-  // Skip when content hash matches last successful run.
-  if (outcome.contentHash) {
-    const prev = await latestRunFor(provider);
-    if (prev?.content_hash === outcome.contentHash) {
-      const unchanged: ImporterOutcome = { ...outcome, status: "unchanged" };
-      await recordRun(unchanged, startedAt);
-      await writeFreshness(provider, true, "Dataset nezmenený od posledného behu.");
-      return {
-        provider,
-        status: "unchanged",
-        recordsUpserted: 0,
-        errorMessage: null,
-      };
-    }
-  }
-
-  if (outcome.status === "not_implemented") {
-    await recordRun(outcome, startedAt);
-    await writeFreshness(provider, false, outcome.errorMessage);
-    return {
-      provider,
-      status: "not_implemented",
-      recordsUpserted: 0,
-      errorMessage: outcome.errorMessage,
-    };
-  }
-
-  const { upserted, errorMessage: upsertErr } = await upsertRecords(outcome.records);
-  const finalStatus: ImporterOutcome["status"] = upsertErr
-    ? "failed"
-    : outcome.status;
-  const finalMessage = upsertErr ?? outcome.errorMessage;
-
-  // Fire-and-forget change detection; do not fail the run if it errors.
-  if (!upsertErr && outcome.records.length > 0) {
-    try {
-      await detectChanges(provider, outcome.records);
-    } catch {
-      // Ignored — monitoring is best-effort.
-    }
-  }
-
-  await recordRun({ ...outcome, status: finalStatus, errorMessage: finalMessage }, startedAt);
-  await writeFreshness(provider, finalStatus !== "failed", finalMessage);
-
-  return {
-    provider,
-    status: finalStatus,
-    recordsUpserted: upserted,
-    errorMessage: finalMessage,
-  };
 }
 
 function runImporterFor(provider: InsuranceProviderId): Promise<ImporterOutcome> {
@@ -297,6 +228,220 @@ function runImporterFor(provider: InsuranceProviderId): Promise<ImporterOutcome>
   }
 }
 
+export interface ProviderImportResult {
+  provider: InsuranceProviderId;
+  status: string;
+  recordsInserted: number;
+  recordsUpdated: number;
+  recordsUnchanged: number;
+  recordsDeactivated: number;
+  errorMessage: string | null;
+}
+
+export async function importOneProvider(
+  provider: InsuranceProviderId,
+): Promise<ProviderImportResult> {
+  const startedAt = new Date();
+  const runId = await insertRunRow(provider, startedAt);
+  if (!runId) {
+    return {
+      provider,
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: "Nepodarilo sa vytvoriť záznam behu.",
+    };
+  }
+
+  let outcome: ImporterOutcome;
+  try {
+    outcome = await runImporterFor(provider);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Neznáma chyba importu.";
+    await updateRunRow(runId, {
+      status: "failed",
+      error_message: msg,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(provider, false, msg);
+    return {
+      provider,
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: msg,
+    };
+  }
+
+  const commonUpdate: RunUpdate = {
+    source_url: outcome.sourceUrl,
+    content_hash: outcome.contentHash,
+    source_record_date: outcome.sourceRecordDate,
+    records_downloaded: outcome.recordsDownloaded,
+    records_normalized: outcome.recordsNormalized,
+    records_with_ico: outcome.recordsWithIco,
+  };
+
+  // Early-exit statuses.
+  if (outcome.status === "not_implemented" || outcome.status === "failed") {
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: outcome.status,
+      error_message: outcome.errorMessage,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(provider, false, outcome.errorMessage);
+    return {
+      provider,
+      status: outcome.status,
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: outcome.errorMessage,
+    };
+  }
+
+  // Hash-based skip. NEVER reconcile when source is unchanged.
+  const prevHash = await latestSuccessHash(provider);
+  if (outcome.contentHash && prevHash && outcome.contentHash === prevHash) {
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "unchanged",
+      previous_source_hash: prevHash,
+      validation_status: "skipped",
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(provider, true, "Dataset nezmenený od posledného behu.");
+    return {
+      provider,
+      status: "unchanged",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: null,
+    };
+  }
+
+  // Validation gate. On failure — NEVER deactivate existing records.
+  const validation = validateInsurance(outcome.records, provider);
+  if (!validation.ok) {
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "failed",
+      previous_source_hash: prevHash,
+      validation_status: "failed",
+      records_valid: validation.validCount,
+      records_invalid: validation.invalidCount,
+      error_message: validation.reason,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(provider, false, validation.reason);
+    return {
+      provider,
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: validation.reason,
+    };
+  }
+
+  // Snapshot BEFORE reconciliation for change detection.
+  const prevSnapshot = await snapshotCurrentForWatched(provider);
+
+  // Stage.
+  const staged = await stageInsurance(admin(), outcome.records, runId);
+  if (staged.errorMessage) {
+    await cleanupStaging(admin(), "staging_insurance_debts", runId);
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "failed",
+      previous_source_hash: prevHash,
+      validation_status: "failed",
+      records_valid: validation.validCount,
+      records_invalid: validation.invalidCount,
+      error_message: `Staging chyba: ${staged.errorMessage}`,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(provider, false, staged.errorMessage);
+    return {
+      provider,
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: staged.errorMessage,
+    };
+  }
+
+  // Reconcile atomically inside Postgres.
+  const sourceDate = outcome.sourceRecordDate ?? new Date().toISOString().slice(0, 10);
+  const rec = await reconcileInsurance(admin(), provider, runId, sourceDate);
+  if (rec.errorMessage || !rec.counts) {
+    await cleanupStaging(admin(), "staging_insurance_debts", runId);
+    await updateRunRow(runId, {
+      ...commonUpdate,
+      status: "failed",
+      previous_source_hash: prevHash,
+      validation_status: "failed",
+      records_valid: validation.validCount,
+      records_invalid: validation.invalidCount,
+      error_message: `Reconciliation zlyhal: ${rec.errorMessage ?? "unknown"}`,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(provider, false, rec.errorMessage);
+    return {
+      provider,
+      status: "failed",
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: rec.errorMessage,
+    };
+  }
+
+  // Emit monitoring changes (watched only). Best-effort — never fails the run.
+  try {
+    await emitChanges(provider, prevSnapshot);
+  } catch {
+    /* ignored */
+  }
+
+  await updateRunRow(runId, {
+    ...commonUpdate,
+    status: "success",
+    previous_source_hash: prevHash,
+    validation_status: "passed",
+    records_valid: validation.validCount,
+    records_invalid: validation.invalidCount,
+    records_inserted: rec.counts.inserted,
+    records_updated: rec.counts.updated,
+    records_unchanged: rec.counts.unchanged,
+    records_deactivated: rec.counts.deactivated,
+    finished_at: new Date().toISOString(),
+  });
+  await writeFreshness(provider, true, null);
+
+  return {
+    provider,
+    status: "success",
+    recordsInserted: rec.counts.inserted,
+    recordsUpdated: rec.counts.updated,
+    recordsUnchanged: rec.counts.unchanged,
+    recordsDeactivated: rec.counts.deactivated,
+    errorMessage: null,
+  };
+}
+
 export async function importAllInsuranceDebtors(): Promise<ProviderImportResult[]> {
   const results: ProviderImportResult[] = [];
   for (const p of INSURANCE_PROVIDERS) {
@@ -306,7 +451,10 @@ export async function importAllInsuranceDebtors(): Promise<ProviderImportResult[
       results.push({
         provider: p,
         status: "failed",
-        recordsUpserted: 0,
+        recordsInserted: 0,
+        recordsUpdated: 0,
+        recordsUnchanged: 0,
+        recordsDeactivated: 0,
         errorMessage: err instanceof Error ? err.message : "Neznáma chyba.",
       });
     }
@@ -314,8 +462,4 @@ export async function importAllInsuranceDebtors(): Promise<ProviderImportResult[
   return results;
 }
 
-// Marker used for global (non-per-IČO) queue jobs.
 export const GLOBAL_JOB_ICO = "__GLOBAL__";
-
-/** Silence unused JsonValue import warning while keeping the type surface stable. */
-export type _JsonValueReExport = JsonValue;
