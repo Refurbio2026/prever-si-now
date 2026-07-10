@@ -5,6 +5,7 @@
 // runs. A row in datahub_settings acts as a lock to prevent duplicate runs and
 // is released from a finally block no matter how the chain ends.
 
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type StepId = "social_insurance" | "tax_debtors" | "vat_registered";
