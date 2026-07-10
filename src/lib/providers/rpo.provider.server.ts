@@ -347,7 +347,7 @@ async function reconcilePersons(
       if (prev.share_percent !== row.share_percent) patch.share_percent = row.share_percent;
       const { error } = await supabaseAdmin
         .from("company_persons")
-        .update(patch)
+        .update(patch as never)
         .eq("id", prev.id);
       if (!error) updated += 1;
     }
