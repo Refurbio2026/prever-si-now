@@ -11,6 +11,7 @@ export type ImportSource =
   | "registry"
   | "people"
   | "history"
+  | "rpo"
   | "ai";
 
 export const SUPPORTED_SOURCES: readonly ImportSource[] = [
@@ -21,6 +22,7 @@ export const SUPPORTED_SOURCES: readonly ImportSource[] = [
   "registry",
   "people",
   "history",
+  "rpo",
   "ai",
 ] as const;
 
