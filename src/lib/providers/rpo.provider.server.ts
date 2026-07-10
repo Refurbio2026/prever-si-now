@@ -505,23 +505,16 @@ async function reconcileHistory(ico: string, rows: HistoryRow[]): Promise<{
     }
   }
 
-  const { error } = await supabaseAdmin
-    .from("company_registry_history")
-    .upsert(
-      rows.map((r) => ({ ...r, is_current: true })),
-      { onConflict: "ico,change_type,field_label,old_value,new_value,effective_date", ignoreDuplicates: true },
-    );
-  // Fallback: upsert with COALESCE columns doesn't map cleanly to onConflict.
-  // If the upsert failed on constraint mismatch, fall back to per-row insert.
-  if (error) {
-    for (const r of rows) {
-      await supabaseAdmin
-        .from("company_registry_history")
-        .insert({ ...r, is_current: true })
-        .then(() => undefined, () => undefined);
-    }
+  // Insert per row; unique index (with COALESCE columns) prevents duplicates
+  // silently. We swallow duplicate-key errors and only count fresh inserts.
+  let inserted = 0;
+  for (const r of rows) {
+    const { error } = await supabaseAdmin
+      .from("company_registry_history")
+      .insert({ ...r, is_current: true });
+    if (!error) inserted += 1;
   }
-  return { inserted: rows.length, changes };
+  return { inserted, changes };
 }
 
 // ---------- freshness ----------
