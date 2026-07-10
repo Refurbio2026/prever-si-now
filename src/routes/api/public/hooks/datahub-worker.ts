@@ -1,10 +1,11 @@
 // Public HTTP endpoint for the DataHub background worker.
-// Anonymous — safe to call from pg_cron or an external scheduler. Never
-// exposes company or user data; only returns aggregate counters.
-// Respects the admin pause switch in datahub_settings and logs every run
-// into datahub_worker_runs for the admin dashboard.
+// Called by pg_cron every minute. Requires the shared X-Datahub-Secret
+// header (DATAHUB_CRON_SECRET). Respects the admin pause switch in
+// datahub_settings, logs every run into datahub_worker_runs. Idempotency:
+// a run in the last 55 s is considered "already scheduled" and skipped.
 
 import { createFileRoute } from "@tanstack/react-router";
+import { verifyDatahubSecret } from "@/lib/hooks-auth.server";
 
 async function runWorker(limit: number, trigger: string) {
   const { processQueueBatch } = await import("@/lib/datahub.server");
