@@ -548,9 +548,49 @@ export type Database = {
         }
         Relationships: []
       }
+      datahub_import_progress: {
+        Row: {
+          current_batch: number | null
+          id: string
+          message: string | null
+          phase: string
+          records_processed: number | null
+          records_total: number | null
+          run_id: string
+          source: string
+          total_batches: number | null
+          updated_at: string
+        }
+        Insert: {
+          current_batch?: number | null
+          id?: string
+          message?: string | null
+          phase: string
+          records_processed?: number | null
+          records_total?: number | null
+          run_id: string
+          source: string
+          total_batches?: number | null
+          updated_at?: string
+        }
+        Update: {
+          current_batch?: number | null
+          id?: string
+          message?: string | null
+          phase?: string
+          records_processed?: number | null
+          records_total?: number | null
+          run_id?: string
+          source?: string
+          total_batches?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       datahub_settings: {
         Row: {
           cron_secret: string | null
+          global_import_current_run_id: string | null
           global_import_last_finished_at: string | null
           global_import_running: boolean
           global_import_started_at: string | null
@@ -561,6 +601,7 @@ export type Database = {
         }
         Insert: {
           cron_secret?: string | null
+          global_import_current_run_id?: string | null
           global_import_last_finished_at?: string | null
           global_import_running?: boolean
           global_import_started_at?: string | null
@@ -571,6 +612,7 @@ export type Database = {
         }
         Update: {
           cron_secret?: string | null
+          global_import_current_run_id?: string | null
           global_import_last_finished_at?: string | null
           global_import_running?: boolean
           global_import_started_at?: string | null

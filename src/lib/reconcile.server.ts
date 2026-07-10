@@ -15,6 +15,7 @@ import type {
   TaxDatasetId,
   TaxStatusRecord,
 } from "@/lib/tax-status.types";
+import { reportProgress, type ProgressCtx } from "@/lib/import-progress.server";
 
 // ---------- Hash ----------
 
@@ -165,6 +166,7 @@ export async function stageInsurance(
   records: InsuranceDebtRecord[],
   runId: string,
   label = "insurance",
+  progress?: ProgressCtx | null,
 ): Promise<{ staged: number; errorMessage: string | null }> {
   const seen = new Set<string>();
   const rows = records
@@ -191,16 +193,40 @@ export async function stageInsurance(
 
   let staged = 0;
   const totalBatches = Math.max(1, Math.ceil(rows.length / STAGING_BATCH));
+  await reportProgress(progress, {
+    phase: "staging",
+    currentBatch: 0,
+    totalBatches,
+    recordsProcessed: 0,
+    recordsTotal: rows.length,
+    message: `Staging ${rows.length} záznamov (${totalBatches} dávok)`,
+  });
   for (let i = 0; i < rows.length; i += STAGING_BATCH) {
     const batchNo = Math.floor(i / STAGING_BATCH) + 1;
     const slice = rows.slice(i, i + STAGING_BATCH);
     const { error } = await admin.from("staging_insurance_debts").insert(slice);
     if (error) {
       logDatahub(`${label} staging batch ${batchNo}/${totalBatches} failed: ${error.message}`);
+      await reportProgress(progress, {
+        phase: "staging",
+        currentBatch: batchNo,
+        totalBatches,
+        recordsProcessed: staged,
+        recordsTotal: rows.length,
+        message: `Staging dávka ${batchNo}/${totalBatches} zlyhala: ${error.message}`,
+      });
       return { staged, errorMessage: error.message };
     }
     staged += slice.length;
     logDatahub(`${label} staging batch ${batchNo}/${totalBatches} rows=${slice.length} staged=${staged}`);
+    await reportProgress(progress, {
+      phase: "staging",
+      currentBatch: batchNo,
+      totalBatches,
+      recordsProcessed: staged,
+      recordsTotal: rows.length,
+      message: `Staging dávka ${batchNo}/${totalBatches}`,
+    });
   }
   return { staged, errorMessage: null };
 }
@@ -210,6 +236,7 @@ export async function stageTax(
   records: TaxStatusRecord[],
   runId: string,
   label = "tax",
+  progress?: ProgressCtx | null,
 ): Promise<{ staged: number; errorMessage: string | null }> {
   const seen = new Set<string>();
   const rows = records
@@ -237,16 +264,40 @@ export async function stageTax(
 
   let staged = 0;
   const totalBatches = Math.max(1, Math.ceil(rows.length / STAGING_BATCH));
+  await reportProgress(progress, {
+    phase: "staging",
+    currentBatch: 0,
+    totalBatches,
+    recordsProcessed: 0,
+    recordsTotal: rows.length,
+    message: `Staging ${rows.length} záznamov (${totalBatches} dávok)`,
+  });
   for (let i = 0; i < rows.length; i += STAGING_BATCH) {
     const batchNo = Math.floor(i / STAGING_BATCH) + 1;
     const slice = rows.slice(i, i + STAGING_BATCH);
     const { error } = await admin.from("staging_tax_records").insert(slice);
     if (error) {
       logDatahub(`${label} staging batch ${batchNo}/${totalBatches} failed: ${error.message}`);
+      await reportProgress(progress, {
+        phase: "staging",
+        currentBatch: batchNo,
+        totalBatches,
+        recordsProcessed: staged,
+        recordsTotal: rows.length,
+        message: `Staging dávka ${batchNo}/${totalBatches} zlyhala: ${error.message}`,
+      });
       return { staged, errorMessage: error.message };
     }
     staged += slice.length;
     logDatahub(`${label} staging batch ${batchNo}/${totalBatches} rows=${slice.length} staged=${staged}`);
+    await reportProgress(progress, {
+      phase: "staging",
+      currentBatch: batchNo,
+      totalBatches,
+      recordsProcessed: staged,
+      recordsTotal: rows.length,
+      message: `Staging dávka ${batchNo}/${totalBatches}`,
+    });
   }
   return { staged, errorMessage: null };
 }
@@ -290,13 +341,22 @@ export async function reconcileInsurance(
   provider: InsuranceProviderId,
   runId: string,
   sourceDate: string,
+  progress?: ProgressCtx | null,
 ): Promise<{ counts: ReconcileCounts | null; errorMessage: string | null }> {
   const counts: ReconcileCounts = { inserted: 0, updated: 0, unchanged: 0, deactivated: 0 };
   const label = insuranceLabel(provider);
   logDatahub(`${label} reconciliation start run=${runId} sourceDate=${sourceDate} batchSize=${RECONCILE_BATCH}`);
+  await reportProgress(progress, {
+    phase: "reconciliation",
+    currentBatch: 0,
+    totalBatches: null,
+    recordsProcessed: 0,
+    message: "Rekonciliácia: apply fáza",
+  });
 
   // Phase 1: apply staged rows (insert new / touch unchanged / close+reinsert changed).
   let afterIco: string | null = null;
+  let applyProcessed = 0;
   for (let batch = 1; batch <= MAX_BATCHES; batch++) {
     const { data, error } = await admin.rpc("reconcile_insurance_debts_batch", {
       _provider: provider,
@@ -315,17 +375,26 @@ export async function reconcileInsurance(
     counts.inserted += Number(row.inserted ?? 0);
     counts.updated += Number(row.updated ?? 0);
     counts.unchanged += Number(row.unchanged ?? 0);
+    applyProcessed += processed;
     logProgress(`${label} apply`, batch, {
       processed,
       inserted: Number(row.inserted ?? 0),
       updated: Number(row.updated ?? 0),
       unchanged: Number(row.unchanged ?? 0),
     });
+    await reportProgress(progress, {
+      phase: "reconciliation",
+      currentBatch: batch,
+      totalBatches: null,
+      recordsProcessed: applyProcessed,
+      message: `Rekonciliácia (apply): dávka ${batch}`,
+    });
     afterIco = row.last_ico as string;
   }
 
   // Phase 2: deactivate current rows that no longer appear in staging.
   afterIco = null;
+  let deactivateScanned = 0;
   for (let batch = 1; batch <= MAX_BATCHES; batch++) {
     const { data, error } = await admin.rpc("reconcile_insurance_deactivate_batch", {
       _provider: provider,
@@ -341,9 +410,17 @@ export async function reconcileInsurance(
       break;
     }
     counts.deactivated += Number(row.deactivated ?? 0);
+    deactivateScanned += scanned;
     logProgress(`${label} deactivate`, batch, {
       scanned,
       deactivated: Number(row.deactivated ?? 0),
+    });
+    await reportProgress(progress, {
+      phase: "reconciliation",
+      currentBatch: batch,
+      totalBatches: null,
+      recordsProcessed: deactivateScanned,
+      message: `Rekonciliácia (deactivate): dávka ${batch}`,
     });
     afterIco = row.last_ico as string;
   }
@@ -360,12 +437,21 @@ export async function reconcileTax(
   dataset: TaxDatasetId,
   runId: string,
   sourceDate: string,
+  progress?: ProgressCtx | null,
 ): Promise<{ counts: ReconcileCounts | null; errorMessage: string | null }> {
   const counts: ReconcileCounts = { inserted: 0, updated: 0, unchanged: 0, deactivated: 0 };
   const label = taxLabel(dataset);
   logDatahub(`${label} reconciliation start run=${runId} sourceDate=${sourceDate} batchSize=${RECONCILE_BATCH}`);
+  await reportProgress(progress, {
+    phase: "reconciliation",
+    currentBatch: 0,
+    totalBatches: null,
+    recordsProcessed: 0,
+    message: "Rekonciliácia: apply fáza",
+  });
 
   let afterIco: string | null = null;
+  let applyProcessed = 0;
   for (let batch = 1; batch <= MAX_BATCHES; batch++) {
     const { data, error } = await admin.rpc("reconcile_tax_dataset_batch", {
       _dataset: dataset,
@@ -384,16 +470,25 @@ export async function reconcileTax(
     counts.inserted += Number(row.inserted ?? 0);
     counts.updated += Number(row.updated ?? 0);
     counts.unchanged += Number(row.unchanged ?? 0);
+    applyProcessed += processed;
     logProgress(`${label} apply`, batch, {
       processed,
       inserted: Number(row.inserted ?? 0),
       updated: Number(row.updated ?? 0),
       unchanged: Number(row.unchanged ?? 0),
     });
+    await reportProgress(progress, {
+      phase: "reconciliation",
+      currentBatch: batch,
+      totalBatches: null,
+      recordsProcessed: applyProcessed,
+      message: `Rekonciliácia (apply): dávka ${batch}`,
+    });
     afterIco = row.last_ico as string;
   }
 
   afterIco = null;
+  let deactivateScanned = 0;
   for (let batch = 1; batch <= MAX_BATCHES; batch++) {
     const { data, error } = await admin.rpc("reconcile_tax_dataset_deactivate_batch", {
       _dataset: dataset,
@@ -409,9 +504,17 @@ export async function reconcileTax(
       break;
     }
     counts.deactivated += Number(row.deactivated ?? 0);
+    deactivateScanned += scanned;
     logProgress(`${label} deactivate`, batch, {
       scanned,
       deactivated: Number(row.deactivated ?? 0),
+    });
+    await reportProgress(progress, {
+      phase: "reconciliation",
+      currentBatch: batch,
+      totalBatches: null,
+      recordsProcessed: deactivateScanned,
+      message: `Rekonciliácia (deactivate): dávka ${batch}`,
     });
     afterIco = row.last_ico as string;
   }

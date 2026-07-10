@@ -5,6 +5,7 @@
 // runs. A row in datahub_settings acts as a lock to prevent duplicate runs and
 // is released from a finally block no matter how the chain ends.
 
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type StepId = "social_insurance" | "tax_debtors" | "vat_registered";
@@ -41,7 +42,10 @@ async function loadAdmin(): Promise<SupabaseClient> {
   return supabaseAdmin as unknown as SupabaseClient;
 }
 
-async function tryAcquireLock(sb: SupabaseClient): Promise<boolean> {
+async function tryAcquireLock(
+  sb: SupabaseClient,
+  runId: string,
+): Promise<boolean> {
   const { data } = await sb
     .from("datahub_settings")
     .select("global_import_running, global_import_started_at")
@@ -66,6 +70,7 @@ async function tryAcquireLock(sb: SupabaseClient): Promise<boolean> {
         id: true,
         global_import_running: true,
         global_import_started_at: new Date().toISOString(),
+        global_import_current_run_id: runId,
       },
       { onConflict: "id" },
     );
@@ -119,13 +124,17 @@ function logStepError(message: string, err?: unknown): void {
   );
 }
 
-async function runStep(step: StepId, sb: SupabaseClient): Promise<GlobalStepResult> {
+async function runStep(
+  step: StepId,
+  sb: SupabaseClient,
+  runId: string,
+): Promise<GlobalStepResult> {
   const started = Date.now();
   try {
     logStep(`step=${step} start`);
     if (step === "social_insurance") {
       const { importOneProvider } = await import("@/lib/insurance-debt.server");
-      const r = await importOneProvider("social_insurance");
+      const r = await importOneProvider("social_insurance", runId);
       return {
         step,
         ok: r.status === "success" || r.status === "unchanged" || r.status === "empty",
@@ -140,7 +149,7 @@ async function runStep(step: StepId, sb: SupabaseClient): Promise<GlobalStepResu
 
     const { importOneDataset } = await import("@/lib/tax-status.server");
     const dataset = step === "tax_debtors" ? "tax_debtors" : "vat_registered";
-    const r = await importOneDataset(dataset);
+    const r = await importOneDataset(dataset, runId);
     return {
       step,
       ok:
@@ -162,6 +171,15 @@ async function runStep(step: StepId, sb: SupabaseClient): Promise<GlobalStepResu
     } catch (freshnessErr) {
       logStepError(`step=${step} failed to write data_freshness`, freshnessErr);
     }
+    try {
+      const { reportProgress } = await import("@/lib/import-progress.server");
+      await reportProgress(
+        { admin: sb, runId, source: stepSource(step) },
+        { phase: "failed", message },
+      );
+    } catch {
+      /* ignored */
+    }
     return {
       step,
       ok: false,
@@ -177,8 +195,10 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
   void admin;
   const sb = await loadAdmin();
   const startedAt = new Date();
+  const runId = randomUUID();
+  logStep(`run start runId=${runId}`);
 
-  if (!(await tryAcquireLock(sb))) {
+  if (!(await tryAcquireLock(sb, runId))) {
     const finishedAt = new Date();
     return {
       ok: false,
@@ -195,7 +215,7 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
 
   try {
     for (const step of stepIds) {
-      const stepResult = await runStep(step, sb);
+      const stepResult = await runStep(step, sb, runId);
       steps.push(stepResult);
       logStep(`step=${step} ok=${stepResult.ok} status=${stepResult.status ?? "n/a"}`);
     }
