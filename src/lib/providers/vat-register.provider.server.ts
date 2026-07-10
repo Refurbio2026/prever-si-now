@@ -141,6 +141,7 @@ export async function importVatRegisterStreamed(
   admin: SupabaseClient,
   runId: string,
   batchSize = 1000,
+  progress?: import("@/lib/import-progress.server").ProgressCtx | null,
 ): Promise<StreamedVatSummary> {
   const configuredUrl = process.env.FS_VAT_REGISTER_URL ?? "";
   if (!configuredUrl) {

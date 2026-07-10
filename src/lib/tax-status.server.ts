@@ -27,6 +27,10 @@ import {
   stageTax,
   validateTax,
 } from "@/lib/reconcile.server";
+import {
+  reportProgress,
+  type ProgressCtx,
+} from "@/lib/import-progress.server";
 
 function admin(): SupabaseClient {
   return supabaseAdmin as unknown as SupabaseClient;
@@ -328,11 +332,20 @@ export interface TaxDatasetImportResult {
 
 async function importVatStreamedFlow(
   runId: string,
+  progress: ProgressCtx | null,
 ): Promise<TaxDatasetImportResult> {
   logImport("vat_registered", `start run=${runId}`);
+  await reportProgress(progress, {
+    phase: "download",
+    message: "Sťahovanie a streamovanie do stagingu",
+  });
   const prevHash = await latestSuccessHash("vat_registered");
   const prevSnapshot = await snapshotWatched("vat_registered");
-  const summary = await importVatRegisterStreamed(admin(), runId);
+  const summary = await importVatRegisterStreamed(admin(), runId, 1000, progress);
+  logImport(
+    "vat_registered",
+    `downloaded bytes=${summary.bytesRead} hash=${shortHash(summary.contentHash)} records=${summary.recordsDownloaded} staged=${summary.recordsStaged}`,
+  );
   logImport(
     "vat_registered",
     `downloaded bytes=${summary.bytesRead} hash=${shortHash(summary.contentHash)} records=${summary.recordsDownloaded} staged=${summary.recordsStaged}`,
@@ -359,6 +372,7 @@ async function importVatStreamedFlow(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness("vat_registered", false, summary.errorMessage);
+    await reportProgress(progress, { phase: "failed", message: summary.errorMessage });
     return {
       dataset: "vat_registered",
       status: "failed",
@@ -381,6 +395,10 @@ async function importVatStreamedFlow(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness("vat_registered", true, "Dataset nezmenený od posledného behu.");
+    await reportProgress(progress, {
+      phase: "done",
+      message: "Dataset nezmenený od posledného behu.",
+    });
     return {
       dataset: "vat_registered",
       status: "unchanged",
@@ -415,6 +433,7 @@ async function importVatStreamedFlow(
     validationError = `Podiel duplicít je vysoký (${(summary.duplicateRatio * 100).toFixed(1)}%). Zdroj vyzerá poškodený.`;
   }
 
+  await reportProgress(progress, { phase: "validation", message: "Validácia dát" });
   logImport(
     "vat_registered",
     `validation ok=${!validationError} valid=${summary.recordsWithValidIco} invalid=${invalid} duplicateRatio=${summary.duplicateRatio.toFixed(4)}`,
@@ -433,6 +452,7 @@ async function importVatStreamedFlow(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness("vat_registered", false, validationError);
+    await reportProgress(progress, { phase: "failed", message: validationError });
     return {
       dataset: "vat_registered",
       status: "failed",
@@ -445,7 +465,7 @@ async function importVatStreamedFlow(
   }
 
   const sourceDate = summary.sourceRecordDate ?? new Date().toISOString().slice(0, 10);
-  const rec = await reconcileTax(admin(), "vat_registered", runId, sourceDate);
+  const rec = await reconcileTax(admin(), "vat_registered", runId, sourceDate, progress);
   if (rec.errorMessage || !rec.counts) {
     logImportError("vat_registered", `reconciliation failed: ${rec.errorMessage ?? "unknown"}`);
     await cleanupStaging(admin(), "staging_tax_records", runId);
@@ -459,6 +479,10 @@ async function importVatStreamedFlow(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness("vat_registered", false, rec.errorMessage);
+    await reportProgress(progress, {
+      phase: "failed",
+      message: `Reconciliation zlyhal: ${rec.errorMessage ?? "unknown"}`,
+    });
     return {
       dataset: "vat_registered",
       status: "failed",
@@ -493,6 +517,12 @@ async function importVatStreamedFlow(
     "vat_registered",
     `final status=success inserted=${rec.counts.inserted} updated=${rec.counts.updated} unchanged=${rec.counts.unchanged} deactivated=${rec.counts.deactivated}`,
   );
+  await reportProgress(progress, {
+    phase: "done",
+    message: `Hotovo: +${rec.counts.inserted} / ~${rec.counts.updated} / =${rec.counts.unchanged} / −${rec.counts.deactivated}`,
+    recordsProcessed:
+      rec.counts.inserted + rec.counts.updated + rec.counts.unchanged,
+  });
 
   return {
     dataset: "vat_registered",
@@ -507,7 +537,11 @@ async function importVatStreamedFlow(
 
 export async function importOneDataset(
   dataset: TaxDatasetId,
+  globalRunId?: string,
 ): Promise<TaxDatasetImportResult> {
+  const progress: ProgressCtx | null = globalRunId
+    ? { admin: admin(), runId: globalRunId, source: `fs_${dataset}` }
+    : null;
   const startedAt = new Date();
   const runId = await insertRunRow(dataset, startedAt);
   if (!runId) {
@@ -529,7 +563,7 @@ export async function importOneDataset(
   // uncompressed and cannot be buffered).
   if (dataset === "vat_registered") {
     try {
-      return await importVatStreamedFlow(runId);
+      return await importVatStreamedFlow(runId, progress);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Neznáma chyba importu.";
       logImportError(dataset, "streamed flow crashed", err);
@@ -540,6 +574,7 @@ export async function importOneDataset(
         finished_at: new Date().toISOString(),
       });
       await writeFreshness(dataset, false, msg);
+      await reportProgress(progress, { phase: "failed", message: msg });
       return {
         dataset,
         status: "failed",
@@ -555,6 +590,7 @@ export async function importOneDataset(
   let outcome: TaxImporterOutcome;
   try {
     logImport(dataset, `start run=${runId}`);
+    await reportProgress(progress, { phase: "download", message: "Sťahovanie zdroja" });
     outcome = await runImporterFor(dataset);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Neznáma chyba importu.";
@@ -565,6 +601,7 @@ export async function importOneDataset(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(dataset, false, msg);
+    await reportProgress(progress, { phase: "failed", message: msg });
     return {
       dataset,
       status: "failed",
@@ -598,6 +635,10 @@ export async function importOneDataset(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(dataset, false, outcome.errorMessage);
+    await reportProgress(progress, {
+      phase: "failed",
+      message: outcome.errorMessage ?? outcome.status,
+    });
     return {
       dataset,
       status: outcome.status,

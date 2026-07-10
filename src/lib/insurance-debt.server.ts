@@ -29,6 +29,10 @@ import {
   stageInsurance,
   validateInsurance,
 } from "@/lib/reconcile.server";
+import {
+  reportProgress,
+  type ProgressCtx,
+} from "@/lib/import-progress.server";
 
 function admin(): SupabaseClient {
   return supabaseAdmin as unknown as SupabaseClient;
@@ -258,7 +262,12 @@ export interface ProviderImportResult {
 
 export async function importOneProvider(
   provider: InsuranceProviderId,
+  globalRunId?: string,
 ): Promise<ProviderImportResult> {
+  const progress: ProgressCtx | null = globalRunId
+    ? { admin: admin(), runId: globalRunId, source: provider }
+    : null;
+
   const startedAt = new Date();
   const runId = await insertRunRow(provider, startedAt);
   if (!runId) {
@@ -279,6 +288,10 @@ export async function importOneProvider(
   let outcome: ImporterOutcome;
   try {
     logImport(provider, `start run=${runId}`);
+    await reportProgress(progress, {
+      phase: "download",
+      message: "Sťahovanie zdroja",
+    });
     outcome = await runImporterFor(provider);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Neznáma chyba importu.";
@@ -289,6 +302,7 @@ export async function importOneProvider(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(provider, false, msg);
+    await reportProgress(progress, { phase: "failed", message: msg });
     return {
       provider,
       status: "failed",
@@ -323,6 +337,10 @@ export async function importOneProvider(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(provider, false, outcome.errorMessage);
+    await reportProgress(progress, {
+      phase: "failed",
+      message: outcome.errorMessage ?? outcome.status,
+    });
     return {
       provider,
       status: outcome.status,
@@ -346,6 +364,10 @@ export async function importOneProvider(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(provider, true, "Dataset nezmenený od posledného behu.");
+    await reportProgress(progress, {
+      phase: "done",
+      message: "Dataset nezmenený od posledného behu.",
+    });
     return {
       provider,
       status: "unchanged",
@@ -358,6 +380,7 @@ export async function importOneProvider(
   }
 
   // Validation gate. On failure — NEVER deactivate existing records.
+  await reportProgress(progress, { phase: "validation", message: "Validácia dát" });
   const validation = validateInsurance(outcome.records, provider);
   logImport(
     provider,
@@ -376,6 +399,10 @@ export async function importOneProvider(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(provider, false, validation.reason);
+    await reportProgress(progress, {
+      phase: "failed",
+      message: validation.reason ?? "Validácia zlyhala",
+    });
     return {
       provider,
       status: "failed",
@@ -391,7 +418,13 @@ export async function importOneProvider(
   const prevSnapshot = await snapshotCurrentForWatched(provider);
 
   // Stage.
-  const staged = await stageInsurance(admin(), outcome.records, runId, providerLogLabel(provider));
+  const staged = await stageInsurance(
+    admin(),
+    outcome.records,
+    runId,
+    providerLogLabel(provider),
+    progress,
+  );
   if (staged.errorMessage) {
     logImportError(provider, `staging failed after ${staged.staged} rows: ${staged.errorMessage}`);
     await cleanupStaging(admin(), "staging_insurance_debts", runId);
@@ -406,6 +439,10 @@ export async function importOneProvider(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(provider, false, staged.errorMessage);
+    await reportProgress(progress, {
+      phase: "failed",
+      message: `Staging chyba: ${staged.errorMessage}`,
+    });
     return {
       provider,
       status: "failed",
@@ -419,7 +456,7 @@ export async function importOneProvider(
 
   // Reconcile atomically inside Postgres.
   const sourceDate = outcome.sourceRecordDate ?? new Date().toISOString().slice(0, 10);
-  const rec = await reconcileInsurance(admin(), provider, runId, sourceDate);
+  const rec = await reconcileInsurance(admin(), provider, runId, sourceDate, progress);
   if (rec.errorMessage || !rec.counts) {
     logImportError(provider, `reconciliation failed: ${rec.errorMessage ?? "unknown"}`);
     await cleanupStaging(admin(), "staging_insurance_debts", runId);
@@ -434,6 +471,10 @@ export async function importOneProvider(
       finished_at: new Date().toISOString(),
     });
     await writeFreshness(provider, false, rec.errorMessage);
+    await reportProgress(progress, {
+      phase: "failed",
+      message: `Reconciliation zlyhal: ${rec.errorMessage ?? "unknown"}`,
+    });
     return {
       provider,
       status: "failed",
@@ -470,6 +511,12 @@ export async function importOneProvider(
     provider,
     `final status=success inserted=${rec.counts.inserted} updated=${rec.counts.updated} unchanged=${rec.counts.unchanged} deactivated=${rec.counts.deactivated}`,
   );
+  await reportProgress(progress, {
+    phase: "done",
+    message: `Hotovo: +${rec.counts.inserted} / ~${rec.counts.updated} / =${rec.counts.unchanged} / −${rec.counts.deactivated}`,
+    recordsProcessed:
+      rec.counts.inserted + rec.counts.updated + rec.counts.unchanged,
+  });
 
   return {
     provider,
