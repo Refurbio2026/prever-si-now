@@ -575,8 +575,19 @@ function SchedulerOverview() {
 
   const overview = useQuery({
     queryKey: ["scheduler-overview"],
-    queryFn: () => fetchOverview(),
-    refetchInterval: 10_000,
+    queryFn: async () => {
+      // Hard 10s timeout — never let the section spin forever.
+      return await Promise.race([
+        fetchOverview(),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Stav plánovača sa nepodarilo načítať")),
+            10_000,
+          ),
+        ),
+      ]);
+    },
+    refetchInterval: 15_000,
     retry: 1,
   });
 
