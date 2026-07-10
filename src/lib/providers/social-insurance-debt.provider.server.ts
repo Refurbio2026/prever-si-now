@@ -223,5 +223,7 @@ export async function importSocialInsuranceDebtors(): Promise<ImporterOutcome> {
           : err.message
         : "Neznáma chyba pri sťahovaní SP datasetu.";
     return { ...base, errorMessage: msg };
+  } finally {
+    if (dl) await dl.cleanup();
   }
 }
