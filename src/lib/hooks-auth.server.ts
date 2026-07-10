@@ -7,6 +7,10 @@ import { timingSafeEqual, createHash } from "node:crypto";
 
 let cache: { value: string; expiresAt: number } | null = null;
 
+export async function loadDatahubSecret(): Promise<string> {
+  return loadSecret();
+}
+
 async function loadSecret(): Promise<string> {
   const now = Date.now();
   if (cache && cache.expiresAt > now) return cache.value;
