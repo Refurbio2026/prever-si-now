@@ -65,6 +65,7 @@ import {
 import { AiReportCard } from "@/components/ai-report-card";
 import { InsuranceDebtsSection } from "@/components/insurance-debts-section";
 import { TaxStatusSection } from "@/components/tax-status-section";
+import { RpoSection } from "@/components/rpo-section";
 import { SeverityBadge } from "@/components/severity-badge";
 import {
   detectCompanyChangesFn,
