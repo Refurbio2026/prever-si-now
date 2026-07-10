@@ -154,7 +154,7 @@ export interface PersonRow {
   share_percent: number | null;
   valid_from: string | null;
   valid_to: string | null;
-  raw_data: Record<string, unknown>;
+  raw_data: unknown;
 }
 
 function collectPersons(ico: string, detail: Record<string, unknown>): PersonRow[] {
