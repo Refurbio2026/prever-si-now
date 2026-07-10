@@ -23,12 +23,34 @@ import {
   TAX_THRESHOLDS,
   cleanupStaging,
   reconcileTax,
+  shortHash,
   stageTax,
   validateTax,
 } from "@/lib/reconcile.server";
 
 function admin(): SupabaseClient {
   return supabaseAdmin as unknown as SupabaseClient;
+}
+
+function datasetLogLabel(dataset: TaxDatasetId): string {
+  return dataset === "vat_registered"
+    ? "VAT"
+    : dataset === "tax_debtors"
+      ? "tax_debtors"
+      : dataset;
+}
+
+function logImport(dataset: TaxDatasetId, message: string): void {
+  // eslint-disable-next-line no-console
+  console.log(`[datahub] ${datasetLogLabel(dataset)} ${message}`);
+}
+
+function logImportError(dataset: TaxDatasetId, message: string, err?: unknown): void {
+  // eslint-disable-next-line no-console
+  console.error(
+    `[datahub] ${datasetLogLabel(dataset)} ${message}`,
+    err instanceof Error ? (err.stack ?? err.message) : (err ?? ""),
+  );
 }
 
 async function writeFreshness(
@@ -307,9 +329,14 @@ export interface TaxDatasetImportResult {
 async function importVatStreamedFlow(
   runId: string,
 ): Promise<TaxDatasetImportResult> {
+  logImport("vat_registered", `start run=${runId}`);
   const prevHash = await latestSuccessHash("vat_registered");
   const prevSnapshot = await snapshotWatched("vat_registered");
   const summary = await importVatRegisterStreamed(admin(), runId);
+  logImport(
+    "vat_registered",
+    `downloaded bytes=${summary.bytesRead} hash=${shortHash(summary.contentHash)} records=${summary.recordsDownloaded} staged=${summary.recordsStaged}`,
+  );
 
   const commonUpdate: RunUpdate = {
     source_url: summary.sourceUrl,
@@ -322,6 +349,7 @@ async function importVatStreamedFlow(
   };
 
   if (summary.errorMessage) {
+    logImportError("vat_registered", `stream/staging failed: ${summary.errorMessage}`);
     await cleanupStaging(admin(), "staging_tax_records", runId);
     await updateRunRow(runId, {
       ...commonUpdate,
@@ -344,6 +372,7 @@ async function importVatStreamedFlow(
 
   // Unchanged shortcut — same source hash as last successful run.
   if (summary.contentHash && prevHash && summary.contentHash === prevHash) {
+    logImport("vat_registered", `validation skipped unchanged hash=${shortHash(summary.contentHash)}`);
     await cleanupStaging(admin(), "staging_tax_records", runId);
     await updateRunRow(runId, {
       ...commonUpdate,
@@ -386,7 +415,13 @@ async function importVatStreamedFlow(
     validationError = `Podiel duplicít je vysoký (${(summary.duplicateRatio * 100).toFixed(1)}%). Zdroj vyzerá poškodený.`;
   }
 
+  logImport(
+    "vat_registered",
+    `validation ok=${!validationError} valid=${summary.recordsWithValidIco} invalid=${invalid} duplicateRatio=${summary.duplicateRatio.toFixed(4)}`,
+  );
+
   if (validationError) {
+    logImportError("vat_registered", `validation failed: ${validationError}`);
     await cleanupStaging(admin(), "staging_tax_records", runId);
     await updateRunRow(runId, {
       ...commonUpdate,
@@ -412,6 +447,7 @@ async function importVatStreamedFlow(
   const sourceDate = summary.sourceRecordDate ?? new Date().toISOString().slice(0, 10);
   const rec = await reconcileTax(admin(), "vat_registered", runId, sourceDate);
   if (rec.errorMessage || !rec.counts) {
+    logImportError("vat_registered", `reconciliation failed: ${rec.errorMessage ?? "unknown"}`);
     await cleanupStaging(admin(), "staging_tax_records", runId);
     await updateRunRow(runId, {
       ...commonUpdate,
@@ -453,6 +489,10 @@ async function importVatStreamedFlow(
     finished_at: new Date().toISOString(),
   });
   await writeFreshness("vat_registered", true, null);
+  logImport(
+    "vat_registered",
+    `final status=success inserted=${rec.counts.inserted} updated=${rec.counts.updated} unchanged=${rec.counts.unchanged} deactivated=${rec.counts.deactivated}`,
+  );
 
   return {
     dataset: "vat_registered",
@@ -471,6 +511,9 @@ export async function importOneDataset(
   const startedAt = new Date();
   const runId = await insertRunRow(dataset, startedAt);
   if (!runId) {
+    const msg = "Nepodarilo sa vytvoriť záznam behu.";
+    logImportError(dataset, msg);
+    await writeFreshness(dataset, false, msg);
     return {
       dataset,
       status: "failed",
@@ -478,21 +521,44 @@ export async function importOneDataset(
       recordsUpdated: 0,
       recordsUnchanged: 0,
       recordsDeactivated: 0,
-      errorMessage: "Nepodarilo sa vytvoriť záznam behu.",
+      errorMessage: msg,
     };
   }
 
   // VAT register is streamed directly into staging (dataset is ~125 MB
   // uncompressed and cannot be buffered).
   if (dataset === "vat_registered") {
-    return importVatStreamedFlow(runId);
+    try {
+      return await importVatStreamedFlow(runId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Neznáma chyba importu.";
+      logImportError(dataset, "streamed flow crashed", err);
+      await cleanupStaging(admin(), "staging_tax_records", runId);
+      await updateRunRow(runId, {
+        status: "failed",
+        error_message: msg,
+        finished_at: new Date().toISOString(),
+      });
+      await writeFreshness(dataset, false, msg);
+      return {
+        dataset,
+        status: "failed",
+        recordsInserted: 0,
+        recordsUpdated: 0,
+        recordsUnchanged: 0,
+        recordsDeactivated: 0,
+        errorMessage: msg,
+      };
+    }
   }
 
   let outcome: TaxImporterOutcome;
   try {
+    logImport(dataset, `start run=${runId}`);
     outcome = await runImporterFor(dataset);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Neznáma chyba importu.";
+    logImportError(dataset, "importer crashed", err);
     await updateRunRow(runId, {
       status: "failed",
       error_message: msg,
@@ -518,8 +584,13 @@ export async function importOneDataset(
     records_normalized: outcome.recordsNormalized,
     records_with_valid_ico: outcome.recordsWithValidIco,
   };
+  logImport(
+    dataset,
+    `downloaded bytes=${outcome.recordsDownloaded} hash=${shortHash(outcome.contentHash)} status=${outcome.status}`,
+  );
 
   if (outcome.status === "not_implemented" || outcome.status === "failed") {
+    logImportError(dataset, `failed before validation: ${outcome.errorMessage ?? "unknown"}`);
     await updateRunRow(runId, {
       ...commonUpdate,
       status: outcome.status,
@@ -540,6 +611,7 @@ export async function importOneDataset(
 
   const prevHash = await latestSuccessHash(dataset);
   if (outcome.contentHash && prevHash && outcome.contentHash === prevHash) {
+    logImport(dataset, `validation skipped unchanged hash=${shortHash(outcome.contentHash)}`);
     await updateRunRow(runId, {
       ...commonUpdate,
       status: "unchanged",
@@ -560,7 +632,12 @@ export async function importOneDataset(
   }
 
   const validation = validateTax(outcome.records, dataset);
+  logImport(
+    dataset,
+    `validation ok=${validation.ok} valid=${validation.validCount} invalid=${validation.invalidCount} duplicateRatio=${validation.duplicateRatio.toFixed(4)}`,
+  );
   if (!validation.ok) {
+    logImportError(dataset, `validation failed: ${validation.reason ?? "unknown"}`);
     await updateRunRow(runId, {
       ...commonUpdate,
       status: "failed",
@@ -585,8 +662,9 @@ export async function importOneDataset(
 
   const prevSnapshot = await snapshotWatched(dataset);
 
-  const staged = await stageTax(admin(), outcome.records, runId);
+  const staged = await stageTax(admin(), outcome.records, runId, datasetLogLabel(dataset));
   if (staged.errorMessage) {
+    logImportError(dataset, `staging failed after ${staged.staged} rows: ${staged.errorMessage}`);
     await cleanupStaging(admin(), "staging_tax_records", runId);
     await updateRunRow(runId, {
       ...commonUpdate,
@@ -613,6 +691,7 @@ export async function importOneDataset(
   const sourceDate = outcome.sourceRecordDate ?? new Date().toISOString().slice(0, 10);
   const rec = await reconcileTax(admin(), dataset, runId, sourceDate);
   if (rec.errorMessage || !rec.counts) {
+    logImportError(dataset, `reconciliation failed: ${rec.errorMessage ?? "unknown"}`);
     await cleanupStaging(admin(), "staging_tax_records", runId);
     await updateRunRow(runId, {
       ...commonUpdate,
@@ -656,6 +735,10 @@ export async function importOneDataset(
     finished_at: new Date().toISOString(),
   });
   await writeFreshness(dataset, true, null);
+  logImport(
+    dataset,
+    `final status=success inserted=${rec.counts.inserted} updated=${rec.counts.updated} unchanged=${rec.counts.unchanged} deactivated=${rec.counts.deactivated}`,
+  );
 
   return {
     dataset,
@@ -686,6 +769,12 @@ export async function importAllFinancialAdministrationData(): Promise<
     try {
       results.push(await importOneDataset(d));
     } catch (err) {
+      logImportError(d, "dataset wrapper crashed", err);
+      await writeFreshness(
+        d,
+        false,
+        err instanceof Error ? err.message : "Neznáma chyba.",
+      );
       results.push({
         dataset: d,
         status: "failed",
