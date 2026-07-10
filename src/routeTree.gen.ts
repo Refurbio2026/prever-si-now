@@ -32,6 +32,7 @@ import { Route as AdminApiDebugRouteImport } from './routes/admin.api-debug'
 import { Route as AdminDatahubTaxRouteImport } from './routes/admin.datahub.tax'
 import { Route as AdminDatahubInsuranceRouteImport } from './routes/admin.datahub.insurance'
 import { Route as ApiPublicHooksTaxWorkerRouteImport } from './routes/api/public/hooks/tax-worker'
+import { Route as ApiPublicHooksRunImportStepRouteImport } from './routes/api/public/hooks/run-import-step'
 import { Route as ApiPublicHooksRunGlobalImportsRouteImport } from './routes/api/public/hooks/run-global-imports'
 import { Route as ApiPublicHooksInsuranceWorkerRouteImport } from './routes/api/public/hooks/insurance-worker'
 import { Route as ApiPublicHooksDatahubWorkerRouteImport } from './routes/api/public/hooks/datahub-worker'
@@ -151,6 +152,12 @@ const ApiPublicHooksTaxWorkerRoute = ApiPublicHooksTaxWorkerRouteImport.update({
   path: '/api/public/hooks/tax-worker',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksRunImportStepRoute =
+  ApiPublicHooksRunImportStepRouteImport.update({
+    id: '/api/public/hooks/run-import-step',
+    path: '/api/public/hooks/run-import-step',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksRunGlobalImportsRoute =
   ApiPublicHooksRunGlobalImportsRouteImport.update({
     id: '/api/public/hooks/run-global-imports',
@@ -196,6 +203,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
   '/api/public/hooks/run-global-imports': typeof ApiPublicHooksRunGlobalImportsRoute
+  '/api/public/hooks/run-import-step': typeof ApiPublicHooksRunImportStepRoute
   '/api/public/hooks/tax-worker': typeof ApiPublicHooksTaxWorkerRoute
 }
 export interface FileRoutesByTo {
@@ -222,6 +230,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
   '/api/public/hooks/run-global-imports': typeof ApiPublicHooksRunGlobalImportsRoute
+  '/api/public/hooks/run-import-step': typeof ApiPublicHooksRunImportStepRoute
   '/api/public/hooks/tax-worker': typeof ApiPublicHooksTaxWorkerRoute
 }
 export interface FileRoutesById {
@@ -251,6 +260,7 @@ export interface FileRoutesById {
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
   '/api/public/hooks/run-global-imports': typeof ApiPublicHooksRunGlobalImportsRoute
+  '/api/public/hooks/run-import-step': typeof ApiPublicHooksRunImportStepRoute
   '/api/public/hooks/tax-worker': typeof ApiPublicHooksTaxWorkerRoute
 }
 export interface FileRouteTypes {
@@ -281,6 +291,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
     | '/api/public/hooks/run-global-imports'
+    | '/api/public/hooks/run-import-step'
     | '/api/public/hooks/tax-worker'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -307,6 +318,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
     | '/api/public/hooks/run-global-imports'
+    | '/api/public/hooks/run-import-step'
     | '/api/public/hooks/tax-worker'
   id:
     | '__root__'
@@ -335,6 +347,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
     | '/api/public/hooks/run-global-imports'
+    | '/api/public/hooks/run-import-step'
     | '/api/public/hooks/tax-worker'
   fileRoutesById: FileRoutesById
 }
@@ -349,6 +362,7 @@ export interface RootRouteChildren {
   ApiPublicHooksDatahubWorkerRoute: typeof ApiPublicHooksDatahubWorkerRoute
   ApiPublicHooksInsuranceWorkerRoute: typeof ApiPublicHooksInsuranceWorkerRoute
   ApiPublicHooksRunGlobalImportsRoute: typeof ApiPublicHooksRunGlobalImportsRoute
+  ApiPublicHooksRunImportStepRoute: typeof ApiPublicHooksRunImportStepRoute
   ApiPublicHooksTaxWorkerRoute: typeof ApiPublicHooksTaxWorkerRoute
 }
 
@@ -515,6 +529,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksTaxWorkerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/run-import-step': {
+      id: '/api/public/hooks/run-import-step'
+      path: '/api/public/hooks/run-import-step'
+      fullPath: '/api/public/hooks/run-import-step'
+      preLoaderRoute: typeof ApiPublicHooksRunImportStepRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/run-global-imports': {
       id: '/api/public/hooks/run-global-imports'
       path: '/api/public/hooks/run-global-imports'
@@ -608,6 +629,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksDatahubWorkerRoute: ApiPublicHooksDatahubWorkerRoute,
   ApiPublicHooksInsuranceWorkerRoute: ApiPublicHooksInsuranceWorkerRoute,
   ApiPublicHooksRunGlobalImportsRoute: ApiPublicHooksRunGlobalImportsRoute,
+  ApiPublicHooksRunImportStepRoute: ApiPublicHooksRunImportStepRoute,
   ApiPublicHooksTaxWorkerRoute: ApiPublicHooksTaxWorkerRoute,
 }
 export const routeTree = rootRouteImport
