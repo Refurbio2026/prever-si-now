@@ -533,3 +533,134 @@ function fmt(iso: string): string {
     return iso;
   }
 }
+
+function SchedulerOverview() {
+  const fetchOverview = useServerFn(getSchedulerOverviewFn);
+  const runGlobal = useServerFn(runGlobalImportsNowFn);
+  const runWorker = useServerFn(runQueueWorkerNowFn);
+
+  const overview = useQuery({
+    queryKey: ["scheduler-overview"],
+    queryFn: () => fetchOverview(),
+    refetchInterval: 10_000,
+  });
+
+  const globalMut = useMutation({
+    mutationFn: () => runGlobal({ data: undefined }),
+    onSuccess: (r) => {
+      if (r.skipped === "already_running") {
+        toast.info("Globálny import už beží — preskočené.");
+      } else {
+        toast.success(
+          `Globálny import: ${r.steps.filter((s) => s.ok).length}/${r.steps.length} OK.`,
+        );
+      }
+      overview.refetch();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const workerMut = useMutation({
+    mutationFn: () => runWorker({ data: undefined }),
+    onSuccess: (r) => {
+      toast.success(
+        `Worker: ${r.processed} spracovaných, ${r.successful} OK, ${r.failed} zlyhalo.`,
+      );
+      overview.refetch();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  return (
+    <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Plánovač (pg_cron)</h2>
+        {overview.isFetching && (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        )}
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Naplánované úlohy sú spúšťané zo Supabase (pg_cron) cez podpísaný
+        X-Datahub-Secret. Manuálne spustenie beží pod tvojím admin účtom.
+      </p>
+
+      <div className="mt-4 space-y-3">
+        {overview.data?.jobs.map((job) => {
+          const isGlobal = job.name === "datahub-global-imports";
+          const busy = isGlobal ? globalMut.isPending : workerMut.isPending;
+          return (
+            <div
+              key={job.name}
+              className="rounded-xl border border-border/60 bg-background/60 p-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-semibold">
+                      {job.name}
+                    </span>
+                    {job.running && (
+                      <Badge variant="secondary" className="rounded-full">
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" /> beží
+                      </Badge>
+                    )}
+                    {job.lastStatus && !job.running && (
+                      <Badge
+                        variant={
+                          job.lastStatus === "success" ? "secondary" : "destructive"
+                        }
+                        className="rounded-full"
+                      >
+                        {job.lastStatus}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {job.schedule}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl"
+                  disabled={busy || job.running}
+                  onClick={() =>
+                    isGlobal ? globalMut.mutate() : workerMut.mutate()
+                  }
+                >
+                  {busy ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <PlayCircle className="mr-2 h-4 w-4" />
+                  )}
+                  Spustiť teraz
+                </Button>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {job.description}
+              </p>
+              <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+                <div>
+                  Posledný beh:{" "}
+                  <span className="font-mono">
+                    {job.lastRunAt ? fmt(job.lastRunAt) : "—"}
+                  </span>
+                </div>
+                {job.lastError && (
+                  <div className="text-destructive">
+                    Chyba: {job.lastError}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {!overview.data && !overview.isLoading && (
+          <p className="text-sm text-muted-foreground">
+            Plánovač zatiaľ nemá žiadne dáta.
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
