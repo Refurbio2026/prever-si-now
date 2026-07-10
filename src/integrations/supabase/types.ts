@@ -302,6 +302,54 @@ export type Database = {
         }
         Relationships: []
       }
+      company_tax_status: {
+        Row: {
+          ic_dph: string | null
+          ico: string
+          id: string
+          imported_at: string
+          raw_data: Json | null
+          source_dataset: string | null
+          source_record_date: string | null
+          source_url: string | null
+          tax_debt_amount: number | null
+          tax_debtor_found: boolean | null
+          tax_reliability_index: string | null
+          vat_registered: boolean | null
+          vat_registration_date: string | null
+        }
+        Insert: {
+          ic_dph?: string | null
+          ico: string
+          id?: string
+          imported_at?: string
+          raw_data?: Json | null
+          source_dataset?: string | null
+          source_record_date?: string | null
+          source_url?: string | null
+          tax_debt_amount?: number | null
+          tax_debtor_found?: boolean | null
+          tax_reliability_index?: string | null
+          vat_registered?: boolean | null
+          vat_registration_date?: string | null
+        }
+        Update: {
+          ic_dph?: string | null
+          ico?: string
+          id?: string
+          imported_at?: string
+          raw_data?: Json | null
+          source_dataset?: string | null
+          source_record_date?: string | null
+          source_url?: string | null
+          tax_debt_amount?: number | null
+          tax_debtor_found?: boolean | null
+          tax_reliability_index?: string | null
+          vat_registered?: boolean | null
+          vat_registration_date?: string | null
+        }
+        Relationships: []
+      }
       data_freshness: {
         Row: {
           created_at: string
@@ -599,6 +647,51 @@ export type Database = {
           id?: string
           report_type?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      tax_import_runs: {
+        Row: {
+          content_hash: string | null
+          dataset: string
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          records_downloaded: number
+          records_normalized: number
+          records_with_valid_ico: number
+          source_record_date: string | null
+          source_url: string | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          content_hash?: string | null
+          dataset: string
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          records_downloaded?: number
+          records_normalized?: number
+          records_with_valid_ico?: number
+          source_record_date?: string | null
+          source_url?: string | null
+          started_at?: string
+          status: string
+        }
+        Update: {
+          content_hash?: string | null
+          dataset?: string
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          records_downloaded?: number
+          records_normalized?: number
+          records_with_valid_ico?: number
+          source_record_date?: string | null
+          source_url?: string | null
+          started_at?: string
+          status?: string
         }
         Relationships: []
       }
