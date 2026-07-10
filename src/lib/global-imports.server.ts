@@ -7,6 +7,76 @@
 // concurrent runs.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadDatahubSecret } from "@/lib/hooks-auth.server";
+
+const LOVABLE_PROJECT_ID = "2a19b096-ded5-4f98-b01e-ebcff1046c4a";
+const STEP_TIMEOUT_MS = 55_000;
+type StepId = "social_insurance" | "tax_debtors" | "vat_registered";
+
+function baseUrl(): string {
+  const explicit = process.env.DATAHUB_BASE_URL;
+  if (explicit) return explicit.replace(/\/+$/, "");
+  return `https://project--${LOVABLE_PROJECT_ID}.lovable.app`;
+}
+
+async function runStepIsolated(step: StepId): Promise<GlobalStepResult> {
+  const url = `${baseUrl()}/api/public/hooks/run-import-step`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), STEP_TIMEOUT_MS);
+  try {
+    const secret = await loadDatahubSecret();
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Datahub-Secret": secret,
+      },
+      body: JSON.stringify({ step }),
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    } catch {
+      /* non-JSON body */
+    }
+    if (!res.ok) {
+      return {
+        step,
+        ok: false,
+        status: (parsed.status as string | null) ?? `http_${res.status}`,
+        errorMessage:
+          (parsed.errorMessage as string | null) ??
+          `Krok zlyhal (HTTP ${res.status}): ${text.slice(0, 200)}`,
+      };
+    }
+    return {
+      step,
+      ok: Boolean(parsed.ok),
+      status: (parsed.status as string | null) ?? null,
+      errorMessage: (parsed.errorMessage as string | null) ?? null,
+      recordsInserted: parsed.recordsInserted as number | undefined,
+      recordsUpdated: parsed.recordsUpdated as number | undefined,
+      recordsUnchanged: parsed.recordsUnchanged as number | undefined,
+      recordsDeactivated: parsed.recordsDeactivated as number | undefined,
+    };
+  } catch (err) {
+    const aborted = err instanceof Error && err.name === "AbortError";
+    return {
+      step,
+      ok: false,
+      status: aborted ? "timeout" : "dispatch_failed",
+      errorMessage: aborted
+        ? `Krok vypršal po ${Math.round(STEP_TIMEOUT_MS / 1000)}s.`
+        : err instanceof Error
+          ? err.message
+          : "Neznáma chyba pri dispatchi.",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export interface GlobalStepResult {
   step: string;
