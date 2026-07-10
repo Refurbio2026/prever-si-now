@@ -568,11 +568,18 @@ const FALLBACK_JOBS = [
   },
 ] as const;
 
-type SchedulerJob = (typeof FALLBACK_JOBS)[number] & {
-  cronLastStatus?: string | null;
-  cronLastStart?: string | null;
-  cronActive?: boolean | null;
-  cronSchedule?: string | null;
+type SchedulerJob = {
+  name: string;
+  schedule: string;
+  description: string;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastError: string | null;
+  running: boolean;
+  cronSchedule: string | null;
+  cronActive: boolean | null;
+  cronLastStart: string | null;
+  cronLastStatus: string | null;
 };
 
 async function fetchSchedulerOverview(): Promise<{
