@@ -271,11 +271,6 @@ function DeactivatedInsurancePanel() {
     </Card>
   );
 }
-        </>
-      )}
-    </div>
-  );
-}
 
 function ProviderCard({
   provider,
