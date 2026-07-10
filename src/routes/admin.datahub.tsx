@@ -32,6 +32,11 @@ import {
   retryFailedFn,
   searchAndEnqueueFn,
 } from "@/lib/datahub.functions";
+import {
+  getSchedulerOverviewFn,
+  runGlobalImportsNowFn,
+  runQueueWorkerNowFn,
+} from "@/lib/scheduler.functions";
 
 export const Route = createFileRoute("/admin/datahub")({
   component: DataHubPage,
