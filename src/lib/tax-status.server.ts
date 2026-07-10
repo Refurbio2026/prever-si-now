@@ -14,9 +14,13 @@ import {
   type TaxImporterOutcome,
 } from "@/lib/tax-status.types";
 import { importTaxDebtors } from "@/lib/providers/tax-debtors.provider.server";
-import { importVatRegister } from "@/lib/providers/vat-register.provider.server";
+import {
+  importVatRegister,
+  importVatRegisterStreamed,
+} from "@/lib/providers/vat-register.provider.server";
 import { importTaxReliability } from "@/lib/providers/tax-reliability.provider.server";
 import {
+  TAX_THRESHOLDS,
   cleanupStaging,
   reconcileTax,
   stageTax,
