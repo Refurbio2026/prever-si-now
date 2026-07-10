@@ -642,7 +642,7 @@ async function fetchSchedulerOverview(): Promise<{
     overrides: Partial<SchedulerJob>,
   ): SchedulerJob => {
     const cron = cronByName.get(base.name);
-    return {
+    const merged: SchedulerJob = {
       name: base.name,
       schedule: base.schedule,
       description: base.description,
@@ -655,9 +655,10 @@ async function fetchSchedulerOverview(): Promise<{
       cronActive: cron?.active ?? null,
       cronLastStart: cron?.last_run_start ?? null,
       cronLastStatus: cron?.last_run_status ?? null,
-      lastError:
-        overrides.lastError ?? cron?.last_error ?? base.lastError ?? null,
     };
+    merged.lastError =
+      overrides.lastError ?? cron?.last_error ?? base.lastError ?? null;
+    return merged;
   };
 
   return {
