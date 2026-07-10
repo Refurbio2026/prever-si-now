@@ -9,7 +9,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { verifyDatahubSecret } from "@/lib/hooks-auth.server";
 
 async function run(request: Request): Promise<Response> {
-  const denied = verifyDatahubSecret(request);
+  const denied = await verifyDatahubSecret(request);
   if (denied) return denied;
   const startedAt = new Date();
   try {
