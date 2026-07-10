@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,8 +19,10 @@ import {
 import {
   getDeactivatedTaxFn,
   getTaxImportStatusFn,
+  getTaxSourceDiagnosticsFn,
   runAllTaxImportsFn,
   runTaxImportFn,
+  type DatasetSourceDiagnostic,
   type DeactivatedTaxRow,
   type TaxDatasetStatus,
 } from "@/lib/tax-status.functions";
@@ -201,9 +203,107 @@ function TaxAdminPage() {
             </div>
           </Card>
 
+          <SourceDiagnosticsPanel />
+
           <DeactivatedTaxPanel />
         </>
       )}
+    </div>
+  );
+}
+
+function SourceDiagnosticsPanel() {
+  const fn = useServerFn(getTaxSourceDiagnosticsFn);
+  const q = useQuery({
+    queryKey: ["tax-source-diagnostics"],
+    queryFn: () => fn(),
+    staleTime: 60_000,
+  });
+  return (
+    <Card className="rounded-2xl p-4">
+      <div className="mb-3">
+        <h2 className="text-lg font-semibold">Zdrojová diagnostika</h2>
+        <p className="text-xs text-muted-foreground">
+          Overenie oficiálnej distribúcie pre každý dataset (HTTP, formát, dátum, polia).
+        </p>
+      </div>
+      {q.isLoading ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" /> Načítavam zdroje…
+        </div>
+      ) : q.isError ? (
+        <p className="text-xs text-destructive">{(q.error as Error).message}</p>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-3">
+          {(q.data ?? []).map((d: DatasetSourceDiagnostic) => (
+            <DiagnosticCard key={d.dataset} d={d} />
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function DiagnosticCard({ d }: { d: DatasetSourceDiagnostic }) {
+  const ok = d.httpStatus === 200 && d.missingColumns.length === 0;
+  return (
+    <div className="rounded-xl border p-3 text-xs">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="font-semibold">{d.dataset}</span>
+        <Badge
+          variant="secondary"
+          className={`rounded-full border-0 ${
+            ok
+              ? "bg-success/15 text-success"
+              : d.errorMessage
+                ? "bg-destructive/15 text-destructive"
+                : "bg-warning/25 text-warning-foreground"
+          }`}
+        >
+          {ok ? "ok" : d.httpStatus ? "chyba" : "nekonfigurované"}
+        </Badge>
+      </div>
+      <dl className="space-y-1">
+        <Row label="Landing" value={
+          <a href={d.landingUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+            dataset page
+          </a>
+        } />
+        <Row label="URL distribúcie" value={d.configuredUrl ? <span className="break-all font-mono text-[10px]">{d.configuredUrl}</span> : "—"} />
+        <Row label="HTTP" value={d.httpStatus ?? "—"} />
+        <Row label="Content-Type" value={d.contentType ?? "—"} />
+        <Row label="Formát" value={d.detectedFormat ?? "—"} />
+        <Row label="Veľkosť" value={d.contentLength ? `${(d.contentLength / 1024 / 1024).toFixed(1)} MB` : "—"} />
+        <Row label="Last-Modified" value={d.lastModified ?? "—"} />
+        <Row label="ETag" value={d.etag ? <span className="font-mono text-[10px]">{d.etag}</span> : "—"} />
+        <Row label="Dátum zdroja" value={d.sourceRecordDate ?? "—"} />
+        <Row
+          label="Detegované polia"
+          value={
+            d.sampleColumnNames.length > 0 ? (
+              <span className="font-mono text-[10px]">{d.sampleColumnNames.join(", ")}</span>
+            ) : "—"
+          }
+        />
+        {d.missingColumns.length > 0 && (
+          <Row
+            label="Chýba"
+            value={<span className="font-mono text-[10px] text-destructive">{d.missingColumns.join(", ")}</span>}
+          />
+        )}
+      </dl>
+      {d.errorMessage && (
+        <p className="mt-2 text-[11px] text-destructive">{d.errorMessage}</p>
+      )}
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="text-right">{value}</dd>
     </div>
   );
 }

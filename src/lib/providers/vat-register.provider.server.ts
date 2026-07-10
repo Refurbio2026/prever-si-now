@@ -1,118 +1,52 @@
-// Finančná správa SR — Register platiteľov DPH (VAT register).
-// Landing: https://www.financnasprava.sk/sk/elektronicke-sluzby/verejne-sluzby/zoznamy
-// Open data portal: https://opendata.financnasprava.sk/
+// Finančná správa SR — Register platiteľov DPH.
+// Official machine-readable distribution (confirmed 2026-07):
+//   https://report.financnasprava.sk/ds_dphs.zip  (XML: ds_dphs.xml + XSD)
+// Landing page:
+//   https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-subjektov-registrovanych-pre-dph1
 //
-// We do NOT guess the download URL. Set `FS_VAT_REGISTER_URL` server-only
-// env var to the official CSV/ZIP endpoint published on opendata.
-// Without it we return `not_implemented`.
+// The uncompressed XML is ~125 MB, so we NEVER buffer it. Streaming path:
+//   fetch → hash bytes → fflate Unzip → XML chunk state machine → onItem.
+// The regular importVatRegister() aggregates a small in-memory sample for the
+// existing pipeline; importVatRegisterStreamed() is used by the orchestrator
+// to stage records incrementally.
 
-import { createHash } from "node:crypto";
-import { unzipSync, strFromU8 } from "fflate";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   type JsonValue,
   type TaxImporterOutcome,
   type TaxStatusRecord,
   normalizeIco,
 } from "@/lib/tax-status.types";
+import { streamFsXml, toIsoDate } from "@/lib/providers/fs-xml-stream.server";
+import { taxRecordHash } from "@/lib/reconcile.server";
 
 const LANDING_URL =
-  "https://www.financnasprava.sk/sk/elektronicke-sluzby/verejne-sluzby/zoznamy";
-const FETCH_TIMEOUT_MS = 20_000;
+  "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-subjektov-registrovanych-pre-dph1";
 
-async function fetchWithTimeout(url: string): Promise<Response> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-  try {
-    return await fetch(url, {
-      signal: ctrl.signal,
-      headers: {
-        "User-Agent": "PreverSi DataHub (+https://preversi.sk)",
-        Accept: "*/*",
-      },
-    });
-  } finally {
-    clearTimeout(t);
-  }
+function mapItem(fields: Record<string, string>, sourceUrl: string): TaxStatusRecord | null {
+  const ico = normalizeIco(fields.ICO ?? "");
+  if (!ico) return null;
+  const regDate = toIsoDate(fields.DATUM_REG ?? fields.PLAT_DPH_OD ?? "");
+  const cancelDate = toIsoDate(fields.DATUM_ZRUS ?? fields.PLAT_DPH_DO ?? "");
+  const raw: JsonValue = fields as unknown as JsonValue;
+  return {
+    ico,
+    dataset: "vat_registered",
+    taxDebtorFound: null,
+    taxDebtAmount: null,
+    // Presence in the register = registered. Explicit cancellation date flips to false.
+    vatRegistered: cancelDate ? false : true,
+    icDph: (fields.IC_DPH ?? "").trim() || null,
+    vatRegistrationDate: regDate,
+    taxReliabilityIndex: null,
+    sourceRecordDate: cancelDate ?? regDate,
+    sourceUrl,
+    rawData: raw,
+  };
 }
 
-function splitCsvLine(line: string, sep: string): string[] {
-  const out: string[] = [];
-  let cur = "";
-  let inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQ) {
-      if (ch === '"') {
-        if (line[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else inQ = false;
-      } else cur += ch;
-    } else if (ch === '"') inQ = true;
-    else if (ch === sep) {
-      out.push(cur);
-      cur = "";
-    } else cur += ch;
-  }
-  out.push(cur);
-  return out;
-}
-
-function detectSeparator(header: string): string {
-  const cands = [";", ",", "\t", "|"];
-  let best = ",";
-  let n = -1;
-  for (const c of cands) {
-    const k = header.split(c).length;
-    if (k > n) {
-      best = c;
-      n = k;
-    }
-  }
-  return best;
-}
-
-function parseCsv(text: string): string[][] {
-  const clean = text.replace(/^\uFEFF/, "");
-  const lines = clean.split(/\r?\n/).filter((l) => l.length > 0);
-  if (lines.length === 0) return [];
-  const sep = detectSeparator(lines[0]);
-  return lines.map((l) => splitCsvLine(l, sep));
-}
-
-function findColumn(header: string[], candidates: string[]): number {
-  const norm = header.map((h) => h.toLowerCase().replace(/[^a-z0-9]+/g, ""));
-  for (const c of candidates) {
-    const target = c.toLowerCase().replace(/[^a-z0-9]+/g, "");
-    const idx = norm.indexOf(target);
-    if (idx >= 0) return idx;
-  }
-  return -1;
-}
-
-function extractCsvFromZip(bytes: Uint8Array): string | null {
-  const files = unzipSync(bytes);
-  for (const name of Object.keys(files)) {
-    if (/\.csv$/i.test(name)) return strFromU8(files[name]);
-  }
-  return null;
-}
-
-function normalizeDate(input: string | undefined): string | null {
-  if (!input) return null;
-  const s = input.trim();
-  // ISO already?
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  // dd.mm.yyyy
-  const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-  if (m) {
-    const d = m[1].padStart(2, "0");
-    const mo = m[2].padStart(2, "0");
-    return `${m[3]}-${mo}-${d}`;
-  }
-  return null;
-}
-
+/** Non-streaming variant kept only for tests / diagnostics. Caps at 2 000
+ *  records so it can never allocate more than a few MB. Not used in prod. */
 export async function importVatRegister(): Promise<TaxImporterOutcome> {
   const configuredUrl = process.env.FS_VAT_REGISTER_URL ?? "";
   if (!configuredUrl) {
@@ -125,145 +59,199 @@ export async function importVatRegister(): Promise<TaxImporterOutcome> {
       recordsWithValidIco: 0,
       contentHash: null,
       errorMessage:
-        "Zdrojová URL registra platiteľov DPH nie je nakonfigurovaná (FS_VAT_REGISTER_URL).",
+        "Zdrojová URL FS pre register DPH nie je nakonfigurovaná (FS_VAT_REGISTER_URL).",
       records: [],
       sourceRecordDate: null,
     };
   }
 
-  const res = await fetchWithTimeout(configuredUrl);
-  if (!res.ok) {
-    return {
-      dataset: "vat_registered",
-      status: "failed",
-      sourceUrl: configuredUrl,
-      recordsDownloaded: 0,
-      recordsNormalized: 0,
-      recordsWithValidIco: 0,
-      contentHash: null,
-      errorMessage: `HTTP ${res.status} pri sťahovaní datasetu.`,
-      records: [],
-      sourceRecordDate: null,
-    };
-  }
-
-  const buf = new Uint8Array(await res.arrayBuffer());
-  const contentHash = createHash("sha256").update(buf).digest("hex");
-  const ct = (res.headers.get("content-type") ?? "").toLowerCase();
-  let csv: string | null = null;
-  if (ct.includes("zip") || configuredUrl.toLowerCase().endsWith(".zip")) {
-    csv = extractCsvFromZip(buf);
-  } else {
-    csv = new TextDecoder("utf-8").decode(buf);
-  }
-  if (!csv) {
-    return {
-      dataset: "vat_registered",
-      status: "failed",
-      sourceUrl: configuredUrl,
-      recordsDownloaded: 0,
-      recordsNormalized: 0,
-      recordsWithValidIco: 0,
-      contentHash,
-      errorMessage: "V ZIP archíve sa nenašiel CSV súbor.",
-      records: [],
-      sourceRecordDate: null,
-    };
-  }
-
-  const rows = parseCsv(csv);
-  if (rows.length < 2) {
-    return {
-      dataset: "vat_registered",
-      status: "empty",
-      sourceUrl: configuredUrl,
-      recordsDownloaded: 0,
-      recordsNormalized: 0,
-      recordsWithValidIco: 0,
-      contentHash,
-      errorMessage: null,
-      records: [],
-      sourceRecordDate: null,
-    };
-  }
-
-  const header = rows[0];
-  const icoIdx = findColumn(header, ["ico", "ičo"]);
-  const icDphIdx = findColumn(header, ["icdph", "ic_dph", "vatid"]);
-  const regDateIdx = findColumn(header, [
-    "datumRegistracie",
-    "datum_registracie",
-    "regDatum",
-    "platnostOd",
-  ]);
-  const cancelDateIdx = findColumn(header, [
-    "datumZrusenia",
-    "datum_zrusenia",
-    "platnostDo",
-  ]);
-  const statusIdx = findColumn(header, ["status", "stav"]);
-
-  const today = new Date().toISOString().slice(0, 10);
   const records: TaxStatusRecord[] = [];
   let downloaded = 0;
   let withValidIco = 0;
-
-  for (let r = 1; r < rows.length; r++) {
-    const row = rows[r];
-    downloaded++;
-    const ico = normalizeIco(icoIdx >= 0 ? row[icoIdx] : "");
-    if (!ico) continue;
-    withValidIco++;
-
-    const icDph = icDphIdx >= 0 ? (row[icDphIdx] ?? "").trim() || null : null;
-    const regDate = normalizeDate(regDateIdx >= 0 ? row[regDateIdx] : "");
-    const cancelDate = normalizeDate(
-      cancelDateIdx >= 0 ? row[cancelDateIdx] : "",
-    );
-    const statusText =
-      statusIdx >= 0 ? (row[statusIdx] ?? "").toLowerCase() : "";
-
-    // "vatRegistered = false" ONLY when the source explicitly confirms
-    // cancellation. Otherwise leave it at true (record present) or null.
-    let vatRegistered: boolean | null = true;
-    if (
-      cancelDate ||
-      statusText.includes("zrušený") ||
-      statusText.includes("zruseny") ||
-      statusText.includes("zrušené") ||
-      statusText.includes("vymazan")
-    ) {
-      vatRegistered = false;
-    }
-
-    const rawObj: Record<string, string> = {};
-    for (let i = 0; i < header.length; i++) rawObj[header[i]] = row[i] ?? "";
-
-    records.push({
-      ico,
-      dataset: "vat_registered",
-      taxDebtorFound: null,
-      taxDebtAmount: null,
-      vatRegistered,
-      icDph,
-      vatRegistrationDate: regDate,
-      taxReliabilityIndex: null,
-      sourceRecordDate: cancelDate ?? regDate ?? today,
-      sourceUrl: LANDING_URL,
-      rawData: rawObj as JsonValue,
-    });
-  }
+  const meta = await streamFsXml({
+    url: configuredUrl,
+    xmlSuffix: "ds_dphs.xml",
+    rootDateTag: "DatumAktualizacieZoznamu",
+    maxItems: 2_000,
+    onItem: (fields) => {
+      downloaded++;
+      const rec = mapItem(fields, configuredUrl);
+      if (rec) {
+        withValidIco++;
+        records.push(rec);
+      }
+    },
+  });
 
   return {
     dataset: "vat_registered",
-    status: records.length > 0 ? "success" : "empty",
+    status: meta.status === 200 ? "success" : "failed",
     sourceUrl: configuredUrl,
     recordsDownloaded: downloaded,
     recordsNormalized: records.length,
     recordsWithValidIco: withValidIco,
-    contentHash,
-    errorMessage: null,
+    contentHash: meta.contentHash || null,
+    errorMessage:
+      meta.status === 200
+        ? null
+        : `HTTP ${meta.status} pri sťahovaní registra DPH.`,
     records,
-    sourceRecordDate: today,
+    sourceRecordDate: toIsoDate(meta.rootDate),
+  };
+}
+
+// ---------- streaming path for production ----------
+
+export interface StreamedVatSummary {
+  sourceUrl: string;
+  contentHash: string;
+  sourceRecordDate: string | null;
+  recordsDownloaded: number;
+  recordsNormalized: number;
+  recordsWithValidIco: number;
+  recordsStaged: number;
+  duplicateRatio: number;
+  sampleColumnNames: string[];
+  httpStatus: number;
+  lastModified: string | null;
+  etag: string | null;
+  contentType: string;
+  errorMessage: string | null;
+}
+
+/** Stream FS VAT register into the given staging table in batches. Records
+ *  are written incrementally, so peak memory stays bounded regardless of the
+ *  dataset size. Returns aggregate stats the orchestrator uses for validation
+ *  and run-log fields. */
+export async function importVatRegisterStreamed(
+  admin: SupabaseClient,
+  runId: string,
+  batchSize = 500,
+): Promise<StreamedVatSummary> {
+  const configuredUrl = process.env.FS_VAT_REGISTER_URL ?? "";
+  if (!configuredUrl) {
+    return {
+      sourceUrl: LANDING_URL,
+      contentHash: "",
+      sourceRecordDate: null,
+      recordsDownloaded: 0,
+      recordsNormalized: 0,
+      recordsWithValidIco: 0,
+      recordsStaged: 0,
+      duplicateRatio: 0,
+      sampleColumnNames: [],
+      httpStatus: 0,
+      lastModified: null,
+      etag: null,
+      contentType: "",
+      errorMessage:
+        "Zdrojová URL FS pre register DPH nie je nakonfigurovaná (FS_VAT_REGISTER_URL).",
+    };
+  }
+
+  let downloaded = 0;
+  let normalized = 0;
+  let withValidIco = 0;
+  let staged = 0;
+  const seen = new Set<string>();
+  let duplicates = 0;
+  let stagingError: string | null = null;
+  let batch: Array<{
+    ico: string;
+    dataset: "vat_registered";
+    tax_debtor_found: boolean | null;
+    tax_debt_amount: number | null;
+    vat_registered: boolean | null;
+    ic_dph: string | null;
+    vat_registration_date: string | null;
+    tax_reliability_index: string | null;
+    source_url: string;
+    raw_data: JsonValue;
+    source_record_hash: string;
+    run_id: string;
+  }> = [];
+
+  const flush = async (): Promise<void> => {
+    if (batch.length === 0 || stagingError) return;
+    const { error } = await admin.from("staging_tax_records").insert(batch);
+    if (error) {
+      stagingError = error.message;
+      return;
+    }
+    staged += batch.length;
+    batch = [];
+  };
+
+  let meta;
+  try {
+    meta = await streamFsXml({
+      url: configuredUrl,
+      xmlSuffix: "ds_dphs.xml",
+      rootDateTag: "DatumAktualizacieZoznamu",
+      onItem: async (fields) => {
+        if (stagingError) return;
+        downloaded++;
+        const rec = mapItem(fields, configuredUrl);
+        if (!rec || !rec.ico) return;
+        normalized++;
+        withValidIco++;
+        const key = `vat_registered|${rec.ico}`;
+        if (seen.has(key)) {
+          duplicates++;
+          return;
+        }
+        seen.add(key);
+        batch.push({
+          ico: rec.ico,
+          dataset: "vat_registered",
+          tax_debtor_found: rec.taxDebtorFound,
+          tax_debt_amount: rec.taxDebtAmount,
+          vat_registered: rec.vatRegistered,
+          ic_dph: rec.icDph,
+          vat_registration_date: rec.vatRegistrationDate,
+          tax_reliability_index: rec.taxReliabilityIndex,
+          source_url: rec.sourceUrl,
+          raw_data: rec.rawData,
+          source_record_hash: taxRecordHash(rec),
+          run_id: runId,
+        });
+        if (batch.length >= batchSize) await flush();
+      },
+    });
+    await flush();
+  } catch (err) {
+    return {
+      sourceUrl: configuredUrl,
+      contentHash: "",
+      sourceRecordDate: null,
+      recordsDownloaded: downloaded,
+      recordsNormalized: normalized,
+      recordsWithValidIco: withValidIco,
+      recordsStaged: staged,
+      duplicateRatio: normalized > 0 ? duplicates / normalized : 0,
+      sampleColumnNames: [],
+      httpStatus: 0,
+      lastModified: null,
+      etag: null,
+      contentType: "",
+      errorMessage: `Streaming zlyhal: ${err instanceof Error ? err.message : "neznáma chyba"}`,
+    };
+  }
+
+  return {
+    sourceUrl: configuredUrl,
+    contentHash: meta.contentHash,
+    sourceRecordDate: toIsoDate(meta.rootDate),
+    recordsDownloaded: downloaded,
+    recordsNormalized: normalized,
+    recordsWithValidIco: withValidIco,
+    recordsStaged: staged,
+    duplicateRatio: normalized > 0 ? duplicates / normalized : 0,
+    sampleColumnNames: meta.sampleColumnNames,
+    httpStatus: meta.status,
+    lastModified: meta.lastModified,
+    etag: meta.etag,
+    contentType: meta.contentType,
+    errorMessage: stagingError,
   };
 }
