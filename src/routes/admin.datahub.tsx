@@ -714,6 +714,7 @@ interface ProgressRow {
 function SchedulerOverview() {
   const runGlobal = useServerFn(runGlobalImportsNowFn);
   const runWorker = useServerFn(runQueueWorkerNowFn);
+  const qc = useQueryClient();
 
   const overview = useQuery({
     queryKey: ["scheduler-overview"],
@@ -732,6 +733,40 @@ function SchedulerOverview() {
     retry: 1,
   });
 
+  const currentRunId = overview.data?.currentRunId ?? null;
+  const globalJobRunning =
+    overview.data?.jobs?.find((j) => j.name === "datahub-global-imports")
+      ?.running ?? false;
+
+  const progress = useQuery({
+    queryKey: ["scheduler-progress", currentRunId],
+    enabled: !!currentRunId,
+    refetchInterval: globalJobRunning ? 3_000 : false,
+    queryFn: async (): Promise<ProgressRow[]> => {
+      if (!currentRunId) return [];
+      const { data, error } = await supabase
+        .from("datahub_import_progress")
+        .select(
+          "source, phase, current_batch, total_batches, records_processed, records_total, message, updated_at",
+        )
+        .eq("run_id", currentRunId)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as ProgressRow[];
+    },
+  });
+
+  // When run flips to done/failed for all sources, refresh freshness overview.
+  const progressRows = progress.data ?? [];
+  const allTerminal =
+    progressRows.length > 0 &&
+    progressRows.every((r) => r.phase === "done" || r.phase === "failed");
+  useEffect(() => {
+    if (allTerminal && !globalJobRunning) {
+      qc.invalidateQueries({ queryKey: ["scheduler-overview"] });
+    }
+  }, [allTerminal, globalJobRunning, qc]);
+
   const globalMut = useMutation({
     mutationFn: () => runGlobal({ data: undefined }),
     onSuccess: (r) => {
@@ -743,6 +778,7 @@ function SchedulerOverview() {
         );
       }
       overview.refetch();
+      progress.refetch();
     },
     onError: (e) => toast.error((e as Error).message),
   });
