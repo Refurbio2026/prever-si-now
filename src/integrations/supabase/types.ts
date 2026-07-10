@@ -436,6 +436,7 @@ export type Database = {
       }
       datahub_settings: {
         Row: {
+          cron_secret: string | null
           global_import_last_finished_at: string | null
           global_import_running: boolean
           global_import_started_at: string | null
@@ -445,6 +446,7 @@ export type Database = {
           worker_paused: boolean
         }
         Insert: {
+          cron_secret?: string | null
           global_import_last_finished_at?: string | null
           global_import_running?: boolean
           global_import_started_at?: string | null
@@ -454,6 +456,7 @@ export type Database = {
           worker_paused?: boolean
         }
         Update: {
+          cron_secret?: string | null
           global_import_last_finished_at?: string | null
           global_import_running?: boolean
           global_import_started_at?: string | null
