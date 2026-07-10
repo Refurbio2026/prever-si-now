@@ -586,7 +586,7 @@ export async function importOneDataset(
   };
   logImport(
     dataset,
-    `downloaded bytes=${outcome.recordsDownloaded} hash=${shortHash(outcome.contentHash)} status=${outcome.status}`,
+    `downloaded records=${outcome.recordsDownloaded} hash=${shortHash(outcome.contentHash)} status=${outcome.status}`,
   );
 
   if (outcome.status === "not_implemented" || outcome.status === "failed") {
