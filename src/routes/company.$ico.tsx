@@ -63,6 +63,7 @@ import {
   type SourceProgress,
 } from "@/lib/datahub-auto.functions";
 import { AiReportCard } from "@/components/ai-report-card";
+import { InsuranceDebtsSection } from "@/components/insurance-debts-section";
 import { SeverityBadge } from "@/components/severity-badge";
 import {
   detectCompanyChangesFn,
