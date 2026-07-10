@@ -1110,6 +1110,14 @@ export type Database = {
           schedule: string
         }[]
       }
+      close_removed_insurance_debt_keys: {
+        Args: { _icos: string[]; _provider: string }
+        Returns: number
+      }
+      close_removed_tax_status_keys: {
+        Args: { _dataset: string; _icos: string[] }
+        Returns: number
+      }
       get_scheduler_status: {
         Args: never
         Returns: {
