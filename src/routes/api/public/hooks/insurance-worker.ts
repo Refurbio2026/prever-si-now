@@ -3,10 +3,14 @@
 // (`social_insurance`, `vszp`, `dovera`, `union`). Providers without a
 // stable public dataset return `not_implemented` and never emit signals.
 // Never exposes company or user data — only aggregate counts.
+// Requires the shared X-Datahub-Secret header (DATAHUB_CRON_SECRET).
 
 import { createFileRoute } from "@tanstack/react-router";
+import { verifyDatahubSecret } from "@/lib/hooks-auth.server";
 
-async function run() {
+async function run(request: Request): Promise<Response> {
+  const denied = verifyDatahubSecret(request);
+  if (denied) return denied;
   const startedAt = new Date();
   try {
     const { importAllInsuranceDebtors } = await import("@/lib/insurance-debt.server");
@@ -25,8 +29,8 @@ async function run() {
 export const Route = createFileRoute("/api/public/hooks/insurance-worker")({
   server: {
     handlers: {
-      GET: () => run(),
-      POST: () => run(),
+      GET: ({ request }) => run(request),
+      POST: ({ request }) => run(request),
     },
   },
 });

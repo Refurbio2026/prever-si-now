@@ -1,10 +1,11 @@
 // Public HTTP endpoint for the DataHub background worker.
-// Anonymous — safe to call from pg_cron or an external scheduler. Never
-// exposes company or user data; only returns aggregate counters.
-// Respects the admin pause switch in datahub_settings and logs every run
-// into datahub_worker_runs for the admin dashboard.
+// Called by pg_cron every minute. Requires the shared X-Datahub-Secret
+// header (DATAHUB_CRON_SECRET). Respects the admin pause switch in
+// datahub_settings, logs every run into datahub_worker_runs. Idempotency:
+// a run in the last 55 s is considered "already scheduled" and skipped.
 
 import { createFileRoute } from "@tanstack/react-router";
+import { verifyDatahubSecret } from "@/lib/hooks-auth.server";
 
 async function runWorker(limit: number, trigger: string) {
   const { processQueueBatch } = await import("@/lib/datahub.server");
@@ -12,7 +13,20 @@ async function runWorker(limit: number, trigger: string) {
 
   const startedAt = new Date();
 
-  // Check pause switch first — never process jobs while paused.
+  // Idempotency: skip if a run is already in-flight (started in the last 55 s
+  // and not yet finished) — protects against overlapping pg_cron ticks.
+  const inflightSince = new Date(startedAt.getTime() - 55_000).toISOString();
+  const { data: inflight } = await supabaseAdmin
+    .from("datahub_worker_runs")
+    .select("id")
+    .is("finished_at", null)
+    .gte("started_at", inflightSince)
+    .limit(1);
+  if (inflight && inflight.length > 0) {
+    return Response.json({ ok: true, skipped: "already_running", processed: 0 });
+  }
+
+  // Check pause switch — never process jobs while paused.
   const { data: settings } = await supabaseAdmin
     .from("datahub_settings")
     .select("worker_paused")
@@ -78,11 +92,15 @@ export const Route = createFileRoute("/api/public/hooks/datahub-worker")({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        const denied = verifyDatahubSecret(request);
+        if (denied) return denied;
         const url = new URL(request.url);
         const trigger = url.searchParams.get("trigger") ?? "cron";
         return runWorker(parseLimit(url.searchParams.get("limit")), trigger);
       },
       POST: async ({ request }) => {
+        const denied = verifyDatahubSecret(request);
+        if (denied) return denied;
         const url = new URL(request.url);
         let body: { limit?: number; trigger?: string } = {};
         try {
