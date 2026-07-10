@@ -25,12 +25,30 @@ import { importUnionDebtors } from "@/lib/providers/union-debt.provider.server";
 import {
   cleanupStaging,
   reconcileInsurance,
+  shortHash,
   stageInsurance,
   validateInsurance,
 } from "@/lib/reconcile.server";
 
 function admin(): SupabaseClient {
   return supabaseAdmin as unknown as SupabaseClient;
+}
+
+function providerLogLabel(provider: InsuranceProviderId): string {
+  return provider === "social_insurance" ? "SP" : provider;
+}
+
+function logImport(provider: InsuranceProviderId, message: string): void {
+  // eslint-disable-next-line no-console
+  console.log(`[datahub] ${providerLogLabel(provider)} ${message}`);
+}
+
+function logImportError(provider: InsuranceProviderId, message: string, err?: unknown): void {
+  // eslint-disable-next-line no-console
+  console.error(
+    `[datahub] ${providerLogLabel(provider)} ${message}`,
+    err instanceof Error ? (err.stack ?? err.message) : (err ?? ""),
+  );
 }
 
 async function writeFreshness(
@@ -244,6 +262,9 @@ export async function importOneProvider(
   const startedAt = new Date();
   const runId = await insertRunRow(provider, startedAt);
   if (!runId) {
+    const msg = "Nepodarilo sa vytvoriť záznam behu.";
+    logImportError(provider, msg);
+    await writeFreshness(provider, false, msg);
     return {
       provider,
       status: "failed",
@@ -251,15 +272,17 @@ export async function importOneProvider(
       recordsUpdated: 0,
       recordsUnchanged: 0,
       recordsDeactivated: 0,
-      errorMessage: "Nepodarilo sa vytvoriť záznam behu.",
+      errorMessage: msg,
     };
   }
 
   let outcome: ImporterOutcome;
   try {
+    logImport(provider, `start run=${runId}`);
     outcome = await runImporterFor(provider);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Neznáma chyba importu.";
+    logImportError(provider, "importer crashed", err);
     await updateRunRow(runId, {
       status: "failed",
       error_message: msg,
@@ -285,9 +308,14 @@ export async function importOneProvider(
     records_normalized: outcome.recordsNormalized,
     records_with_ico: outcome.recordsWithIco,
   };
+  logImport(
+    provider,
+    `downloaded bytes=${outcome.recordsDownloaded} hash=${shortHash(outcome.contentHash)} status=${outcome.status}`,
+  );
 
   // Early-exit statuses.
   if (outcome.status === "not_implemented" || outcome.status === "failed") {
+    logImportError(provider, `failed before validation: ${outcome.errorMessage ?? "unknown"}`);
     await updateRunRow(runId, {
       ...commonUpdate,
       status: outcome.status,
@@ -309,6 +337,7 @@ export async function importOneProvider(
   // Hash-based skip. NEVER reconcile when source is unchanged.
   const prevHash = await latestSuccessHash(provider);
   if (outcome.contentHash && prevHash && outcome.contentHash === prevHash) {
+    logImport(provider, `validation skipped unchanged hash=${shortHash(outcome.contentHash)}`);
     await updateRunRow(runId, {
       ...commonUpdate,
       status: "unchanged",
@@ -330,7 +359,12 @@ export async function importOneProvider(
 
   // Validation gate. On failure — NEVER deactivate existing records.
   const validation = validateInsurance(outcome.records, provider);
+  logImport(
+    provider,
+    `validation ok=${validation.ok} valid=${validation.validCount} invalid=${validation.invalidCount} duplicateRatio=${validation.duplicateRatio.toFixed(4)}`,
+  );
   if (!validation.ok) {
+    logImportError(provider, `validation failed: ${validation.reason ?? "unknown"}`);
     await updateRunRow(runId, {
       ...commonUpdate,
       status: "failed",
@@ -357,8 +391,9 @@ export async function importOneProvider(
   const prevSnapshot = await snapshotCurrentForWatched(provider);
 
   // Stage.
-  const staged = await stageInsurance(admin(), outcome.records, runId);
+  const staged = await stageInsurance(admin(), outcome.records, runId, providerLogLabel(provider));
   if (staged.errorMessage) {
+    logImportError(provider, `staging failed after ${staged.staged} rows: ${staged.errorMessage}`);
     await cleanupStaging(admin(), "staging_insurance_debts", runId);
     await updateRunRow(runId, {
       ...commonUpdate,
@@ -386,6 +421,7 @@ export async function importOneProvider(
   const sourceDate = outcome.sourceRecordDate ?? new Date().toISOString().slice(0, 10);
   const rec = await reconcileInsurance(admin(), provider, runId, sourceDate);
   if (rec.errorMessage || !rec.counts) {
+    logImportError(provider, `reconciliation failed: ${rec.errorMessage ?? "unknown"}`);
     await cleanupStaging(admin(), "staging_insurance_debts", runId);
     await updateRunRow(runId, {
       ...commonUpdate,
@@ -430,6 +466,10 @@ export async function importOneProvider(
     finished_at: new Date().toISOString(),
   });
   await writeFreshness(provider, true, null);
+  logImport(
+    provider,
+    `final status=success inserted=${rec.counts.inserted} updated=${rec.counts.updated} unchanged=${rec.counts.unchanged} deactivated=${rec.counts.deactivated}`,
+  );
 
   return {
     provider,
@@ -448,6 +488,12 @@ export async function importAllInsuranceDebtors(): Promise<ProviderImportResult[
     try {
       results.push(await importOneProvider(p));
     } catch (err) {
+      logImportError(p, "provider wrapper crashed", err);
+      await writeFreshness(
+        p,
+        false,
+        err instanceof Error ? err.message : "Neznáma chyba.",
+      );
       results.push({
         provider: p,
         status: "failed",

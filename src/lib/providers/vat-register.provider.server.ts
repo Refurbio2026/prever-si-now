@@ -23,6 +23,19 @@ import { taxRecordHash } from "@/lib/reconcile.server";
 const LANDING_URL =
   "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-subjektov-registrovanych-pre-dph1";
 
+function logVat(message: string): void {
+  // eslint-disable-next-line no-console
+  console.log(`[datahub] VAT ${message}`);
+}
+
+function logVatError(message: string, err?: unknown): void {
+  // eslint-disable-next-line no-console
+  console.error(
+    `[datahub] VAT ${message}`,
+    err instanceof Error ? (err.stack ?? err.message) : (err ?? ""),
+  );
+}
+
 function mapItem(fields: Record<string, string>, sourceUrl: string): TaxStatusRecord | null {
   const ico = normalizeIco(fields.ICO ?? "");
   if (!ico) return null;
@@ -116,6 +129,7 @@ export interface StreamedVatSummary {
   lastModified: string | null;
   etag: string | null;
   contentType: string;
+  bytesRead: number;
   errorMessage: string | null;
 }
 
@@ -126,7 +140,7 @@ export interface StreamedVatSummary {
 export async function importVatRegisterStreamed(
   admin: SupabaseClient,
   runId: string,
-  batchSize = 500,
+  batchSize = 1000,
 ): Promise<StreamedVatSummary> {
   const configuredUrl = process.env.FS_VAT_REGISTER_URL ?? "";
   if (!configuredUrl) {
@@ -144,6 +158,7 @@ export async function importVatRegisterStreamed(
       lastModified: null,
       etag: null,
       contentType: "",
+      bytesRead: 0,
       errorMessage:
         "Zdrojová URL FS pre register DPH nie je nakonfigurovaná (FS_VAT_REGISTER_URL).",
     };
@@ -156,6 +171,7 @@ export async function importVatRegisterStreamed(
   const seen = new Set<string>();
   let duplicates = 0;
   let stagingError: string | null = null;
+  let batchNo = 0;
   let batch: Array<{
     ico: string;
     dataset: "vat_registered";
@@ -173,17 +189,22 @@ export async function importVatRegisterStreamed(
 
   const flush = async (): Promise<void> => {
     if (batch.length === 0 || stagingError) return;
+    batchNo++;
+    const rows = batch.length;
     const { error } = await admin.from("staging_tax_records").insert(batch);
     if (error) {
       stagingError = error.message;
+      logVatError(`staging batch ${batchNo} failed: ${error.message}`);
       return;
     }
     staged += batch.length;
+    logVat(`staging batch ${batchNo} rows=${rows} staged=${staged}`);
     batch = [];
   };
 
   let meta;
   try {
+    logVat(`download start url=${configuredUrl}`);
     meta = await streamFsXml({
       url: configuredUrl,
       xmlSuffix: "ds_dphs.xml",
@@ -219,7 +240,9 @@ export async function importVatRegisterStreamed(
       },
     });
     await flush();
+    logVat(`downloaded bytes=${meta.bytesRead} hash=${meta.contentHash.slice(0, 12)} items=${meta.itemCount}`);
   } catch (err) {
+    logVatError("streaming error", err);
     return {
       sourceUrl: configuredUrl,
       contentHash: "",
@@ -234,6 +257,7 @@ export async function importVatRegisterStreamed(
       lastModified: null,
       etag: null,
       contentType: "",
+      bytesRead: 0,
       errorMessage: `Streaming zlyhal: ${err instanceof Error ? err.message : "neznáma chyba"}`,
     };
   }
@@ -252,6 +276,7 @@ export async function importVatRegisterStreamed(
     lastModified: meta.lastModified,
     etag: meta.etag,
     contentType: meta.contentType,
+    bytesRead: meta.bytesRead,
     errorMessage: stagingError,
   };
 }

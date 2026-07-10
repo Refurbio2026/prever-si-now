@@ -19,6 +19,19 @@ const DEFAULT_DOWNLOAD_URL =
   "https://www.socpoist.sk/api/idsp/download/302e4a86-4333-4d75-b441-d191d6aff6c4";
 const FETCH_TIMEOUT_MS = 8_000;
 
+function logSp(message: string): void {
+  // eslint-disable-next-line no-console
+  console.log(`[datahub] SP ${message}`);
+}
+
+function logSpError(message: string, err?: unknown): void {
+  // eslint-disable-next-line no-console
+  console.error(
+    `[datahub] SP ${message}`,
+    err instanceof Error ? (err.stack ?? err.message) : (err ?? ""),
+  );
+}
+
 async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
@@ -115,8 +128,10 @@ export async function importSocialInsuranceDebtors(): Promise<ImporterOutcome> {
   };
 
   try {
+    logSp(`download start url=${DEFAULT_DOWNLOAD_URL}`);
     const res = await fetchWithTimeout(DEFAULT_DOWNLOAD_URL);
     if (!res.ok) {
+      logSpError(`download failed status=${res.status}`);
       return {
         ...base,
         errorMessage: `HTTP ${res.status} pri sťahovaní SP datasetu.`,
@@ -124,6 +139,7 @@ export async function importSocialInsuranceDebtors(): Promise<ImporterOutcome> {
     }
     const buf = new Uint8Array(await res.arrayBuffer());
     const contentHash = createHash("sha256").update(buf).digest("hex");
+    logSp(`downloaded bytes=${buf.byteLength} hash=${contentHash.slice(0, 12)}`);
     const entries = unzipSync(buf);
     const csvName = Object.keys(entries).find((n) => n.toLowerCase().endsWith(".csv"));
     if (!csvName) {
@@ -131,6 +147,7 @@ export async function importSocialInsuranceDebtors(): Promise<ImporterOutcome> {
     }
     const csvText = strFromU8(entries[csvName]);
     const rows = parseCsv(csvText);
+    logSp(`parsed csv=${csvName} rows=${Math.max(rows.length - 1, 0)}`);
     if (rows.length < 2) {
       return {
         ...base,
@@ -184,6 +201,8 @@ export async function importSocialInsuranceDebtors(): Promise<ImporterOutcome> {
       });
     }
 
+    logSp(`normalized records=${records.length} withIco=${withIco}`);
+
     return {
       provider: "social_insurance",
       status: records.length === 0 ? "empty" : "success",
@@ -197,6 +216,7 @@ export async function importSocialInsuranceDebtors(): Promise<ImporterOutcome> {
       sourceRecordDate,
     };
   } catch (err) {
+    logSpError("importer error", err);
     const msg =
       err instanceof Error
         ? err.name === "AbortError"

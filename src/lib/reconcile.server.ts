@@ -149,12 +149,22 @@ export function validateTax(
 
 // ---------- Staging + reconcile ----------
 
-const CHUNK = 500;
+const STAGING_BATCH = 1000;
+
+function logDatahub(message: string): void {
+  // eslint-disable-next-line no-console
+  console.log(`[datahub] ${message}`);
+}
+
+function shortHash(hash: string | null | undefined): string {
+  return hash ? hash.slice(0, 12) : "none";
+}
 
 export async function stageInsurance(
   admin: SupabaseClient,
   records: InsuranceDebtRecord[],
   runId: string,
+  label = "insurance",
 ): Promise<{ staged: number; errorMessage: string | null }> {
   const seen = new Set<string>();
   const rows = records
@@ -180,11 +190,17 @@ export async function stageInsurance(
     });
 
   let staged = 0;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const slice = rows.slice(i, i + CHUNK);
+  const totalBatches = Math.max(1, Math.ceil(rows.length / STAGING_BATCH));
+  for (let i = 0; i < rows.length; i += STAGING_BATCH) {
+    const batchNo = Math.floor(i / STAGING_BATCH) + 1;
+    const slice = rows.slice(i, i + STAGING_BATCH);
     const { error } = await admin.from("staging_insurance_debts").insert(slice);
-    if (error) return { staged, errorMessage: error.message };
+    if (error) {
+      logDatahub(`${label} staging batch ${batchNo}/${totalBatches} failed: ${error.message}`);
+      return { staged, errorMessage: error.message };
+    }
     staged += slice.length;
+    logDatahub(`${label} staging batch ${batchNo}/${totalBatches} rows=${slice.length} staged=${staged}`);
   }
   return { staged, errorMessage: null };
 }
@@ -193,6 +209,7 @@ export async function stageTax(
   admin: SupabaseClient,
   records: TaxStatusRecord[],
   runId: string,
+  label = "tax",
 ): Promise<{ staged: number; errorMessage: string | null }> {
   const seen = new Set<string>();
   const rows = records
@@ -219,11 +236,17 @@ export async function stageTax(
     });
 
   let staged = 0;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const slice = rows.slice(i, i + CHUNK);
+  const totalBatches = Math.max(1, Math.ceil(rows.length / STAGING_BATCH));
+  for (let i = 0; i < rows.length; i += STAGING_BATCH) {
+    const batchNo = Math.floor(i / STAGING_BATCH) + 1;
+    const slice = rows.slice(i, i + STAGING_BATCH);
     const { error } = await admin.from("staging_tax_records").insert(slice);
-    if (error) return { staged, errorMessage: error.message };
+    if (error) {
+      logDatahub(`${label} staging batch ${batchNo}/${totalBatches} failed: ${error.message}`);
+      return { staged, errorMessage: error.message };
+    }
     staged += slice.length;
+    logDatahub(`${label} staging batch ${batchNo}/${totalBatches} rows=${slice.length} staged=${staged}`);
   }
   return { staged, errorMessage: null };
 }
@@ -247,8 +270,19 @@ function logProgress(label: string, batch: number, extra: Record<string, number>
   const parts = Object.entries(extra)
     .map(([k, v]) => `${k}=${v}`)
     .join(" ");
-  // eslint-disable-next-line no-console
-  console.log(`[reconcile] ${label} batch ${batch} ${parts}`);
+  logDatahub(`${label} reconcile batch ${batch} ${parts}`);
+}
+
+function insuranceLabel(provider: InsuranceProviderId): string {
+  return provider === "social_insurance" ? "SP" : provider;
+}
+
+function taxLabel(dataset: TaxDatasetId): string {
+  return dataset === "vat_registered"
+    ? "VAT"
+    : dataset === "tax_debtors"
+      ? "tax_debtors"
+      : dataset;
 }
 
 export async function reconcileInsurance(
@@ -258,6 +292,8 @@ export async function reconcileInsurance(
   sourceDate: string,
 ): Promise<{ counts: ReconcileCounts | null; errorMessage: string | null }> {
   const counts: ReconcileCounts = { inserted: 0, updated: 0, unchanged: 0, deactivated: 0 };
+  const label = insuranceLabel(provider);
+  logDatahub(`${label} reconciliation start run=${runId} sourceDate=${sourceDate} batchSize=${RECONCILE_BATCH}`);
 
   // Phase 1: apply staged rows (insert new / touch unchanged / close+reinsert changed).
   let afterIco: string | null = null;
@@ -269,17 +305,17 @@ export async function reconcileInsurance(
       _after_ico: afterIco,
       _limit: RECONCILE_BATCH,
     });
-    if (error) return { counts: null, errorMessage: `stage batch ${batch}: ${error.message}` };
+    if (error) return { counts: null, errorMessage: `apply batch ${batch}: ${error.message}` };
     const row = Array.isArray(data) ? data[0] : data;
     const processed = Number(row?.processed ?? 0);
     if (!row || processed === 0 || !row.last_ico) {
-      logProgress(`insurance ${provider} stage`, batch, { processed: 0, done: 1 });
+      logProgress(`${label} apply`, batch, { processed: 0, done: 1 });
       break;
     }
     counts.inserted += Number(row.inserted ?? 0);
     counts.updated += Number(row.updated ?? 0);
     counts.unchanged += Number(row.unchanged ?? 0);
-    logProgress(`insurance ${provider} stage`, batch, {
+    logProgress(`${label} apply`, batch, {
       processed,
       inserted: Number(row.inserted ?? 0),
       updated: Number(row.updated ?? 0),
@@ -301,11 +337,11 @@ export async function reconcileInsurance(
     const row = Array.isArray(data) ? data[0] : data;
     const scanned = Number(row?.scanned ?? 0);
     if (!row || scanned === 0 || !row.last_ico) {
-      logProgress(`insurance ${provider} deactivate`, batch, { scanned: 0, done: 1 });
+      logProgress(`${label} deactivate`, batch, { scanned: 0, done: 1 });
       break;
     }
     counts.deactivated += Number(row.deactivated ?? 0);
-    logProgress(`insurance ${provider} deactivate`, batch, {
+    logProgress(`${label} deactivate`, batch, {
       scanned,
       deactivated: Number(row.deactivated ?? 0),
     });
@@ -314,6 +350,7 @@ export async function reconcileInsurance(
 
   // Phase 3: clear staging (small, single statement).
   await admin.rpc("reconcile_insurance_cleanup", { _run_id: runId });
+  logDatahub(`${label} reconciliation finished inserted=${counts.inserted} updated=${counts.updated} unchanged=${counts.unchanged} deactivated=${counts.deactivated}`);
 
   return { counts, errorMessage: null };
 }
@@ -325,6 +362,8 @@ export async function reconcileTax(
   sourceDate: string,
 ): Promise<{ counts: ReconcileCounts | null; errorMessage: string | null }> {
   const counts: ReconcileCounts = { inserted: 0, updated: 0, unchanged: 0, deactivated: 0 };
+  const label = taxLabel(dataset);
+  logDatahub(`${label} reconciliation start run=${runId} sourceDate=${sourceDate} batchSize=${RECONCILE_BATCH}`);
 
   let afterIco: string | null = null;
   for (let batch = 1; batch <= MAX_BATCHES; batch++) {
@@ -335,17 +374,17 @@ export async function reconcileTax(
       _after_ico: afterIco,
       _limit: RECONCILE_BATCH,
     });
-    if (error) return { counts: null, errorMessage: `stage batch ${batch}: ${error.message}` };
+    if (error) return { counts: null, errorMessage: `apply batch ${batch}: ${error.message}` };
     const row = Array.isArray(data) ? data[0] : data;
     const processed = Number(row?.processed ?? 0);
     if (!row || processed === 0 || !row.last_ico) {
-      logProgress(`tax ${dataset} stage`, batch, { processed: 0, done: 1 });
+      logProgress(`${label} apply`, batch, { processed: 0, done: 1 });
       break;
     }
     counts.inserted += Number(row.inserted ?? 0);
     counts.updated += Number(row.updated ?? 0);
     counts.unchanged += Number(row.unchanged ?? 0);
-    logProgress(`tax ${dataset} stage`, batch, {
+    logProgress(`${label} apply`, batch, {
       processed,
       inserted: Number(row.inserted ?? 0),
       updated: Number(row.updated ?? 0),
@@ -366,11 +405,11 @@ export async function reconcileTax(
     const row = Array.isArray(data) ? data[0] : data;
     const scanned = Number(row?.scanned ?? 0);
     if (!row || scanned === 0 || !row.last_ico) {
-      logProgress(`tax ${dataset} deactivate`, batch, { scanned: 0, done: 1 });
+      logProgress(`${label} deactivate`, batch, { scanned: 0, done: 1 });
       break;
     }
     counts.deactivated += Number(row.deactivated ?? 0);
-    logProgress(`tax ${dataset} deactivate`, batch, {
+    logProgress(`${label} deactivate`, batch, {
       scanned,
       deactivated: Number(row.deactivated ?? 0),
     });
@@ -378,9 +417,12 @@ export async function reconcileTax(
   }
 
   await admin.rpc("reconcile_tax_dataset_cleanup", { _run_id: runId });
+  logDatahub(`${label} reconciliation finished inserted=${counts.inserted} updated=${counts.updated} unchanged=${counts.unchanged} deactivated=${counts.deactivated}`);
 
   return { counts, errorMessage: null };
 }
+
+export { shortHash };
 
 /** Best-effort cleanup — orphaned staging rows if a run crashed mid-flight. */
 export async function cleanupStaging(
