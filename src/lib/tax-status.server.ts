@@ -62,8 +62,10 @@ async function writeFreshness(
   dataset: TaxDatasetId,
   ok: boolean,
   message: string | null,
+  statusOverride?: string,
 ): Promise<void> {
   const now = new Date().toISOString();
+  const status = statusOverride ?? (ok ? "success" : "failed");
   await admin()
     .from("data_freshness")
     .upsert(
@@ -72,7 +74,7 @@ async function writeFreshness(
         source: `fs_${dataset}`,
         last_attempt_at: now,
         last_success_at: ok ? now : undefined,
-        status: ok ? "success" : "failed",
+        status,
         error_message: message,
         updated_at: now,
       },
