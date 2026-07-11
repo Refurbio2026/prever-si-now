@@ -319,9 +319,9 @@ function Landing() {
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function Stat({ value, label, title }: { value: string; label: string; title?: string }) {
   return (
-    <div className="text-left">
+    <div className="text-left" title={title}>
       <div className="text-lg font-semibold text-foreground">{value}</div>
       <div className="text-xs">{label}</div>
     </div>
