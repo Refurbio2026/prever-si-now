@@ -10,12 +10,29 @@ import {
   Check,
   ArrowRight,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+
+const FALLBACK_COMPANIES_LABEL = "600 000+";
+const FALLBACK_SOURCES_LABEL = "12 zdrojov";
+
+/** Round a count DOWN to the nearest 100k and format Slovak-style with
+ *  non-breaking spaces as thousands separator, appending "+". */
+function formatSubjectsRounded(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return FALLBACK_COMPANIES_LABEL;
+  const rounded = Math.floor(n / 100_000) * 100_000;
+  if (rounded <= 0) return FALLBACK_COMPANIES_LABEL;
+  return `${rounded.toLocaleString("sk-SK").replace(/\s/g, "\u00A0")}+`;
+}
+
+function formatExact(n: number): string {
+  return n.toLocaleString("sk-SK").replace(/\s/g, "\u00A0");
+}
 
 export const Route = createFileRoute("/")({
   component: Landing,
