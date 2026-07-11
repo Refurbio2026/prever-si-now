@@ -87,6 +87,14 @@ export interface TaxImporterOutcome {
 // UI-facing per-dataset state shown on the company profile.
 export type CompanyTaxDebtorState =
   | { kind: "debt_found"; amount: number | null; recordDate: string | null }
+  | {
+      kind: "matched_debt";
+      amount: number | null;
+      recordDate: string | null;
+      matchTier: "exact" | "fuzzy" | "manual";
+      matchConfidence: number | null;
+    }
+  | { kind: "not_matched"; recordDate: string | null }
   | { kind: "not_in_list"; recordDate: string | null }
   | { kind: "unverified"; reason: string }
   | { kind: "pending" };
