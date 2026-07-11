@@ -47,6 +47,6 @@ export function extractPsc(input: string | null | undefined): string | null {
 export function extractObec(input: string | null | undefined): string | null {
   if (input == null) return null;
   const s = String(input);
-  const m = s.match(/\d{3}\s?\d{2}\s*[,\-]?\s*(.+)$/);
+  const m = s.match(/\d{3}\s?\d{2}\s*[,-]?\s*(.+)$/);
   return normalizeText(m ? m[1] : s);
 }
