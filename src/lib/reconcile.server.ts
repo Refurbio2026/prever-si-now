@@ -752,3 +752,73 @@ export async function cleanupStaging(
   }
   logDatahub(`${label} exceeded safety batch cap`);
 }
+
+/**
+ * Retention cleanup — deletes orphaned staging rows belonging to import runs
+ * older than `retentionDays` (default 7). Chunked at KEY_PAGE per delete so
+ * no statement scans the whole staging table.
+ */
+export async function retainStaging(
+  admin: SupabaseClient,
+  table: "staging_insurance_debts" | "staging_tax_records",
+  sourceCol: "provider" | "dataset",
+  sourceValue: string,
+  label: string,
+  retentionDays = 7,
+): Promise<void> {
+  const runsTable =
+    table === "staging_tax_records" ? "tax_import_runs" : "insurance_import_runs";
+  const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString();
+
+  const { data: runs, error: runsError } = await admin
+    .from(runsTable)
+    .select("id")
+    .eq(sourceCol, sourceValue)
+    .lt("started_at", cutoff);
+  if (runsError) {
+    logDatahub(`${label} retention fetch runs failed: ${runsError.message}`);
+    return;
+  }
+  const runIds = ((runs as Array<{ id: string }> | null) ?? []).map((r) => r.id);
+  if (runIds.length === 0) {
+    logDatahub(`${label} retention no runs older than ${retentionDays}d`);
+    return;
+  }
+
+  let totalDeleted = 0;
+  let runsWithRows = 0;
+  for (const runId of runIds) {
+    for (let batch = 1; batch <= MAX_BATCHES; batch++) {
+      const { data, error } = await admin
+        .from(table)
+        .select("ico")
+        .eq("run_id", runId)
+        .order("ico", { ascending: true })
+        .limit(KEY_PAGE);
+      if (error) {
+        logDatahub(`${label} retention fetch run=${runId} failed: ${error.message}`);
+        break;
+      }
+      const keys = ((data as Array<{ ico: string }> | null) ?? []).map((r) => r.ico);
+      if (keys.length === 0) break;
+      if (batch === 1) runsWithRows += 1;
+      const { error: delError } = await admin
+        .from(table)
+        .delete()
+        .eq("run_id", runId)
+        .in("ico", keys);
+      if (delError) {
+        logDatahub(`${label} retention delete run=${runId} failed: ${delError.message}`);
+        break;
+      }
+      totalDeleted += keys.length;
+      logDatahub(
+        `${label} retention delete run=${runId} chunk ${batch} rows=${keys.length}`,
+      );
+      if (keys.length < KEY_PAGE) break;
+    }
+  }
+  logDatahub(
+    `${label} retention done cutoff=${cutoff} runs=${runIds.length} runsWithRows=${runsWithRows} deleted=${totalDeleted}`,
+  );
+}
