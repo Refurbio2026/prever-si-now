@@ -116,6 +116,32 @@ const plans = [
 function Landing() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [companiesLabel, setCompaniesLabel] = useState(FALLBACK_COMPANIES_LABEL);
+  const [companiesExact, setCompaniesExact] = useState<string | null>(null);
+  const [sourcesLabel, setSourcesLabel] = useState(FALLBACK_SOURCES_LABEL);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc("get_public_stats");
+        if (cancelled || error || !data) return;
+        const stats = data as { companies_count?: number; sources_count?: number };
+        if (typeof stats.companies_count === "number" && stats.companies_count > 0) {
+          setCompaniesLabel(formatSubjectsRounded(stats.companies_count));
+          setCompaniesExact(formatExact(stats.companies_count));
+        }
+        if (typeof stats.sources_count === "number" && stats.sources_count > 0) {
+          setSourcesLabel(`${stats.sources_count} zdrojov`);
+        }
+      } catch {
+        // Fallback values already set — never show 0.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
