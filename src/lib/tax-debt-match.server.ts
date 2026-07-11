@@ -17,12 +17,10 @@ const FUZZY_THRESHOLD = 0.9;
 const SOURCE = "fs_tax_debtors";
 
 function log(msg: string): void {
-  // eslint-disable-next-line no-console
   console.log(`[datahub] tax_debt_match ${msg}`);
 }
 
 function logErr(msg: string, err?: unknown): void {
-  // eslint-disable-next-line no-console
   console.error(
     `[datahub] tax_debt_match ${msg}`,
     err instanceof Error ? (err.stack ?? err.message) : (err ?? ""),

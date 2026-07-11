@@ -46,7 +46,6 @@ export async function downloadTaxDebtors(): Promise<TaxDebtorsDownloadOutcome> {
 
   const records: RawTaxDebtorRecord[] = [];
   try {
-    // eslint-disable-next-line no-console
     console.log(`[datahub] tax_debtors download start url=${configuredUrl}`);
     const meta = await streamFsXml({
       url: configuredUrl,
@@ -70,7 +69,7 @@ export async function downloadTaxDebtors(): Promise<TaxDebtorsDownloadOutcome> {
         });
       },
     });
-    // eslint-disable-next-line no-console
+
     console.log(
       `[datahub] tax_debtors downloaded bytes=${meta.bytesRead} hash=${meta.contentHash.slice(0, 12)} items=${meta.itemCount}`,
     );
@@ -95,7 +94,6 @@ export async function downloadTaxDebtors(): Promise<TaxDebtorsDownloadOutcome> {
       errorMessage: null,
     };
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(
       "[datahub] tax_debtors download error",
       err instanceof Error ? (err.stack ?? err.message) : err,

@@ -35,12 +35,10 @@ function datasetLogLabel(dataset: TaxDatasetId): string {
 }
 
 function logImport(dataset: TaxDatasetId, message: string): void {
-  // eslint-disable-next-line no-console
   console.log(`[datahub] ${datasetLogLabel(dataset)} ${message}`);
 }
 
 function logImportError(dataset: TaxDatasetId, message: string, err?: unknown): void {
-  // eslint-disable-next-line no-console
   console.error(
     `[datahub] ${datasetLogLabel(dataset)} ${message}`,
     err instanceof Error ? (err.stack ?? err.message) : (err ?? ""),
