@@ -63,16 +63,25 @@ function isFresh(dataset: TaxDatasetId, iso: string | null | undefined): boolean
   return Date.now() - new Date(iso).getTime() < TAX_REFRESH_MS[dataset] * 2;
 }
 
+interface MatchedDebtRow {
+  amount: number | null;
+  source_record_date: string | null;
+  match_tier: string;
+  match_confidence: number | null;
+}
+
 function debtorStateFrom(
-  latest: TaxRow | undefined,
+  matched: MatchedDebtRow | undefined,
   lastSuccess: RunRow | undefined,
   lastAny: RunRow | undefined,
 ): CompanyTaxDebtorState {
-  if (latest && latest.tax_debtor_found) {
+  if (matched) {
     return {
-      kind: "debt_found",
-      amount: latest.tax_debt_amount,
-      recordDate: latest.source_record_date,
+      kind: "matched_debt",
+      amount: matched.amount,
+      recordDate: matched.source_record_date,
+      matchTier: (matched.match_tier as "exact" | "fuzzy" | "manual") ?? "manual",
+      matchConfidence: matched.match_confidence,
     };
   }
   if (
@@ -88,7 +97,7 @@ function debtorStateFrom(
   if (!isFresh("tax_debtors", lastSuccess.started_at)) {
     return { kind: "unverified", reason: "Posledný úspešný import je zastaraný." };
   }
-  return { kind: "not_in_list", recordDate: lastSuccess.source_record_date };
+  return { kind: "not_matched", recordDate: lastSuccess.source_record_date };
 }
 
 function vatStateFrom(
