@@ -1,21 +1,29 @@
-// RPO register orchestrator — download the latest RPO bulk export, upsert
-// into `company_registry` (source='RPO'), refresh `company_match_keys` in
-// chunks, close entries that disappeared, and (best-effort) retrigger the
-// tax-debtor matching against the freshly populated register.
+// RPO register orchestrator — download the latest RPO bulk export part-by-
+// part, upsert into `company_registry` (source='RPO'), refresh
+// `company_match_keys` in chunks, close entries that disappeared, and
+// checkpoint each successfully processed part so a failure mid-import can be
+// resumed on the next run without re-processing the whole 2 GB dataset.
+//
+// Checkpoint format (stashed in data_freshness.error_message keyed by
+// __GLOBAL__ / rpo_register):
+//   export_date=YYYY-MM-DD;parts_done=1,2,3[;error=<msg>]
+// On full success we simplify to:
+//   export_date=YYYY-MM-DD;parts_done=all
 //
 // Runs in Node with no CPU/memory/time limits. Everything is chunked at 1000
-// rows so individual statements stay well under statement_timeout. Progress
-// is written to datahub_import_progress after every phase so the admin UI
-// shows live status.
+// rows so individual statements stay under statement_timeout. Progress is
+// written to datahub_import_progress after every phase so the admin UI shows
+// live status.
 
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { reportProgress, type ProgressCtx } from "@/lib/import-progress.server";
 import {
-  downloadRpoBatch,
+  downloadRpoPart,
   findLatestRpoBatch,
   streamRpoRecords,
+  type RpoBatchListing,
   type RpoRawRecord,
 } from "@/lib/providers/rpo-register.provider.server";
 import { normalizeCompanyName, normalizeText } from "@/lib/text-normalize";
@@ -35,6 +43,9 @@ export interface RpoImportResult {
   recordsUnchanged: number;
   recordsDeactivated: number;
   matchKeysRefreshed: number;
+  partsProcessed: number;
+  partsSkipped: number;
+  resumed: boolean;
 }
 
 function log(msg: string): void {
@@ -66,41 +77,76 @@ function recordHash(r: RpoRawRecord): string {
   return createHash("sha256").update(parts).digest("hex");
 }
 
-async function latestExportDate(sb: SupabaseClient): Promise<string | null> {
-  const { data } = await sb
-    .from("data_freshness")
-    .select("last_success_at, error_message")
-    .eq("ico", "__GLOBAL__")
-    .eq("source", "rpo_register")
-    .maybeSingle<{ last_success_at: string | null; error_message: string | null }>();
-  // We stash the last exportDate into error_message on success — cheap and
-  // avoids another table. If absent, treat as first run.
-  if (!data?.error_message) return null;
-  const m = /export_date=(\d{4}-\d{2}-\d{2})/.exec(data.error_message);
-  return m ? m[1] : null;
+// -------------------- Freshness / checkpoint I/O --------------------
+
+interface Checkpoint {
+  exportDate: string | null;
+  partsDone: Set<number>; // 1-based
+  allDone: boolean;
 }
 
-async function writeFreshness(
+function parseCheckpoint(message: string | null | undefined): Checkpoint {
+  if (!message) return { exportDate: null, partsDone: new Set(), allDone: false };
+  const dateM = /export_date=(\d{4}-\d{2}-\d{2})/.exec(message);
+  const partsM = /parts_done=([\w,]+)/.exec(message);
+  const partsDone = new Set<number>();
+  let allDone = false;
+  if (partsM) {
+    if (partsM[1] === "all") allDone = true;
+    else {
+      for (const p of partsM[1].split(",")) {
+        const n = Number(p);
+        if (Number.isFinite(n) && n > 0) partsDone.add(n);
+      }
+    }
+  }
+  return { exportDate: dateM ? dateM[1] : null, partsDone, allDone };
+}
+
+function serializeCheckpoint(cp: Checkpoint, error?: string | null): string {
+  const bits: string[] = [];
+  if (cp.exportDate) bits.push(`export_date=${cp.exportDate}`);
+  if (cp.allDone) bits.push("parts_done=all");
+  else if (cp.partsDone.size > 0) {
+    const arr = [...cp.partsDone].sort((a, b) => a - b);
+    bits.push(`parts_done=${arr.join(",")}`);
+  }
+  if (error) bits.push(`error=${error.replace(/;/g, ",").slice(0, 400)}`);
+  return bits.join(";");
+}
+
+async function loadCheckpoint(sb: SupabaseClient): Promise<Checkpoint> {
+  const { data } = await sb
+    .from("data_freshness")
+    .select("error_message")
+    .eq("ico", "__GLOBAL__")
+    .eq("source", "rpo_register")
+    .maybeSingle<{ error_message: string | null }>();
+  return parseCheckpoint(data?.error_message ?? null);
+}
+
+async function writeCheckpoint(
   sb: SupabaseClient,
-  ok: boolean,
-  message: string,
-  exportDate: string | null,
+  cp: Checkpoint,
+  status: "success" | "failed" | "in_progress",
+  error?: string | null,
 ): Promise<void> {
   const now = new Date().toISOString();
-  const encoded = ok && exportDate ? `export_date=${exportDate}` : message;
   await sb.from("data_freshness").upsert(
     {
       ico: "__GLOBAL__",
       source: "rpo_register",
       last_attempt_at: now,
-      last_success_at: ok ? now : undefined,
-      status: ok ? "success" : "failed",
-      error_message: encoded,
+      last_success_at: status === "success" ? now : undefined,
+      status: status === "success" ? "success" : status === "failed" ? "failed" : "running",
+      error_message: serializeCheckpoint(cp, error),
       updated_at: now,
     },
     { onConflict: "ico,source" },
   );
 }
+
+// -------------------- Registry helpers --------------------
 
 interface CurrentRow {
   ico: string;
@@ -130,7 +176,6 @@ async function loadCurrentHashes(sb: SupabaseClient): Promise<Map<string, string
   return map;
 }
 
-/** Upsert one chunk of parsed RPO records into company_registry. */
 async function upsertChunk(
   sb: SupabaseClient,
   chunk: RpoRawRecord[],
@@ -180,7 +225,6 @@ async function upsertChunk(
   if (error) throw new Error(`upsert chunk: ${error.message}`);
 }
 
-/** Refresh company_match_keys from a chunk of records. */
 async function refreshMatchKeysChunk(
   sb: SupabaseClient,
   chunk: RpoRawRecord[],
@@ -207,7 +251,6 @@ async function refreshMatchKeysChunk(
   return rows.length;
 }
 
-/** Close-removed helper (chunked, RPC-based). */
 async function closeRemoved(sb: SupabaseClient, icos: string[]): Promise<number> {
   let deactivated = 0;
   for (let i = 0; i < icos.length; i += CHUNK) {
@@ -222,6 +265,68 @@ async function closeRemoved(sb: SupabaseClient, icos: string[]): Promise<number>
   return deactivated;
 }
 
+// -------------------- Per-part processor --------------------
+
+interface PartStats {
+  inserted: number;
+  updated: number;
+  unchanged: number;
+}
+
+async function processPart(
+  sb: SupabaseClient,
+  batch: RpoBatchListing,
+  partIndex: number,
+  currentHashes: Map<string, string | null>,
+  seenIcos: Set<string>,
+  progress: ProgressCtx,
+  runningTotal: { parsed: number; matchKeys: number },
+): Promise<PartStats> {
+  const dl = await downloadRpoPart(batch, partIndex);
+  const stats: PartStats = { inserted: 0, updated: 0, unchanged: 0 };
+  try {
+    let buffer: RpoRawRecord[] = [];
+    let chunksDone = 0;
+
+    const flush = async (): Promise<void> => {
+      if (buffer.length === 0) return;
+      await upsertChunk(sb, buffer, currentHashes, stats);
+      runningTotal.matchKeys += await refreshMatchKeysChunk(sb, buffer);
+      chunksDone++;
+      for (const r of buffer) currentHashes.set(r.ico, recordHash(r));
+      if (chunksDone % 10 === 0) {
+        await reportProgress(progress, {
+          phase: "staging",
+          currentBatch: partIndex,
+          totalBatches: batch.files.length,
+          recordsProcessed: runningTotal.parsed,
+          message: `Časť ${partIndex}/${batch.files.length}: ${runningTotal.parsed} záznamov`,
+        });
+      }
+      buffer = [];
+    };
+
+    for await (const rec of streamRpoRecords(dl.filePath)) {
+      if (seenIcos.has(rec.ico)) continue;
+      seenIcos.add(rec.ico);
+      buffer.push(rec);
+      runningTotal.parsed++;
+      if (buffer.length >= CHUNK) await flush();
+    }
+    await flush();
+    log(`part ${partIndex}/${batch.files.length} done ins=${stats.inserted} upd=${stats.updated} unc=${stats.unchanged}`);
+    return stats;
+  } finally {
+    try {
+      await dl.cleanup();
+    } catch (err) {
+      logErr("part cleanup failed", err);
+    }
+  }
+}
+
+// -------------------- Main orchestrator --------------------
+
 export async function importRpoRegister(runId: string): Promise<RpoImportResult> {
   const result: RpoImportResult = {
     status: "failed",
@@ -234,14 +339,21 @@ export async function importRpoRegister(runId: string): Promise<RpoImportResult>
     recordsUnchanged: 0,
     recordsDeactivated: 0,
     matchKeysRefreshed: 0,
+    partsProcessed: 0,
+    partsSkipped: 0,
+    resumed: false,
   };
 
   const sb = await loadAdmin();
   const progress: ProgressCtx = { admin: sb, runId, source: "rpo_register" };
+  const checkpoint = await loadCheckpoint(sb);
 
   try {
     await reportProgress(progress, { phase: "download", message: "Zisťujem najnovší RPO export…" });
-    const prevExportDate = await latestExportDate(sb);
+    // If we crashed mid-init, prefer resuming that same exportDate rather than
+    // rolling forward — findLatestRpoBatch is told about it via the "previous"
+    // arg so a newer init won't be picked up until this one finishes.
+    const prevExportDate = checkpoint.exportDate;
     const batch = await findLatestRpoBatch(prevExportDate);
     result.batchKind = batch.kind;
     result.exportDate = batch.exportDate;
@@ -249,86 +361,93 @@ export async function importRpoRegister(runId: string): Promise<RpoImportResult>
 
     if (batch.files.length === 0) {
       log("nothing new since last run");
-      await writeFreshness(sb, true, "", batch.exportDate);
+      // Keep prior checkpoint intact (esp. parts_done=all).
+      await writeCheckpoint(
+        sb,
+        { exportDate: batch.exportDate, partsDone: checkpoint.partsDone, allDone: checkpoint.allDone || checkpoint.partsDone.size === 0 },
+        "success",
+      );
       await reportProgress(progress, { phase: "done", message: "Bez zmien voči poslednému behu." });
       result.status = "unchanged";
-      result.errorMessage = null;
       return result;
     }
 
-    await reportProgress(progress, {
-      phase: "download",
-      message: `Sťahujem ${batch.files.length} súbor(ov) (${batch.kind}, ${batch.exportDate})…`,
-    });
-    const dl = await downloadRpoBatch(batch);
-    if (dl.status !== "success") {
-      throw new Error(dl.errorMessage ?? "Download failed");
+    // Resume detection: only meaningful for init batches with a matching date.
+    const isResume =
+      batch.kind === "init" &&
+      checkpoint.exportDate === batch.exportDate &&
+      !checkpoint.allDone &&
+      checkpoint.partsDone.size > 0;
+    result.resumed = isResume;
+    const partsDone = new Set<number>(isResume ? checkpoint.partsDone : []);
+    if (isResume) {
+      log(`resuming init date=${batch.exportDate} completed=${[...partsDone].sort((a,b)=>a-b).join(",")}`);
     }
 
-    try {
-      // -------- Parse + upsert in streaming chunks --------
-      await reportProgress(progress, {
-        phase: "staging",
-        message: `Parsujem a ukladám záznamy v dávkach po ${CHUNK}…`,
-      });
-      const currentHashes = await loadCurrentHashes(sb);
-      log(`current registry entries: ${currentHashes.size}`);
+    await reportProgress(progress, {
+      phase: "staging",
+      message: isResume
+        ? `Pokračujem v behu (${partsDone.size}/${batch.files.length} častí už hotových)…`
+        : `Sťahujem a spracúvam ${batch.files.length} súbor(ov) (${batch.kind}, ${batch.exportDate})…`,
+    });
 
-      const seenIcos = new Set<string>();
-      const upsertStats = { inserted: 0, updated: 0, unchanged: 0 };
-      let buffer: RpoRawRecord[] = [];
-      let totalParsed = 0;
-      let chunksDone = 0;
-      let matchKeysRefreshed = 0;
+    const currentHashes = await loadCurrentHashes(sb);
+    log(`current registry entries: ${currentHashes.size}`);
 
-      const flush = async (): Promise<void> => {
-        if (buffer.length === 0) return;
-        await upsertChunk(sb, buffer, currentHashes, upsertStats);
-        matchKeysRefreshed += await refreshMatchKeysChunk(sb, buffer);
-        chunksDone++;
-        // Update hashes so subsequent files with the same ico don't reprocess.
-        for (const r of buffer) currentHashes.set(r.ico, recordHash(r));
-        if (chunksDone % 10 === 0) {
-          await reportProgress(progress, {
-            phase: "staging",
-            currentBatch: chunksDone,
-            recordsProcessed: totalParsed,
-            message: `Spracovaných ${totalParsed} záznamov (${chunksDone} dávok)`,
-          });
-          log(`progress parsed=${totalParsed} inserted=${upsertStats.inserted} updated=${upsertStats.updated} unchanged=${upsertStats.unchanged}`);
-        }
-        buffer = [];
-      };
+    const seenIcos = new Set<string>();
+    const runningTotal = { parsed: 0, matchKeys: 0 };
+    const totalStats = { inserted: 0, updated: 0, unchanged: 0 };
 
-      for (let i = 0; i < dl.downloads.length; i++) {
-        const file = dl.downloads[i];
-        log(`streaming part ${i + 1}/${dl.downloads.length} ${file.filePath}`);
-        for await (const rec of streamRpoRecords(file.filePath)) {
-          if (seenIcos.has(rec.ico)) continue; // dedupe across parts
-          seenIcos.add(rec.ico);
-          buffer.push(rec);
-          totalParsed++;
-          if (buffer.length >= CHUNK) await flush();
-        }
+    for (let partIndex = 1; partIndex <= batch.files.length; partIndex++) {
+      if (partsDone.has(partIndex)) {
+        result.partsSkipped++;
+        log(`skip part ${partIndex}/${batch.files.length} (already done)`);
+        continue;
       }
-      await flush();
+      const partStats = await processPart(
+        sb,
+        batch,
+        partIndex,
+        currentHashes,
+        seenIcos,
+        progress,
+        runningTotal,
+      );
+      totalStats.inserted += partStats.inserted;
+      totalStats.updated += partStats.updated;
+      totalStats.unchanged += partStats.unchanged;
+      partsDone.add(partIndex);
+      result.partsProcessed++;
 
-      result.recordsParsed = totalParsed;
-      result.recordsInserted = upsertStats.inserted;
-      result.recordsUpdated = upsertStats.updated;
-      result.recordsUnchanged = upsertStats.unchanged;
-      result.matchKeysRefreshed = matchKeysRefreshed;
-      log(`parse+upsert done parsed=${totalParsed} inserted=${upsertStats.inserted} updated=${upsertStats.updated} unchanged=${upsertStats.unchanged} match_keys=${matchKeysRefreshed}`);
+      // Checkpoint after every part so a crash resumes here.
+      await writeCheckpoint(
+        sb,
+        { exportDate: batch.exportDate, partsDone, allDone: false },
+        "in_progress",
+      );
+    }
 
-      // -------- Sanity gate --------
-      if (batch.kind === "init" && totalParsed < MIN_INIT_RECORDS) {
-        throw new Error(
-          `Init batch príliš malý: ${totalParsed} < ${MIN_INIT_RECORDS}. Odmietnutý.`,
-        );
-      }
+    result.recordsParsed = runningTotal.parsed;
+    result.matchKeysRefreshed = runningTotal.matchKeys;
+    result.recordsInserted = totalStats.inserted;
+    result.recordsUpdated = totalStats.updated;
+    result.recordsUnchanged = totalStats.unchanged;
 
-      // -------- Close-removed (init only — dailies are deltas) --------
-      if (batch.kind === "init") {
+    // Sanity gate — only enforce on fully fresh init (a resume may parse fewer
+    // records this run since earlier parts were already applied).
+    if (batch.kind === "init" && !isResume && runningTotal.parsed < MIN_INIT_RECORDS) {
+      throw new Error(
+        `Init batch príliš malý: ${runningTotal.parsed} < ${MIN_INIT_RECORDS}. Odmietnutý.`,
+      );
+    }
+
+    // Close-removed: only safe on a fully-fresh init where seenIcos represents
+    // the ENTIRE dataset. On a resumed init, earlier parts' IČOs aren't in
+    // seenIcos, so we'd deactivate real entities. Skip and warn.
+    if (batch.kind === "init") {
+      if (isResume) {
+        log("close-removed skipped: resumed init cannot reconstruct full seen set");
+      } else {
         await reportProgress(progress, {
           phase: "reconciliation",
           message: "Uzatváram odstránené záznamy…",
@@ -340,30 +459,45 @@ export async function importRpoRegister(runId: string): Promise<RpoImportResult>
         log(`close-removed count=${removedIcos.length}`);
         result.recordsDeactivated = await closeRemoved(sb, removedIcos);
       }
-
-      await writeFreshness(sb, true, "", batch.exportDate);
-      await reportProgress(progress, {
-        phase: "done",
-        recordsProcessed: totalParsed,
-        message: `Hotovo: ${upsertStats.inserted} nových, ${upsertStats.updated} zmenených, ${upsertStats.unchanged} bez zmeny.`,
-      });
-      result.status = "success";
-      result.errorMessage = null;
-      return result;
-    } finally {
-      // Cleanup temp files
-      for (const dl2 of dl.downloads) {
-        try {
-          await dl2.cleanup();
-        } catch (err) {
-          logErr("cleanup failed", err);
-        }
-      }
     }
+
+    await writeCheckpoint(
+      sb,
+      { exportDate: batch.exportDate, partsDone, allDone: true },
+      "success",
+    );
+    await reportProgress(progress, {
+      phase: "done",
+      recordsProcessed: runningTotal.parsed,
+      message: `Hotovo: ${totalStats.inserted} nových, ${totalStats.updated} zmenených, ${totalStats.unchanged} bez zmeny${isResume ? ` (obnovené, ${result.partsSkipped} častí preskočených)` : ""}.`,
+    });
+    result.status = "success";
+    return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : "RPO import failed";
     logErr("import failed", err);
-    await writeFreshness(sb, false, message, result.exportDate);
+    // PRESERVE checkpoint so the next run resumes from the first unfinished
+    // part instead of restarting from scratch.
+    const preserved: Checkpoint = {
+      exportDate: result.exportDate ?? checkpoint.exportDate,
+      partsDone: new Set(checkpoint.partsDone),
+      allDone: false,
+    };
+    // Merge in parts completed during this run (tracked via result.partsProcessed
+    // requires re-derivation; easier: reload from write path — but we only add
+    // to partsDone inside the loop via writeCheckpoint calls, so the DB row
+    // already reflects them. Just make sure we don't clobber it with a stale
+    // in-memory copy.)
+    try {
+      const latest = await loadCheckpoint(sb);
+      if (latest.partsDone.size > preserved.partsDone.size) {
+        preserved.partsDone = latest.partsDone;
+        preserved.exportDate = latest.exportDate ?? preserved.exportDate;
+      }
+    } catch {
+      /* ignore */
+    }
+    await writeCheckpoint(sb, preserved, "failed", message);
     await reportProgress(progress, { phase: "failed", message });
     result.status = "failed";
     result.errorMessage = message;

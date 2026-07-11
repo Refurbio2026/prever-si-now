@@ -14,9 +14,85 @@
 // helper (retry + hash + progress), then yields parsed records via a callback.
 
 import { createReadStream } from "node:fs";
+import { open, stat } from "node:fs/promises";
 import { createGunzip } from "node:zlib";
 import { createInterface } from "node:readline";
 import { downloadToTempFile, type DownloadedFile } from "@/lib/providers/download-to-file.server";
+
+const PART_ATTEMPTS = 3;
+const PART_BACKOFF_MS = 30_000;
+
+/** Read the first 2 bytes of a file and confirm they are the gzip magic. On
+ *  mismatch, log the first 200 bytes as UTF-8 text so we can see the HTML
+ *  error page / whatever body was actually saved. */
+async function validateGzipFile(filePath: string, label: string): Promise<void> {
+  const fh = await open(filePath, "r");
+  try {
+    const st = await stat(filePath);
+    if (st.size < 18) {
+      const buf = Buffer.alloc(Math.min(200, st.size));
+      if (st.size > 0) await fh.read(buf, 0, buf.length, 0);
+      throw new Error(
+        `Invalid gzip ${label}: file too small (${st.size} bytes). Head: ${buf.toString("utf8").slice(0, 200)}`,
+      );
+    }
+    const magic = Buffer.alloc(2);
+    await fh.read(magic, 0, 2, 0);
+    if (magic[0] !== 0x1f || magic[1] !== 0x8b) {
+      const head = Buffer.alloc(200);
+      await fh.read(head, 0, 200, 0);
+      throw new Error(
+        `Invalid gzip magic ${label}: got ${magic[0].toString(16)} ${magic[1].toString(16)}. Head bytes as text: ${head.toString("utf8").replace(/\s+/g, " ").slice(0, 200)}`,
+      );
+    }
+  } finally {
+    await fh.close();
+  }
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Download one RPO part with validation. Retries the full download (fresh
+ *  temp dir each time) if the resulting file is not a valid gzip. */
+async function downloadAndValidatePart(
+  url: string,
+  label: string,
+  filename: string,
+): Promise<DownloadedFile> {
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= PART_ATTEMPTS; attempt++) {
+    let dl: DownloadedFile | null = null;
+    try {
+      dl = await downloadToTempFile({
+        url,
+        label: `${label} (attempt ${attempt}/${PART_ATTEMPTS})`,
+        filename,
+        attempts: 1, // per-attempt retry lives here so validation can trigger it
+      });
+      await validateGzipFile(dl.filePath, label);
+      return dl;
+    } catch (err) {
+      lastErr = err;
+      console.error(
+        `[datahub] RPO part validation failed attempt=${attempt}/${PART_ATTEMPTS}`,
+        err instanceof Error ? err.message : err,
+      );
+      if (dl) {
+        try {
+          await dl.cleanup();
+        } catch {
+          /* ignore */
+        }
+      }
+      if (attempt < PART_ATTEMPTS) await sleep(PART_BACKOFF_MS);
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(`RPO part failed after ${PART_ATTEMPTS} attempts`);
+}
 
 const BUCKET_URL =
   "https://frkqbrydxwdp.compat.objectstorage.eu-frankfurt-1.oraclecloud.com/susr-rpo";
@@ -226,66 +302,17 @@ export async function* streamRpoRecords(filePath: string): AsyncGenerator<RpoRaw
   }
 }
 
-export interface RpoDownloadOutcome {
-  status: "success" | "unchanged" | "failed";
-  batch: RpoBatchListing;
-  downloads: DownloadedFile[];
-  contentHash: string; // combined
-  errorMessage: string | null;
+
+/** Download+validate a single RPO part. Caller MUST call `cleanup()` on the
+ *  returned file when done streaming. */
+export async function downloadRpoPart(
+  batch: RpoBatchListing,
+  partIndex: number, // 1-based
+): Promise<DownloadedFile> {
+  const url = batch.files[partIndex - 1];
+  const filename = `rpo-${batch.exportDate}-${String(partIndex).padStart(3, "0")}.json.gz`;
+  const label = `RPO ${batch.kind} ${partIndex}/${batch.files.length}`;
+  log(`downloading ${label}: ${url.split("/").pop()}`);
+  return downloadAndValidatePart(url, label, filename);
 }
 
-/** Download every part of a batch to /tmp. Caller must call cleanup() on each
- *  DownloadedFile in a finally block. */
-export async function downloadRpoBatch(batch: RpoBatchListing): Promise<RpoDownloadOutcome> {
-  if (batch.files.length === 0) {
-    return {
-      status: "unchanged",
-      batch,
-      downloads: [],
-      contentHash: "",
-      errorMessage: null,
-    };
-  }
-  const downloads: DownloadedFile[] = [];
-  const hashes: string[] = [];
-  try {
-    let i = 0;
-    for (const url of batch.files) {
-      i++;
-      log(`downloading part ${i}/${batch.files.length}: ${url.split("/").pop()}`);
-      const dl = await downloadToTempFile({
-        url,
-        label: `RPO ${batch.kind} ${i}/${batch.files.length}`,
-        filename: `rpo-${batch.exportDate}-${String(i).padStart(3, "0")}.json.gz`,
-      });
-      downloads.push(dl);
-      hashes.push(dl.contentHash);
-    }
-    // Combined content hash = concatenation of per-part hashes.
-    const combined = hashes.join("");
-    return {
-      status: "success",
-      batch,
-      downloads,
-      contentHash: combined,
-      errorMessage: null,
-    };
-  } catch (err) {
-    // Best-effort cleanup of anything downloaded so far.
-    for (const dl of downloads) {
-      try {
-        await dl.cleanup();
-      } catch {
-        /* ignore */
-      }
-    }
-    logErr("download failed", err);
-    return {
-      status: "failed",
-      batch,
-      downloads: [],
-      contentHash: "",
-      errorMessage: err instanceof Error ? err.message : "download failed",
-    };
-  }
-}
