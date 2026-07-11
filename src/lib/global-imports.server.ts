@@ -148,6 +148,21 @@ async function runStep(
       };
     }
 
+    if (step === "rpo_register") {
+      const { importRpoRegister } = await import("@/lib/rpo-register.server");
+      const r = await importRpoRegister(runId);
+      return {
+        step,
+        ok: r.status === "success" || r.status === "unchanged",
+        status: r.status ?? null,
+        errorMessage: r.errorMessage ?? null,
+        recordsInserted: r.recordsInserted,
+        recordsUpdated: r.recordsUpdated,
+        recordsUnchanged: r.recordsUnchanged,
+        recordsDeactivated: r.recordsDeactivated,
+      };
+    }
+
     const { importOneDataset } = await import("@/lib/tax-status.server");
     const dataset = step === "tax_debtors" ? "tax_debtors" : "vat_registered";
     const r = await importOneDataset(dataset, runId);
