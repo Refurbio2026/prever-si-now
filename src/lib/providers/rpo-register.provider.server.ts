@@ -302,13 +302,6 @@ export async function* streamRpoRecords(filePath: string): AsyncGenerator<RpoRaw
   }
 }
 
-export interface RpoDownloadOutcome {
-  status: "success" | "unchanged" | "failed";
-  batch: RpoBatchListing;
-  downloads: DownloadedFile[];
-  contentHash: string; // combined
-  errorMessage: string | null;
-}
 
 /** Download+validate a single RPO part. Caller MUST call `cleanup()` on the
  *  returned file when done streaming. */
