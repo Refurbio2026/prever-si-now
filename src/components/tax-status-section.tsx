@@ -86,15 +86,17 @@ function SourceLink({ url }: { url: string | null }) {
 }
 
 /**
- * Tax debtors: reconciliation is intentionally disabled (XML has no ICO).
- * Even after a successful import, no production rows will be attached to a
- * company. Show a neutral "downloaded, matching in progress" state whenever
- * the debtor block has no positive match — never a red error.
+ * Tax debtors: FS SR XML has no IČO, so matching is done in-app by
+ * normalized name + address. Four-state rendering:
+ *   1. Query error → red (handled at Section level)
+ *   2. Never imported → neutral "sa pripravujú"
+ *   3. Imported + no current match → positive "not in matched list"
+ *   4. Matched → show amount + tier basis
  */
 function DebtorBlock({ debtor }: { debtor: CompanyTaxPayload["debtor"] }) {
   const s = debtor.state;
 
-  // Positive debtor match — currently impossible but supported for the future.
+  // Legacy positive match on tax_status (pre-matching pipeline).
   if (s.kind === "debt_found") {
     return (
       <li className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
@@ -118,7 +120,40 @@ function DebtorBlock({ debtor }: { debtor: CompanyTaxPayload["debtor"] }) {
     );
   }
 
-  // Dataset not yet imported (no successful run recorded).
+  // Current-pipeline positive: matched via name + address.
+  if (s.kind === "matched_debt") {
+    const basis =
+      s.matchTier === "exact"
+        ? "Priradené podľa zhody názvu a adresy (presná zhoda)."
+        : s.matchTier === "manual"
+          ? "Priradené manuálne administrátorom."
+          : `Priradené podľa zhody názvu a adresy (zhoda s vysokou podobnosťou${
+              s.matchConfidence ? `, ${(s.matchConfidence * 100).toFixed(0)}%` : ""
+            }).`;
+    return (
+      <li className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <IconTile tone="bad">
+            <ShieldAlert className="h-4 w-4" />
+          </IconTile>
+          <div>
+            <div className="text-sm font-medium">Daňový nedoplatok</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              Evidovaný záznam v zozname daňových dlžníkov
+            </div>
+            <div className="mt-1 text-xs">
+              {formatEur(s.amount)}
+              {s.recordDate ? ` · Údaje k: ${formatDate(s.recordDate)}` : ""}
+            </div>
+            <div className="mt-1 text-[11px] text-muted-foreground">{basis}</div>
+          </div>
+        </div>
+        <SourceLink url={debtor.sourceUrl} />
+      </li>
+    );
+  }
+
+  // Dataset not yet imported.
   if (s.kind === "unverified" && !debtor.lastSuccessAt) {
     return (
       <li className="flex items-start gap-3 py-3">
@@ -135,22 +170,25 @@ function DebtorBlock({ debtor }: { debtor: CompanyTaxPayload["debtor"] }) {
     );
   }
 
-  // Success import exists (or last run stale) — reconciliation to ICO is
-  // disabled, so we always render the neutral "downloaded, matching pending"
-  // state instead of the misleading "not in list".
+  // Imported + no current match → positive.
+  const recordDate = s.kind === "not_matched" || s.kind === "not_in_list" ? s.recordDate : null;
   return (
     <li className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex items-start gap-3">
-        <IconTile tone="muted">
-          <Info className="h-4 w-4" />
+        <IconTile tone="good">
+          <ShieldCheck className="h-4 w-4" />
         </IconTile>
         <div>
           <div className="text-sm font-medium">Daňový nedoplatok</div>
           <div className="mt-0.5 text-xs text-muted-foreground">
-            Zoznam daňových dlžníkov je stiahnutý, priraďovanie k spoločnostiam sa pripravuje.
+            Spoločnosť sa nenachádza medzi spárovanými záznamami zoznamu daňových dlžníkov.
           </div>
+          {recordDate && (
+            <div className="mt-1 text-xs">Údaje k: {formatDate(recordDate)}</div>
+          )}
           <div className="mt-1 text-[11px] text-muted-foreground">
-            Neprítomnosť v zozname nie je definitívnym potvrdením, že firma nemá nedoplatky.
+            Zoznam FS neobsahuje IČO; priraďovanie prebieha podľa názvu a adresy.
+            Záznamy, ktoré sa nepodarilo jednoznačne priradiť, nie sú zahrnuté.
           </div>
         </div>
       </div>
