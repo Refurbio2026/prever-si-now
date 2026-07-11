@@ -224,6 +224,30 @@ export type Database = {
         }
         Relationships: []
       }
+      company_match_keys: {
+        Row: {
+          ico: string
+          name_normalized: string | null
+          obec: string | null
+          psc: string | null
+          updated_at: string
+        }
+        Insert: {
+          ico: string
+          name_normalized?: string | null
+          obec?: string | null
+          psc?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ico?: string
+          name_normalized?: string | null
+          obec?: string | null
+          psc?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       company_people: {
         Row: {
           created_at: string
@@ -437,6 +461,69 @@ export type Database = {
           data?: Json
           ico?: string
           id?: string
+        }
+        Relationships: []
+      }
+      company_tax_debts: {
+        Row: {
+          amount: number | null
+          created_at: string
+          debtor_address_raw: string | null
+          debtor_name_raw: string | null
+          first_seen_at: string
+          ico: string
+          id: string
+          is_current: boolean
+          last_seen_at: string
+          match_confidence: number | null
+          match_tier: string
+          removed_at: string | null
+          source: string
+          source_record_date: string | null
+          source_record_hash: string | null
+          updated_at: string
+          valid_from: string
+          valid_to: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          debtor_address_raw?: string | null
+          debtor_name_raw?: string | null
+          first_seen_at?: string
+          ico: string
+          id?: string
+          is_current?: boolean
+          last_seen_at?: string
+          match_confidence?: number | null
+          match_tier: string
+          removed_at?: string | null
+          source?: string
+          source_record_date?: string | null
+          source_record_hash?: string | null
+          updated_at?: string
+          valid_from?: string
+          valid_to?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          debtor_address_raw?: string | null
+          debtor_name_raw?: string | null
+          first_seen_at?: string
+          ico?: string
+          id?: string
+          is_current?: boolean
+          last_seen_at?: string
+          match_confidence?: number | null
+          match_tier?: string
+          removed_at?: string | null
+          source?: string
+          source_record_date?: string | null
+          source_record_hash?: string | null
+          updated_at?: string
+          valid_from?: string
+          valid_to?: string | null
         }
         Relationships: []
       }
@@ -977,6 +1064,90 @@ export type Database = {
         }
         Relationships: []
       }
+      tax_debtor_manual_mappings: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          ico: string
+          id: string
+          name_normalized: string
+          psc: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          ico: string
+          id?: string
+          name_normalized: string
+          psc: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          ico?: string
+          id?: string
+          name_normalized?: string
+          psc?: string
+        }
+        Relationships: []
+      }
+      tax_debtor_unmatched: {
+        Row: {
+          address_raw: string | null
+          amount: number | null
+          candidates: Json
+          created_at: string
+          debtor_name_normalized: string | null
+          debtor_name_raw: string
+          id: string
+          matched_ico: string | null
+          obec: string | null
+          psc: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          run_id: string | null
+          source_record_date: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          address_raw?: string | null
+          amount?: number | null
+          candidates?: Json
+          created_at?: string
+          debtor_name_normalized?: string | null
+          debtor_name_raw: string
+          id?: string
+          matched_ico?: string | null
+          obec?: string | null
+          psc?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          run_id?: string | null
+          source_record_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          address_raw?: string | null
+          amount?: number | null
+          candidates?: Json
+          created_at?: string
+          debtor_name_normalized?: string | null
+          debtor_name_raw?: string
+          id?: string
+          matched_ico?: string | null
+          obec?: string | null
+          psc?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          run_id?: string | null
+          source_record_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       tax_import_runs: {
         Row: {
           content_hash: string | null
@@ -1114,9 +1285,30 @@ export type Database = {
         Args: { _icos: string[]; _provider: string }
         Returns: number
       }
+      close_removed_tax_debt_keys: {
+        Args: { _icos: string[]; _source: string }
+        Returns: number
+      }
       close_removed_tax_status_keys: {
         Args: { _dataset: string; _icos: string[] }
         Returns: number
+      }
+      extract_obec: { Args: { input: string }; Returns: string }
+      extract_psc: { Args: { input: string }; Returns: string }
+      find_tax_debtor_candidates: {
+        Args: {
+          _limit?: number
+          _name_normalized: string
+          _obec: string
+          _psc: string
+        }
+        Returns: {
+          ico: string
+          name_normalized: string
+          obec: string
+          psc: string
+          sim: number
+        }[]
       }
       get_scheduler_status: {
         Args: never
@@ -1136,6 +1328,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      normalize_company_name: { Args: { input: string }; Returns: string }
+      normalize_text: { Args: { input: string }; Returns: string }
       reconcile_insurance_cleanup: {
         Args: { _run_id: string }
         Returns: undefined
@@ -1220,6 +1414,9 @@ export type Database = {
           scanned: number
         }[]
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
+      unaccent: { Args: { "": string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "user"
