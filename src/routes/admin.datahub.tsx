@@ -823,9 +823,17 @@ function SchedulerOverview() {
     <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Plánovač (pg_cron)</h2>
-        {overview.isFetching && (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        )}
+        <div className="flex items-center gap-3">
+          <a
+            href="/admin/datahub/tax-matching"
+            className="text-xs text-primary hover:underline"
+          >
+            Daňoví dlžníci — párovanie →
+          </a>
+          {overview.isFetching && (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+        </div>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         Naplánované úlohy sú spúšťané zo Supabase (pg_cron) cez podpísaný
