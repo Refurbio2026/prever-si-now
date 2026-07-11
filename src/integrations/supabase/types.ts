@@ -965,6 +965,24 @@ export type Database = {
         }
         Relationships: []
       }
+      public_stats_cache: {
+        Row: {
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       recent_searches: {
         Row: {
           company_name: string | null
@@ -1353,6 +1371,7 @@ export type Database = {
           sim: number
         }[]
       }
+      get_public_stats: { Args: never; Returns: Json }
       get_scheduler_status: {
         Args: never
         Returns: {
@@ -1457,6 +1476,7 @@ export type Database = {
           scanned: number
         }[]
       }
+      refresh_public_stats: { Args: never; Returns: Json }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       unaccent: { Args: { "": string }; Returns: string }

@@ -10,12 +10,29 @@ import {
   Check,
   ArrowRight,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+
+const FALLBACK_COMPANIES_LABEL = "600 000+";
+const FALLBACK_SOURCES_LABEL = "12 zdrojov";
+
+/** Round a count DOWN to the nearest 100k and format Slovak-style with
+ *  non-breaking spaces as thousands separator, appending "+". */
+function formatSubjectsRounded(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return FALLBACK_COMPANIES_LABEL;
+  const rounded = Math.floor(n / 100_000) * 100_000;
+  if (rounded <= 0) return FALLBACK_COMPANIES_LABEL;
+  return `${rounded.toLocaleString("sk-SK").replace(/\s/g, "\u00A0")}+`;
+}
+
+function formatExact(n: number): string {
+  return n.toLocaleString("sk-SK").replace(/\s/g, "\u00A0");
+}
 
 export const Route = createFileRoute("/")({
   component: Landing,
@@ -99,6 +116,32 @@ const plans = [
 function Landing() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [companiesLabel, setCompaniesLabel] = useState(FALLBACK_COMPANIES_LABEL);
+  const [companiesExact, setCompaniesExact] = useState<string | null>(null);
+  const [sourcesLabel, setSourcesLabel] = useState(FALLBACK_SOURCES_LABEL);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc("get_public_stats");
+        if (cancelled || error || !data) return;
+        const stats = data as { companies_count?: number; sources_count?: number };
+        if (typeof stats.companies_count === "number" && stats.companies_count > 0) {
+          setCompaniesLabel(formatSubjectsRounded(stats.companies_count));
+          setCompaniesExact(formatExact(stats.companies_count));
+        }
+        if (typeof stats.sources_count === "number" && stats.sources_count > 0) {
+          setSourcesLabel(`${stats.sources_count} zdrojov`);
+        }
+      } catch {
+        // Fallback values already set — never show 0.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,8 +208,12 @@ function Landing() {
           </div>
 
           <div className="mt-12 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-muted-foreground">
-            <Stat value="600 000+" label="firiem v databáze" />
-            <Stat value="12 zdrojov" label="verejných registrov" />
+            <Stat
+              value={companiesLabel}
+              label="subjektov v databáze"
+              title={companiesExact ? `Presne: ${companiesExact} aktívnych subjektov` : undefined}
+            />
+            <Stat value={sourcesLabel} label="verejných registrov" />
             <Stat value="99.9%" label="dostupnosť služby" />
           </div>
         </div>
@@ -272,9 +319,9 @@ function Landing() {
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function Stat({ value, label, title }: { value: string; label: string; title?: string }) {
   return (
-    <div className="text-left">
+    <div className="text-left" title={title}>
       <div className="text-lg font-semibold text-foreground">{value}</div>
       <div className="text-xs">{label}</div>
     </div>
