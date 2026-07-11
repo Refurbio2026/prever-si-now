@@ -355,12 +355,125 @@ async function emitChanges(
 function runImporterFor(dataset: TaxDatasetId): Promise<TaxImporterOutcome> {
   switch (dataset) {
     case "tax_debtors":
-      return importTaxDebtors();
+      throw new Error("tax_debtors uses the matching pipeline, not runImporterFor");
     case "vat_registered":
       return importVatRegister();
     case "tax_reliability":
       return importTaxReliability();
   }
+}
+
+async function importTaxDebtorsMatchingFlow(
+  runId: string,
+  progress: ProgressCtx | null,
+): Promise<TaxDatasetImportResult> {
+  const dataset: TaxDatasetId = "tax_debtors";
+  logImport(dataset, `start matching-flow run=${runId}`);
+  await reportProgress(progress, { phase: "download", message: "Sťahovanie zoznamu dlžníkov" });
+
+  const outcome = await downloadTaxDebtors();
+  const common: RunUpdate = {
+    source_url: outcome.sourceUrl,
+    content_hash: outcome.contentHash,
+    source_record_date: outcome.sourceRecordDate,
+    records_downloaded: outcome.recordsDownloaded,
+    records_normalized: outcome.recordsDownloaded,
+    records_with_valid_ico: 0,
+  };
+  logImport(dataset, `downloaded records=${outcome.recordsDownloaded} status=${outcome.status}`);
+
+  if (outcome.status !== "success") {
+    const st = outcome.status === "not_configured" ? "not_implemented" : "failed";
+    await updateRunRow(runId, {
+      ...common,
+      status: st,
+      error_message: outcome.errorMessage,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(dataset, false, outcome.errorMessage);
+    await reportProgress(progress, { phase: "failed", message: outcome.errorMessage ?? st });
+    return {
+      dataset,
+      status: st,
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: outcome.errorMessage,
+    };
+  }
+
+  const sourceDate = outcome.sourceRecordDate ?? new Date().toISOString().slice(0, 10);
+  await reportProgress(progress, { phase: "reconciliation", message: "Párovanie záznamov" });
+  const match = await matchAndReconcileTaxDebtors(
+    admin(),
+    runId,
+    outcome.records,
+    sourceDate,
+    progress,
+  );
+
+  if (match.errorMessage) {
+    await updateRunRow(runId, {
+      ...common,
+      status: "failed",
+      validation_status: "failed",
+      error_message: `Párovanie zlyhalo: ${match.errorMessage}`,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(dataset, false, match.errorMessage);
+    await reportProgress(progress, {
+      phase: "failed",
+      message: `Párovanie zlyhalo: ${match.errorMessage}`,
+    });
+    return {
+      dataset,
+      status: "failed",
+      recordsInserted: match.inserted,
+      recordsUpdated: match.updated,
+      recordsUnchanged: match.unchanged,
+      recordsDeactivated: match.deactivated,
+      errorMessage: match.errorMessage,
+    };
+  }
+
+  const stats = `total=${match.totalRecords} exact=${match.matchedExact} fuzzy=${match.matchedFuzzy} manual=${match.matchedManual} unmatched=${match.unmatched}`;
+  logImport(dataset, `matching done ${stats} inserted=${match.inserted} updated=${match.updated} unchanged=${match.unchanged} deactivated=${match.deactivated}`);
+
+  await updateRunRow(runId, {
+    ...common,
+    status: "success_partial",
+    validation_status: "passed",
+    records_valid: match.matchedExact + match.matchedFuzzy + match.matchedManual,
+    records_invalid: match.unmatched,
+    records_inserted: match.inserted,
+    records_updated: match.updated,
+    records_unchanged: match.unchanged,
+    records_deactivated: match.deactivated,
+    error_message: `Info: Zdroj FS neobsahuje IČO. Priradených ${match.matchedExact + match.matchedFuzzy + match.matchedManual} / ${match.totalRecords} záznamov (exact=${match.matchedExact}, fuzzy=${match.matchedFuzzy}, manual=${match.matchedManual}, unmatched=${match.unmatched}).`,
+    finished_at: new Date().toISOString(),
+  });
+  await writeFreshness(
+    dataset,
+    true,
+    `Priradené ${match.matchedExact + match.matchedFuzzy + match.matchedManual}/${match.totalRecords}. Nepriradené: ${match.unmatched}.`,
+    "success_partial",
+  );
+  await reportProgress(progress, {
+    phase: "done",
+    message: `Hotovo: ${stats}`,
+    recordsProcessed: match.matchedExact + match.matchedFuzzy + match.matchedManual,
+    recordsTotal: match.totalRecords,
+  });
+  return {
+    dataset,
+    status: "success_partial",
+    recordsInserted: match.inserted,
+    recordsUpdated: match.updated,
+    recordsUnchanged: match.unchanged,
+    recordsDeactivated: match.deactivated,
+    errorMessage: null,
+  };
 }
 
 export interface TaxDatasetImportResult {
