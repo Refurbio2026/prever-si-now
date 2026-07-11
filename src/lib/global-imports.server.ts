@@ -244,6 +244,15 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
     } catch (err) {
       logStepError("lock release failed", err);
     }
+    // Refresh the landing-page stats cache so the public counter reflects the
+    // freshly imported RPO registry. Best-effort — never fail the run.
+    try {
+      const { error } = await sb.rpc("refresh_public_stats");
+      if (error) logStepError("refresh_public_stats failed", error);
+      else logStep("public stats cache refreshed");
+    } catch (err) {
+      logStepError("refresh_public_stats crashed", err);
+    }
   }
 
 
