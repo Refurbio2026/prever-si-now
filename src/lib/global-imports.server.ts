@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-type StepId = "social_insurance" | "tax_debtors" | "vat_registered";
+type StepId = "social_insurance" | "tax_debtors" | "vat_registered" | "rpo_register";
 
 export interface GlobalStepResult {
   step: string;
@@ -89,6 +89,7 @@ async function releaseLock(sb: SupabaseClient): Promise<void> {
 
 function stepSource(step: StepId): string {
   if (step === "social_insurance") return "social_insurance";
+  if (step === "rpo_register") return "rpo_register";
   return `fs_${step}`;
 }
 
@@ -138,6 +139,21 @@ async function runStep(
       return {
         step,
         ok: r.status === "success" || r.status === "unchanged" || r.status === "empty",
+        status: r.status ?? null,
+        errorMessage: r.errorMessage ?? null,
+        recordsInserted: r.recordsInserted,
+        recordsUpdated: r.recordsUpdated,
+        recordsUnchanged: r.recordsUnchanged,
+        recordsDeactivated: r.recordsDeactivated,
+      };
+    }
+
+    if (step === "rpo_register") {
+      const { importRpoRegister } = await import("@/lib/rpo-register.server");
+      const r = await importRpoRegister(runId);
+      return {
+        step,
+        ok: r.status === "success" || r.status === "unchanged",
         status: r.status ?? null,
         errorMessage: r.errorMessage ?? null,
         recordsInserted: r.recordsInserted,
@@ -211,7 +227,9 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
   }
 
   const steps: GlobalStepResult[] = [];
-  const stepIds = ["social_insurance", "tax_debtors", "vat_registered"] as const;
+  // Order matters: RPO must populate company_match_keys BEFORE the tax
+  // debtors matching runs (FS dataset has no IČO — needs match keys).
+  const stepIds = ["social_insurance", "vat_registered", "rpo_register", "tax_debtors"] as const;
 
   try {
     for (const step of stepIds) {

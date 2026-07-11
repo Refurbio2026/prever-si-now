@@ -360,41 +360,80 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
+          first_seen_at: string | null
           ico: string
           id: string
           imported_at: string
+          is_current: boolean
+          last_seen_at: string | null
           legal_form: string | null
           name: string | null
+          name_normalized: string | null
+          obec: string | null
+          obec_normalized: string | null
+          psc: string | null
           registration_date: string | null
           registration_number: string | null
+          removed_at: string | null
           source: string
+          source_record_hash: string | null
+          status: string | null
+          street: string | null
           updated_at: string
+          valid_from: string | null
+          valid_to: string | null
         }
         Insert: {
           address?: string | null
           created_at?: string
+          first_seen_at?: string | null
           ico: string
           id?: string
           imported_at?: string
+          is_current?: boolean
+          last_seen_at?: string | null
           legal_form?: string | null
           name?: string | null
+          name_normalized?: string | null
+          obec?: string | null
+          obec_normalized?: string | null
+          psc?: string | null
           registration_date?: string | null
           registration_number?: string | null
+          removed_at?: string | null
           source?: string
+          source_record_hash?: string | null
+          status?: string | null
+          street?: string | null
           updated_at?: string
+          valid_from?: string | null
+          valid_to?: string | null
         }
         Update: {
           address?: string | null
           created_at?: string
+          first_seen_at?: string | null
           ico?: string
           id?: string
           imported_at?: string
+          is_current?: boolean
+          last_seen_at?: string | null
           legal_form?: string | null
           name?: string | null
+          name_normalized?: string | null
+          obec?: string | null
+          obec_normalized?: string | null
+          psc?: string | null
           registration_date?: string | null
           registration_number?: string | null
+          removed_at?: string | null
           source?: string
+          source_record_hash?: string | null
+          status?: string | null
+          street?: string | null
           updated_at?: string
+          valid_from?: string | null
+          valid_to?: string | null
         }
         Relationships: []
       }
@@ -1283,6 +1322,10 @@ export type Database = {
       }
       close_removed_insurance_debt_keys: {
         Args: { _icos: string[]; _provider: string }
+        Returns: number
+      }
+      close_removed_registry_keys: {
+        Args: { _icos: string[]; _source: string }
         Returns: number
       }
       close_removed_tax_debt_keys: {
