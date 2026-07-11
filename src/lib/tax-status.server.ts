@@ -8,12 +8,9 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import {
-  TAX_DATASETS,
-  type TaxDatasetId,
-  type TaxImporterOutcome,
-} from "@/lib/tax-status.types";
-import { importTaxDebtors } from "@/lib/providers/tax-debtors.provider.server";
+import { TAX_DATASETS, type TaxDatasetId, type TaxImporterOutcome } from "@/lib/tax-status.types";
+import { downloadTaxDebtors } from "@/lib/providers/tax-debtors.provider.server";
+import { matchAndReconcileTaxDebtors } from "@/lib/tax-debt-match.server";
 import {
   importVatRegister,
   importVatRegisterStreamed,
@@ -27,30 +24,21 @@ import {
   stageTax,
   validateTax,
 } from "@/lib/reconcile.server";
-import {
-  reportProgress,
-  type ProgressCtx,
-} from "@/lib/import-progress.server";
+import { reportProgress, type ProgressCtx } from "@/lib/import-progress.server";
 
 function admin(): SupabaseClient {
   return supabaseAdmin as unknown as SupabaseClient;
 }
 
 function datasetLogLabel(dataset: TaxDatasetId): string {
-  return dataset === "vat_registered"
-    ? "VAT"
-    : dataset === "tax_debtors"
-      ? "tax_debtors"
-      : dataset;
+  return dataset === "vat_registered" ? "VAT" : dataset === "tax_debtors" ? "tax_debtors" : dataset;
 }
 
 function logImport(dataset: TaxDatasetId, message: string): void {
-  // eslint-disable-next-line no-console
   console.log(`[datahub] ${datasetLogLabel(dataset)} ${message}`);
 }
 
 function logImportError(dataset: TaxDatasetId, message: string, err?: unknown): void {
-  // eslint-disable-next-line no-console
   console.error(
     `[datahub] ${datasetLogLabel(dataset)} ${message}`,
     err instanceof Error ? (err.stack ?? err.message) : (err ?? ""),
@@ -61,8 +49,10 @@ async function writeFreshness(
   dataset: TaxDatasetId,
   ok: boolean,
   message: string | null,
+  statusOverride?: string,
 ): Promise<void> {
   const now = new Date().toISOString();
+  const status = statusOverride ?? (ok ? "success" : "failed");
   await admin()
     .from("data_freshness")
     .upsert(
@@ -71,7 +61,7 @@ async function writeFreshness(
         source: `fs_${dataset}`,
         last_attempt_at: now,
         last_success_at: ok ? now : undefined,
-        status: ok ? "success" : "failed",
+        status,
         error_message: message,
         updated_at: now,
       },
@@ -91,10 +81,7 @@ async function latestSuccessHash(dataset: TaxDatasetId): Promise<string | null> 
   return (data as { content_hash: string | null } | null)?.content_hash ?? null;
 }
 
-async function insertRunRow(
-  dataset: TaxDatasetId,
-  startedAt: Date,
-): Promise<string | null> {
+async function insertRunRow(dataset: TaxDatasetId, startedAt: Date): Promise<string | null> {
   const { data, error } = await admin()
     .from("tax_import_runs")
     .insert({
@@ -173,9 +160,7 @@ async function fetchWatchedIcos(dataset: TaxDatasetId, phase: string): Promise<s
   throw new Error("watched companies exceeded safety page cap");
 }
 
-async function snapshotWatched(
-  dataset: TaxDatasetId,
-): Promise<Map<string, WatchedSnapshot>> {
+async function snapshotWatched(dataset: TaxDatasetId): Promise<Map<string, WatchedSnapshot>> {
   const icos = await fetchWatchedIcos(dataset, "snapshot");
   const out = new Map<string, WatchedSnapshot>();
   if (icos.length === 0) return out;
@@ -184,9 +169,7 @@ async function snapshotWatched(
     logImport(dataset, `changes snapshot batch ${i + 1}/${icoChunks.length}`);
     const { data } = await admin()
       .from("company_tax_status")
-      .select(
-        "ico, source_record_hash, tax_debt_amount, vat_registered, tax_reliability_index",
-      )
+      .select("ico, source_record_hash, tax_debt_amount, vat_registered, tax_reliability_index")
       .eq("source_dataset", dataset)
       .eq("is_current", true)
       .in("ico", icoChunks[i]);
@@ -221,9 +204,7 @@ async function emitChanges(
     logImport(dataset, `changes current batch ${i + 1}/${icoChunks.length}`);
     const { data: nowCurrent } = await admin()
       .from("company_tax_status")
-      .select(
-        "ico, source_record_hash, tax_debt_amount, vat_registered, tax_reliability_index",
-      )
+      .select("ico, source_record_hash, tax_debt_amount, vat_registered, tax_reliability_index")
       .eq("source_dataset", dataset)
       .eq("is_current", true)
       .in("ico", icoChunks[i]);
@@ -264,10 +245,7 @@ async function emitChanges(
             cur.taxDebtAmount != null
               ? `Firma bola pridaná do zoznamu daňových dlžníkov (dlh: ${cur.taxDebtAmount.toFixed(2)} €).`
               : "Firma bola pridaná do zoznamu daňových dlžníkov.",
-          severity:
-            cur.taxDebtAmount != null && cur.taxDebtAmount >= 1000
-              ? "critical"
-              : "warning",
+          severity: cur.taxDebtAmount != null && cur.taxDebtAmount >= 1000 ? "critical" : "warning",
         });
       } else if (before.hash !== cur.hash) {
         changes.push({
@@ -285,8 +263,7 @@ async function emitChanges(
           ico,
           change_type: "tax_debt_removed_from_published_list",
           title: "Firma odstránená zo zoznamu daňových dlžníkov",
-          description:
-            "Firma už nie je uvedená v aktuálnom zverejnenom zozname daňových dlžníkov.",
+          description: "Firma už nie je uvedená v aktuálnom zverejnenom zozname daňových dlžníkov.",
           severity: "info",
         });
       }
@@ -307,8 +284,7 @@ async function emitChanges(
           ico,
           change_type: "vat_registration_removed",
           title: "Zrušená registrácia DPH",
-          description:
-            "Podľa oficiálneho zdroja Finančnej správy bola registrácia DPH zrušená.",
+          description: "Podľa oficiálneho zdroja Finančnej správy bola registrácia DPH zrušená.",
           severity: "warning",
         });
       }
@@ -319,8 +295,7 @@ async function emitChanges(
           ico,
           change_type: "vat_registration_removed",
           title: "Odstránené zo zverejneného registra DPH",
-          description:
-            "Firma už nie je uvedená v aktuálnom zverejnenom registri platiteľov DPH.",
+          description: "Firma už nie je uvedená v aktuálnom zverejnenom registri platiteľov DPH.",
           severity: "warning",
         });
       }
@@ -342,7 +317,10 @@ async function emitChanges(
 
   const changeChunks = chunkArray(changes, CHANGE_BATCH_SIZE);
   for (let i = 0; i < changeChunks.length; i++) {
-    logImport(dataset, `changes insert batch ${i + 1}/${changeChunks.length} rows=${changeChunks[i].length}`);
+    logImport(
+      dataset,
+      `changes insert batch ${i + 1}/${changeChunks.length} rows=${changeChunks[i].length}`,
+    );
     await admin().from("company_changes").insert(changeChunks[i]);
   }
 }
@@ -352,12 +330,128 @@ async function emitChanges(
 function runImporterFor(dataset: TaxDatasetId): Promise<TaxImporterOutcome> {
   switch (dataset) {
     case "tax_debtors":
-      return importTaxDebtors();
+      throw new Error("tax_debtors uses the matching pipeline, not runImporterFor");
     case "vat_registered":
       return importVatRegister();
     case "tax_reliability":
       return importTaxReliability();
   }
+}
+
+async function importTaxDebtorsMatchingFlow(
+  runId: string,
+  progress: ProgressCtx | null,
+): Promise<TaxDatasetImportResult> {
+  const dataset: TaxDatasetId = "tax_debtors";
+  logImport(dataset, `start matching-flow run=${runId}`);
+  await reportProgress(progress, { phase: "download", message: "Sťahovanie zoznamu dlžníkov" });
+
+  const outcome = await downloadTaxDebtors();
+  const common: RunUpdate = {
+    source_url: outcome.sourceUrl,
+    content_hash: outcome.contentHash,
+    source_record_date: outcome.sourceRecordDate,
+    records_downloaded: outcome.recordsDownloaded,
+    records_normalized: outcome.recordsDownloaded,
+    records_with_valid_ico: 0,
+  };
+  logImport(dataset, `downloaded records=${outcome.recordsDownloaded} status=${outcome.status}`);
+
+  if (outcome.status !== "success") {
+    const st = outcome.status === "not_configured" ? "not_implemented" : "failed";
+    await updateRunRow(runId, {
+      ...common,
+      status: st,
+      error_message: outcome.errorMessage,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(dataset, false, outcome.errorMessage);
+    await reportProgress(progress, { phase: "failed", message: outcome.errorMessage ?? st });
+    return {
+      dataset,
+      status: st,
+      recordsInserted: 0,
+      recordsUpdated: 0,
+      recordsUnchanged: 0,
+      recordsDeactivated: 0,
+      errorMessage: outcome.errorMessage,
+    };
+  }
+
+  const sourceDate = outcome.sourceRecordDate ?? new Date().toISOString().slice(0, 10);
+  await reportProgress(progress, { phase: "reconciliation", message: "Párovanie záznamov" });
+  const match = await matchAndReconcileTaxDebtors(
+    admin(),
+    runId,
+    outcome.records,
+    sourceDate,
+    progress,
+  );
+
+  if (match.errorMessage) {
+    await updateRunRow(runId, {
+      ...common,
+      status: "failed",
+      validation_status: "failed",
+      error_message: `Párovanie zlyhalo: ${match.errorMessage}`,
+      finished_at: new Date().toISOString(),
+    });
+    await writeFreshness(dataset, false, match.errorMessage);
+    await reportProgress(progress, {
+      phase: "failed",
+      message: `Párovanie zlyhalo: ${match.errorMessage}`,
+    });
+    return {
+      dataset,
+      status: "failed",
+      recordsInserted: match.inserted,
+      recordsUpdated: match.updated,
+      recordsUnchanged: match.unchanged,
+      recordsDeactivated: match.deactivated,
+      errorMessage: match.errorMessage,
+    };
+  }
+
+  const stats = `total=${match.totalRecords} exact=${match.matchedExact} fuzzy=${match.matchedFuzzy} manual=${match.matchedManual} unmatched=${match.unmatched}`;
+  logImport(
+    dataset,
+    `matching done ${stats} inserted=${match.inserted} updated=${match.updated} unchanged=${match.unchanged} deactivated=${match.deactivated}`,
+  );
+
+  await updateRunRow(runId, {
+    ...common,
+    status: "success_partial",
+    validation_status: "passed",
+    records_valid: match.matchedExact + match.matchedFuzzy + match.matchedManual,
+    records_invalid: match.unmatched,
+    records_inserted: match.inserted,
+    records_updated: match.updated,
+    records_unchanged: match.unchanged,
+    records_deactivated: match.deactivated,
+    error_message: `Info: Zdroj FS neobsahuje IČO. Priradených ${match.matchedExact + match.matchedFuzzy + match.matchedManual} / ${match.totalRecords} záznamov (exact=${match.matchedExact}, fuzzy=${match.matchedFuzzy}, manual=${match.matchedManual}, unmatched=${match.unmatched}).`,
+    finished_at: new Date().toISOString(),
+  });
+  await writeFreshness(
+    dataset,
+    true,
+    `Priradené ${match.matchedExact + match.matchedFuzzy + match.matchedManual}/${match.totalRecords}. Nepriradené: ${match.unmatched}.`,
+    "success_partial",
+  );
+  await reportProgress(progress, {
+    phase: "done",
+    message: `Hotovo: ${stats}`,
+    recordsProcessed: match.matchedExact + match.matchedFuzzy + match.matchedManual,
+    recordsTotal: match.totalRecords,
+  });
+  return {
+    dataset,
+    status: "success_partial",
+    recordsInserted: match.inserted,
+    recordsUpdated: match.updated,
+    recordsUnchanged: match.unchanged,
+    recordsDeactivated: match.deactivated,
+    errorMessage: null,
+  };
 }
 
 export interface TaxDatasetImportResult {
@@ -426,7 +520,10 @@ async function importVatStreamedFlow(
 
   // Unchanged shortcut — same source hash as last successful run.
   if (summary.contentHash && prevHash && summary.contentHash === prevHash) {
-    logImport("vat_registered", `validation skipped unchanged hash=${shortHash(summary.contentHash)}`);
+    logImport(
+      "vat_registered",
+      `validation skipped unchanged hash=${shortHash(summary.contentHash)}`,
+    );
     await cleanupStaging(admin(), "staging_tax_records", runId);
     await updateRunRow(runId, {
       ...commonUpdate,
@@ -454,9 +551,7 @@ async function importVatStreamedFlow(
   const th = TAX_THRESHOLDS.vat_registered;
   const invalid = summary.recordsDownloaded - summary.recordsWithValidIco;
   const validRatio =
-    summary.recordsDownloaded > 0
-      ? summary.recordsWithValidIco / summary.recordsDownloaded
-      : 0;
+    summary.recordsDownloaded > 0 ? summary.recordsWithValidIco / summary.recordsDownloaded : 0;
 
   const missingCols: string[] = [];
   if (!summary.sampleColumnNames.includes("ICO")) missingCols.push("ICO");
@@ -560,8 +655,7 @@ async function importVatStreamedFlow(
   await reportProgress(progress, {
     phase: "done",
     message: `Hotovo: +${rec.counts.inserted} / ~${rec.counts.updated} / =${rec.counts.unchanged} / −${rec.counts.deactivated}`,
-    recordsProcessed:
-      rec.counts.inserted + rec.counts.updated + rec.counts.unchanged,
+    recordsProcessed: rec.counts.inserted + rec.counts.updated + rec.counts.unchanged,
   });
 
   return {
@@ -597,6 +691,32 @@ export async function importOneDataset(
       recordsDeactivated: 0,
       errorMessage: msg,
     };
+  }
+
+  // tax_debtors uses matching pipeline (dataset has no IČO).
+  if (dataset === "tax_debtors") {
+    try {
+      return await importTaxDebtorsMatchingFlow(runId, progress);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Neznáma chyba importu.";
+      logImportError(dataset, "matching flow crashed", err);
+      await updateRunRow(runId, {
+        status: "failed",
+        error_message: msg,
+        finished_at: new Date().toISOString(),
+      });
+      await writeFreshness(dataset, false, msg);
+      await reportProgress(progress, { phase: "failed", message: msg });
+      return {
+        dataset,
+        status: "failed",
+        recordsInserted: 0,
+        recordsUpdated: 0,
+        recordsUnchanged: 0,
+        recordsDeactivated: 0,
+        errorMessage: msg,
+      };
+    }
   }
 
   // VAT register is streamed directly into staging (dataset is ~125 MB
@@ -846,8 +966,7 @@ export async function importOneDataset(
   await reportProgress(progress, {
     phase: "done",
     message: `Hotovo: +${rec.counts.inserted} / ~${rec.counts.updated} / =${rec.counts.unchanged} / −${rec.counts.deactivated}`,
-    recordsProcessed:
-      rec.counts.inserted + rec.counts.updated + rec.counts.unchanged,
+    recordsProcessed: rec.counts.inserted + rec.counts.updated + rec.counts.unchanged,
   });
 
   return {
@@ -871,20 +990,14 @@ export async function importTaxReliabilityGlobal(): Promise<TaxDatasetImportResu
   return importOneDataset("tax_reliability");
 }
 
-export async function importAllFinancialAdministrationData(): Promise<
-  TaxDatasetImportResult[]
-> {
+export async function importAllFinancialAdministrationData(): Promise<TaxDatasetImportResult[]> {
   const results: TaxDatasetImportResult[] = [];
   for (const d of TAX_DATASETS) {
     try {
       results.push(await importOneDataset(d));
     } catch (err) {
       logImportError(d, "dataset wrapper crashed", err);
-      await writeFreshness(
-        d,
-        false,
-        err instanceof Error ? err.message : "Neznáma chyba.",
-      );
+      await writeFreshness(d, false, err instanceof Error ? err.message : "Neznáma chyba.");
       results.push({
         dataset: d,
         status: "failed",

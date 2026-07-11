@@ -29,6 +29,7 @@ import { Route as AdminImportsRouteImport } from './routes/admin.imports'
 import { Route as AdminDatahubRouteImport } from './routes/admin.datahub'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
 import { Route as AdminApiDebugRouteImport } from './routes/admin.api-debug'
+import { Route as AdminDatahubTaxMatchingRouteImport } from './routes/admin.datahub.tax-matching'
 import { Route as AdminDatahubTaxRouteImport } from './routes/admin.datahub.tax'
 import { Route as AdminDatahubInsuranceRouteImport } from './routes/admin.datahub.insurance'
 import { Route as ApiPublicHooksTaxWorkerRouteImport } from './routes/api/public/hooks/tax-worker'
@@ -137,6 +138,11 @@ const AdminApiDebugRoute = AdminApiDebugRouteImport.update({
   path: '/api-debug',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminDatahubTaxMatchingRoute = AdminDatahubTaxMatchingRouteImport.update({
+  id: '/tax-matching',
+  path: '/tax-matching',
+  getParentRoute: () => AdminDatahubRoute,
+} as any)
 const AdminDatahubTaxRoute = AdminDatahubTaxRouteImport.update({
   id: '/tax',
   path: '/tax',
@@ -200,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/': typeof DashboardIndexRoute
   '/admin/datahub/insurance': typeof AdminDatahubInsuranceRoute
   '/admin/datahub/tax': typeof AdminDatahubTaxRoute
+  '/admin/datahub/tax-matching': typeof AdminDatahubTaxMatchingRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
   '/api/public/hooks/run-global-imports': typeof ApiPublicHooksRunGlobalImportsRoute
@@ -227,6 +234,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardIndexRoute
   '/admin/datahub/insurance': typeof AdminDatahubInsuranceRoute
   '/admin/datahub/tax': typeof AdminDatahubTaxRoute
+  '/admin/datahub/tax-matching': typeof AdminDatahubTaxMatchingRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
   '/api/public/hooks/run-global-imports': typeof ApiPublicHooksRunGlobalImportsRoute
@@ -257,6 +265,7 @@ export interface FileRoutesById {
   '/dashboard/': typeof DashboardIndexRoute
   '/admin/datahub/insurance': typeof AdminDatahubInsuranceRoute
   '/admin/datahub/tax': typeof AdminDatahubTaxRoute
+  '/admin/datahub/tax-matching': typeof AdminDatahubTaxMatchingRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
   '/api/public/hooks/run-global-imports': typeof ApiPublicHooksRunGlobalImportsRoute
@@ -288,6 +297,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/admin/datahub/insurance'
     | '/admin/datahub/tax'
+    | '/admin/datahub/tax-matching'
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
     | '/api/public/hooks/run-global-imports'
@@ -315,6 +325,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/admin/datahub/insurance'
     | '/admin/datahub/tax'
+    | '/admin/datahub/tax-matching'
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
     | '/api/public/hooks/run-global-imports'
@@ -344,6 +355,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/admin/datahub/insurance'
     | '/admin/datahub/tax'
+    | '/admin/datahub/tax-matching'
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
     | '/api/public/hooks/run-global-imports'
@@ -508,6 +520,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminApiDebugRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/datahub/tax-matching': {
+      id: '/admin/datahub/tax-matching'
+      path: '/tax-matching'
+      fullPath: '/admin/datahub/tax-matching'
+      preLoaderRoute: typeof AdminDatahubTaxMatchingRouteImport
+      parentRoute: typeof AdminDatahubRoute
+    }
     '/admin/datahub/tax': {
       id: '/admin/datahub/tax'
       path: '/tax'
@@ -563,11 +582,13 @@ declare module '@tanstack/react-router' {
 interface AdminDatahubRouteChildren {
   AdminDatahubInsuranceRoute: typeof AdminDatahubInsuranceRoute
   AdminDatahubTaxRoute: typeof AdminDatahubTaxRoute
+  AdminDatahubTaxMatchingRoute: typeof AdminDatahubTaxMatchingRoute
 }
 
 const AdminDatahubRouteChildren: AdminDatahubRouteChildren = {
   AdminDatahubInsuranceRoute: AdminDatahubInsuranceRoute,
   AdminDatahubTaxRoute: AdminDatahubTaxRoute,
+  AdminDatahubTaxMatchingRoute: AdminDatahubTaxMatchingRoute,
 }
 
 const AdminDatahubRouteWithChildren = AdminDatahubRoute._addFileChildren(
@@ -635,13 +656,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
