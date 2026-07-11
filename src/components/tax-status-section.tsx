@@ -106,9 +106,7 @@ function DebtorBlock({ debtor }: { debtor: CompanyTaxPayload["debtor"] }) {
           </IconTile>
           <div>
             <div className="text-sm font-medium">Daňový nedoplatok</div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
-              Evidovaný daňový nedoplatok
-            </div>
+            <div className="mt-0.5 text-xs text-muted-foreground">Evidovaný daňový nedoplatok</div>
             <div className="mt-1 text-xs">
               {formatEur(s.amount)}
               {s.recordDate ? ` · k dátumu ${formatDate(s.recordDate)}` : ""}
@@ -183,12 +181,10 @@ function DebtorBlock({ debtor }: { debtor: CompanyTaxPayload["debtor"] }) {
           <div className="mt-0.5 text-xs text-muted-foreground">
             Spoločnosť sa nenachádza medzi spárovanými záznamami zoznamu daňových dlžníkov.
           </div>
-          {recordDate && (
-            <div className="mt-1 text-xs">Údaje k: {formatDate(recordDate)}</div>
-          )}
+          {recordDate && <div className="mt-1 text-xs">Údaje k: {formatDate(recordDate)}</div>}
           <div className="mt-1 text-[11px] text-muted-foreground">
-            Zoznam FS neobsahuje IČO; priraďovanie prebieha podľa názvu a adresy.
-            Záznamy, ktoré sa nepodarilo jednoznačne priradiť, nie sú zahrnuté.
+            Zoznam FS neobsahuje IČO; priraďovanie prebieha podľa názvu a adresy. Záznamy, ktoré sa
+            nepodarilo jednoznačne priradiť, nie sú zahrnuté.
           </div>
         </div>
       </div>
@@ -285,11 +281,7 @@ function VatBlock({ vat }: { vat: CompanyTaxPayload["vat"] }) {
   );
 }
 
-function ReliabilityBlock({
-  reliability,
-}: {
-  reliability: CompanyTaxPayload["reliability"];
-}) {
+function ReliabilityBlock({ reliability }: { reliability: CompanyTaxPayload["reliability"] }) {
   const s = reliability.state;
 
   if (s.kind === "classified") {
@@ -379,9 +371,8 @@ export function TaxStatusSection({ ico }: { ico: string }) {
         <div>
           <h3 className="text-lg font-semibold">Daňové údaje</h3>
           <p className="text-xs text-muted-foreground">
-            Zdroj: Finančná správa SR (financnasprava.sk, opendata.financnasprava.sk).
-            Neprítomnosť v zozname dlžníkov nie je definitívnym potvrdením, že firma nemá
-            žiadne nedoplatky.
+            Zdroj: Finančná správa SR (financnasprava.sk, opendata.financnasprava.sk). Neprítomnosť
+            v zozname dlžníkov nie je definitívnym potvrdením, že firma nemá žiadne nedoplatky.
           </p>
         </div>
         {headerDate && (
@@ -397,9 +388,7 @@ export function TaxStatusSection({ ico }: { ico: string }) {
         </div>
       ) : q.isError ? (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
-          <p className="text-sm text-destructive">
-            Daňové údaje sa nepodarilo načítať.
-          </p>
+          <p className="text-sm text-destructive">Daňové údaje sa nepodarilo načítať.</p>
           <Button size="sm" variant="outline" onClick={() => q.refetch()}>
             Skúsiť znova
           </Button>

@@ -9,8 +9,7 @@
 import { streamFsXml, toIsoDate } from "@/lib/providers/fs-xml-stream.server";
 import { parseSkAmount } from "@/lib/tax-status.types";
 
-const LANDING_URL =
-  "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-dlznikov";
+const LANDING_URL = "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-dlznikov";
 
 export interface RawTaxDebtorRecord {
   nameRaw: string;
@@ -40,7 +39,8 @@ export async function downloadTaxDebtors(): Promise<TaxDebtorsDownloadOutcome> {
       sourceRecordDate: null,
       recordsDownloaded: 0,
       records: [],
-      errorMessage: "Zdrojová URL FS pre zoznam daňových dlžníkov nie je nakonfigurovaná (FS_TAX_DEBTORS_URL).",
+      errorMessage:
+        "Zdrojová URL FS pre zoznam daňových dlžníkov nie je nakonfigurovaná (FS_TAX_DEBTORS_URL).",
     };
   }
 

@@ -5,11 +5,7 @@
 
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  normalizeCompanyName,
-  normalizeText,
-  extractPsc,
-} from "@/lib/text-normalize";
+import { normalizeCompanyName, normalizeText, extractPsc } from "@/lib/text-normalize";
 import { reportProgress, type ProgressCtx } from "@/lib/import-progress.server";
 import type { RawTaxDebtorRecord } from "@/lib/providers/tax-debtors.provider.server";
 
@@ -109,7 +105,7 @@ export async function matchAndReconcileTaxDebtors(
   for (const r of rawRecords) {
     const nameNormalized = normalizeCompanyName(r.nameRaw);
     if (!nameNormalized) continue;
-    const psc = r.psc ? extractPsc(r.psc) ?? r.psc.replace(/\s/g, "") : null;
+    const psc = r.psc ? (extractPsc(r.psc) ?? r.psc.replace(/\s/g, "")) : null;
     const obec = normalizeText(r.obec);
     inputs.push({ raw: r, nameNormalized, psc, obec });
   }
@@ -128,7 +124,8 @@ export async function matchAndReconcileTaxDebtors(
       if (after) q = q.gt("name_normalized", after);
       const { data, error } = await q;
       if (error) throw new Error(`manual mappings page ${page}: ${error.message}`);
-      const rows = (data as Array<{ name_normalized: string; psc: string; ico: string }> | null) ?? [];
+      const rows =
+        (data as Array<{ name_normalized: string; psc: string; ico: string }> | null) ?? [];
       if (rows.length === 0) break;
       for (const row of rows) manualMap.set(`${row.name_normalized}|${row.psc}`, row.ico);
       after = rows[rows.length - 1]?.name_normalized ?? null;
@@ -181,13 +178,15 @@ export async function matchAndReconcileTaxDebtors(
         if (error) {
           return { input, tier: null, ico: null, confidence: null, candidates: [] };
         }
-        const cands = ((data as Array<{
-          ico: string;
-          name_normalized: string;
-          psc: string | null;
-          obec: string | null;
-          sim: number;
-        }> | null) ?? []).map((c) => ({
+        const cands = (
+          (data as Array<{
+            ico: string;
+            name_normalized: string;
+            psc: string | null;
+            obec: string | null;
+            sim: number;
+          }> | null) ?? []
+        ).map((c) => ({
           ico: c.ico,
           nameNormalized: c.name_normalized,
           psc: c.psc,
@@ -200,7 +199,13 @@ export async function matchAndReconcileTaxDebtors(
           (c) => c.nameNormalized === input.nameNormalized && c.psc === input.psc && input.psc,
         );
         if (exactCands.length === 1) {
-          return { input, tier: "exact", ico: exactCands[0].ico, confidence: 1.0, candidates: cands };
+          return {
+            input,
+            tier: "exact",
+            ico: exactCands[0].ico,
+            confidence: 1.0,
+            candidates: cands,
+          };
         }
         if (exactCands.length >= 2) {
           return { input, tier: null, ico: null, confidence: null, candidates: cands };
@@ -261,7 +266,9 @@ export async function matchAndReconcileTaxDebtors(
     if (!prev || m.confidence > prev.confidence) byIco.set(m.ico, m);
   }
   const dedupedMatched = [...byIco.values()];
-  log(`matched exact=${result.matchedExact} fuzzy=${result.matchedFuzzy} manual=${result.matchedManual} unmatched=${result.unmatched} deduped=${dedupedMatched.length}`);
+  log(
+    `matched exact=${result.matchedExact} fuzzy=${result.matchedFuzzy} manual=${result.matchedManual} unmatched=${result.unmatched} deduped=${dedupedMatched.length}`,
+  );
 
   // ---------- 5. Upsert matched into company_tax_debts (chunked) ----------
   // Load current is_current rows for hash comparison.
@@ -279,9 +286,12 @@ export async function matchAndReconcileTaxDebtors(
       if (after) q = q.gt("ico", after);
       const { data, error } = await q;
       if (error) throw new Error(`current fetch page ${page}: ${error.message}`);
-      const rows = (data as Array<{ id: string; ico: string; source_record_hash: string | null }> | null) ?? [];
+      const rows =
+        (data as Array<{ id: string; ico: string; source_record_hash: string | null }> | null) ??
+        [];
       if (rows.length === 0) break;
-      for (const r of rows) currentByIco.set(r.ico, { id: r.id, source_record_hash: r.source_record_hash });
+      for (const r of rows)
+        currentByIco.set(r.ico, { id: r.id, source_record_hash: r.source_record_hash });
       after = rows[rows.length - 1]?.ico ?? null;
       if (rows.length < KEY_PAGE) break;
     }

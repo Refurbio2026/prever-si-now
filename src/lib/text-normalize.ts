@@ -10,7 +10,10 @@ function stripDiacritics(input: string): string {
 export function normalizeCompanyName(input: string | null | undefined): string | null {
   if (input == null) return null;
   let s = stripDiacritics(String(input)).toLowerCase();
-  s = s.replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+  s = s
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!s) return null;
   s = ` ${s} `;
   s = s.replace(/ (spol s r o|s r o|s ro) /g, " sro ");

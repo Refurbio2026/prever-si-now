@@ -90,10 +90,7 @@ function TaxMatchingPage() {
             Oficiálny dataset FS neobsahuje IČO. Priraďovanie prebieha podľa názvu a adresy.
           </p>
         </div>
-        <Link
-          to="/admin/datahub"
-          className="text-sm text-primary hover:underline"
-        >
+        <Link to="/admin/datahub" className="text-sm text-primary hover:underline">
           ← Späť na DataHub
         </Link>
       </div>
@@ -152,9 +149,7 @@ function TaxMatchingPage() {
                       <Input
                         placeholder="IČO"
                         value={manualIco[row.id] ?? ""}
-                        onChange={(e) =>
-                          setManualIco((m) => ({ ...m, [row.id]: e.target.value }))
-                        }
+                        onChange={(e) => setManualIco((m) => ({ ...m, [row.id]: e.target.value }))}
                         className="w-28"
                       />
                       <Button
@@ -198,9 +193,7 @@ function TaxMatchingPage() {
                             <span className="font-mono">{c.ico}</span> · {c.nameNormalized}{" "}
                             {c.psc && <span className="text-muted-foreground">· {c.psc}</span>}
                           </div>
-                          <Badge variant="secondary">
-                            {(c.similarity * 100).toFixed(0)}%
-                          </Badge>
+                          <Badge variant="secondary">{(c.similarity * 100).toFixed(0)}%</Badge>
                           <Link
                             to="/company/$ico"
                             params={{ ico: c.ico }}

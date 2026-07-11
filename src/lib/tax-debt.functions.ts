@@ -37,7 +37,9 @@ export const getCompanyTaxDebtFn = createServerFn({ method: "POST" })
     const ico = data.ico.padStart(8, "0");
     const { data: row } = await admin
       .from("company_tax_debts")
-      .select("amount, source_record_date, match_tier, match_confidence, debtor_name_raw, debtor_address_raw")
+      .select(
+        "amount, source_record_date, match_tier, match_confidence, debtor_name_raw, debtor_address_raw",
+      )
       .eq("ico", ico)
       .eq("source", SOURCE)
       .eq("is_current", true)
@@ -92,7 +94,10 @@ export const getTaxDebtMatchStatsFn = createServerFn({ method: "POST" })
     ]);
     const tiers = { exact: 0, fuzzy: 0, manual: 0 };
     let latestDate: string | null = null;
-    for (const r of (current as Array<{ match_tier: string; source_record_date: string | null }> | null) ?? []) {
+    for (const r of (current as Array<{
+      match_tier: string;
+      source_record_date: string | null;
+    }> | null) ?? []) {
       if (r.match_tier === "exact") tiers.exact++;
       else if (r.match_tier === "fuzzy") tiers.fuzzy++;
       else if (r.match_tier === "manual") tiers.manual++;
@@ -145,26 +150,31 @@ export const listUnmatchedTaxDebtorsFn = createServerFn({ method: "POST" })
     }
     const { data: rows, count, error } = await q;
     if (error) throw new Error(error.message);
-    const items: UnmatchedTaxDebtor[] = ((rows as Array<Record<string, unknown>> | null) ?? []).map((r) => ({
-      id: r.id as string,
-      debtorNameRaw: r.debtor_name_raw as string,
-      addressRaw: (r.address_raw as string | null) ?? null,
-      psc: (r.psc as string | null) ?? null,
-      obec: (r.obec as string | null) ?? null,
-      amount: (r.amount as number | null) ?? null,
-      sourceRecordDate: (r.source_record_date as string | null) ?? null,
-      candidates: ((r.candidates as Array<Record<string, unknown>> | null) ?? []).map((c) => ({
-        ico: c.ico as string,
-        nameNormalized: (c.name_normalized as string) ?? "",
-        psc: (c.psc as string | null) ?? null,
-        obec: (c.obec as string | null) ?? null,
-        similarity: Number(c.similarity ?? 0),
-      } as UnmatchedCandidate)),
-      status: r.status as UnmatchedTaxDebtor["status"],
-      matchedIco: (r.matched_ico as string | null) ?? null,
-      reviewedAt: (r.reviewed_at as string | null) ?? null,
-      createdAt: r.created_at as string,
-    }));
+    const items: UnmatchedTaxDebtor[] = ((rows as Array<Record<string, unknown>> | null) ?? []).map(
+      (r) => ({
+        id: r.id as string,
+        debtorNameRaw: r.debtor_name_raw as string,
+        addressRaw: (r.address_raw as string | null) ?? null,
+        psc: (r.psc as string | null) ?? null,
+        obec: (r.obec as string | null) ?? null,
+        amount: (r.amount as number | null) ?? null,
+        sourceRecordDate: (r.source_record_date as string | null) ?? null,
+        candidates: ((r.candidates as Array<Record<string, unknown>> | null) ?? []).map(
+          (c) =>
+            ({
+              ico: c.ico as string,
+              nameNormalized: (c.name_normalized as string) ?? "",
+              psc: (c.psc as string | null) ?? null,
+              obec: (c.obec as string | null) ?? null,
+              similarity: Number(c.similarity ?? 0),
+            }) as UnmatchedCandidate,
+        ),
+        status: r.status as UnmatchedTaxDebtor["status"],
+        matchedIco: (r.matched_ico as string | null) ?? null,
+        reviewedAt: (r.reviewed_at as string | null) ?? null,
+        createdAt: r.created_at as string,
+      }),
+    );
     return { items, total: count ?? items.length };
   });
 
@@ -184,7 +194,9 @@ export const matchTaxDebtorFn = createServerFn({ method: "POST" })
 
     const { data: row, error: rowErr } = await admin
       .from("tax_debtor_unmatched")
-      .select("id, debtor_name_raw, debtor_name_normalized, address_raw, psc, amount, source_record_date")
+      .select(
+        "id, debtor_name_raw, debtor_name_normalized, address_raw, psc, amount, source_record_date",
+      )
       .eq("id", data.unmatchedId)
       .maybeSingle();
     if (rowErr) throw new Error(rowErr.message);
@@ -226,17 +238,15 @@ export const matchTaxDebtorFn = createServerFn({ method: "POST" })
 
     // Persist mapping for future imports
     if (r.debtor_name_normalized && r.psc) {
-      await admin
-        .from("tax_debtor_manual_mappings")
-        .upsert(
-          {
-            name_normalized: r.debtor_name_normalized,
-            psc: r.psc,
-            ico,
-            created_by: context.userId,
-          },
-          { onConflict: "name_normalized,psc" },
-        );
+      await admin.from("tax_debtor_manual_mappings").upsert(
+        {
+          name_normalized: r.debtor_name_normalized,
+          psc: r.psc,
+          ico,
+          created_by: context.userId,
+        },
+        { onConflict: "name_normalized,psc" },
+      );
     }
     // Mark unmatched row as manually_matched
     await admin

@@ -23,10 +23,7 @@ const icoSchema = z.object({
 });
 const datasetSchema = z.object({ dataset: z.enum(TAX_DATASETS) });
 
-async function assertAdmin(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<void> {
+async function assertAdmin(supabase: SupabaseClient, userId: string): Promise<void> {
   const { data, error } = await supabase.rpc("has_role", {
     _user_id: userId,
     _role: "admin",
@@ -86,8 +83,7 @@ function debtorStateFrom(
   }
   if (
     !lastSuccess ||
-    (lastAny &&
-      (lastAny.status === "failed" || lastAny.status === "not_implemented"))
+    (lastAny && (lastAny.status === "failed" || lastAny.status === "not_implemented"))
   ) {
     return {
       kind: "unverified",
@@ -131,8 +127,7 @@ function vatStateFrom(
   // 3) Unknown / unverified.
   if (
     !lastSuccess ||
-    (lastAny &&
-      (lastAny.status === "failed" || lastAny.status === "not_implemented"))
+    (lastAny && (lastAny.status === "failed" || lastAny.status === "not_implemented"))
   ) {
     return {
       kind: "unverified",
@@ -156,8 +151,7 @@ function reliabilityStateFrom(
   }
   if (
     !lastSuccess ||
-    (lastAny &&
-      (lastAny.status === "failed" || lastAny.status === "not_implemented"))
+    (lastAny && (lastAny.status === "failed" || lastAny.status === "not_implemented"))
   ) {
     return {
       kind: "unverified",
@@ -174,43 +168,35 @@ export const getCompanyTaxStatusFn = createServerFn({ method: "POST" })
     const admin = supabaseAdmin as unknown as SupabaseClient;
     const ico = data.ico.padStart(8, "0");
 
-    const [
-      { data: rowsData },
-      { data: runsData },
-      { data: finstatData },
-      { data: matchedDebt },
-    ] = await Promise.all([
-      admin
-        .from("company_tax_status")
-        .select(
-          "source_dataset, tax_debtor_found, tax_debt_amount, vat_registered, ic_dph, vat_registration_date, tax_reliability_index, source_record_date, source_url, imported_at",
-        )
-        .eq("ico", ico)
-        .eq("is_current", true)
-        .order("imported_at", { ascending: false })
-        .limit(50),
-      admin
-        .from("tax_import_runs")
-        .select(
-          "dataset, status, started_at, finished_at, error_message, source_url, source_record_date",
-        )
-        .order("started_at", { ascending: false })
-        .limit(200),
-      admin
-        .from("company_registry")
-        .select("finstat_data")
-        .eq("ico", ico)
-        .maybeSingle(),
-      admin
-        .from("company_tax_debts")
-        .select("amount, source_record_date, match_tier, match_confidence")
-        .eq("ico", ico)
-        .eq("source", "fs_tax_debtors")
-        .eq("is_current", true)
-        .order("valid_from", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
+    const [{ data: rowsData }, { data: runsData }, { data: finstatData }, { data: matchedDebt }] =
+      await Promise.all([
+        admin
+          .from("company_tax_status")
+          .select(
+            "source_dataset, tax_debtor_found, tax_debt_amount, vat_registered, ic_dph, vat_registration_date, tax_reliability_index, source_record_date, source_url, imported_at",
+          )
+          .eq("ico", ico)
+          .eq("is_current", true)
+          .order("imported_at", { ascending: false })
+          .limit(50),
+        admin
+          .from("tax_import_runs")
+          .select(
+            "dataset, status, started_at, finished_at, error_message, source_url, source_record_date",
+          )
+          .order("started_at", { ascending: false })
+          .limit(200),
+        admin.from("company_registry").select("finstat_data").eq("ico", ico).maybeSingle(),
+        admin
+          .from("company_tax_debts")
+          .select("amount, source_record_date, match_tier, match_confidence")
+          .eq("ico", ico)
+          .eq("source", "fs_tax_debtors")
+          .eq("is_current", true)
+          .order("valid_from", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
 
     const latest = new Map<TaxDatasetId, TaxRow>();
     for (const row of (rowsData as TaxRow[] | null) ?? []) {
@@ -259,8 +245,7 @@ export const getCompanyTaxStatusFn = createServerFn({ method: "POST" })
         lastSuccess.get("tax_debtors"),
         lastAny.get("tax_debtors"),
       ),
-      sourceUrl:
-        "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-dlznikov",
+      sourceUrl: "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-dlznikov",
       lastImportAt: lastAny.get("tax_debtors")?.started_at ?? null,
       lastSuccessAt: lastSuccess.get("tax_debtors")?.started_at ?? null,
       sourceRecordDate:
@@ -401,15 +386,10 @@ export const getTaxImportStatusFn = createServerFn({ method: "POST" })
         .select(TAX_RUN_COLUMNS)
         .order("started_at", { ascending: false })
         .limit(100),
-      admin
-        .from("company_tax_status")
-        .select("source_dataset, ico")
-        .eq("is_current", true),
+      admin.from("company_tax_status").select("source_dataset, ico").eq("is_current", true),
     ]);
 
-    const mapped: TaxRunSummary[] = ((runs as AdminRunRow[] | null) ?? []).map(
-      mapRun,
-    );
+    const mapped: TaxRunSummary[] = ((runs as AdminRunRow[] | null) ?? []).map(mapRun);
 
     const countMap = new Map<TaxDatasetId, number>();
     for (const row of (counts as Array<{ source_dataset: string }> | null) ?? []) {
@@ -424,9 +404,7 @@ export const getTaxImportStatusFn = createServerFn({ method: "POST" })
         mapped.find(
           (r) =>
             r.dataset === d &&
-            (r.status === "success" ||
-              r.status === "empty" ||
-              r.status === "unchanged"),
+            (r.status === "success" || r.status === "empty" || r.status === "unchanged"),
         ) ?? null;
       return {
         dataset: d,
@@ -453,9 +431,7 @@ export const runAllTaxImportsFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
-    const { importAllFinancialAdministrationData } = await import(
-      "@/lib/tax-status.server"
-    );
+    const { importAllFinancialAdministrationData } = await import("@/lib/tax-status.server");
     return importAllFinancialAdministrationData();
   });
 
@@ -544,8 +520,7 @@ const DATASET_META: Record<
   { landing: string; envVar: string; xmlSuffix: string; required: string[] }
 > = {
   tax_debtors: {
-    landing:
-      "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-dlznikov",
+    landing: "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-dlznikov",
     envVar: "FS_TAX_DEBTORS_URL",
     xmlSuffix: "ds_dsdd.xml",
     required: ["ICO", "NAZOV_SUBJEKTU", "CIASTKA"],
@@ -558,8 +533,7 @@ const DATASET_META: Record<
     required: ["ICO", "IC_DPH", "DRUH_REG_DPH", "DATUM_REG"],
   },
   tax_reliability: {
-    landing:
-      "https://www.financnasprava.sk/sk/elektronicke-sluzby/verejne-sluzby/zoznamy",
+    landing: "https://www.financnasprava.sk/sk/elektronicke-sluzby/verejne-sluzby/zoznamy",
     envVar: "FS_TAX_RELIABILITY_URL",
     xmlSuffix: "",
     required: [],
@@ -570,9 +544,7 @@ export const getTaxSourceDiagnosticsFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<DatasetSourceDiagnostic[]> => {
     await assertAdmin(context.supabase, context.userId);
-    const { streamFsXml, toIsoDate } = await import(
-      "@/lib/providers/fs-xml-stream.server"
-    );
+    const { streamFsXml, toIsoDate } = await import("@/lib/providers/fs-xml-stream.server");
 
     const results: DatasetSourceDiagnostic[] = [];
     for (const dataset of TAX_DATASETS) {
@@ -626,18 +598,14 @@ export const getTaxSourceDiagnosticsFn = createServerFn({ method: "POST" })
           contentLength: probe.contentLength,
           lastModified: probe.lastModified,
           etag: probe.etag,
-          detectedFormat: probe.contentType.includes("zip")
-            ? "zip+xml"
-            : probe.contentType || null,
+          detectedFormat: probe.contentType.includes("zip") ? "zip+xml" : probe.contentType || null,
           sourceRecordDate: toIsoDate(probe.rootDate),
           sampleColumnNames: cols,
           sampleItems: probe.sampleItems,
           requiredColumns: meta.required,
           missingColumns: missing,
           errorMessage:
-            missing.length > 0
-              ? `Chýbajúce povinné polia: ${missing.join(", ")}.`
-              : null,
+            missing.length > 0 ? `Chýbajúce povinné polia: ${missing.join(", ")}.` : null,
         });
       } catch (err) {
         results.push({
@@ -661,5 +629,3 @@ export const getTaxSourceDiagnosticsFn = createServerFn({ method: "POST" })
     }
     return results;
   });
-
-
