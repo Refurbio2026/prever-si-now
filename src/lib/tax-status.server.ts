@@ -715,6 +715,32 @@ export async function importOneDataset(
     };
   }
 
+  // tax_debtors uses matching pipeline (dataset has no IČO).
+  if (dataset === "tax_debtors") {
+    try {
+      return await importTaxDebtorsMatchingFlow(runId, progress);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Neznáma chyba importu.";
+      logImportError(dataset, "matching flow crashed", err);
+      await updateRunRow(runId, {
+        status: "failed",
+        error_message: msg,
+        finished_at: new Date().toISOString(),
+      });
+      await writeFreshness(dataset, false, msg);
+      await reportProgress(progress, { phase: "failed", message: msg });
+      return {
+        dataset,
+        status: "failed",
+        recordsInserted: 0,
+        recordsUpdated: 0,
+        recordsUnchanged: 0,
+        recordsDeactivated: 0,
+        errorMessage: msg,
+      };
+    }
+  }
+
   // VAT register is streamed directly into staging (dataset is ~125 MB
   // uncompressed and cannot be buffered).
   if (dataset === "vat_registered") {
