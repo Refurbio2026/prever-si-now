@@ -710,6 +710,7 @@ export async function reconcileTax(
   }
 
   await cleanupStaging(admin, "staging_tax_records", runId, `${label} cleanup`);
+  await retainStaging(admin, "staging_tax_records", "dataset", dataset, label);
   logDatahub(`${label} reconciliation finished inserted=${counts.inserted} updated=${counts.updated} unchanged=${counts.unchanged} deactivated=${counts.deactivated}`);
 
   return { counts, errorMessage: null };
