@@ -208,8 +208,12 @@ function Landing() {
           </div>
 
           <div className="mt-12 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-muted-foreground">
-            <Stat value="600 000+" label="firiem v databáze" />
-            <Stat value="12 zdrojov" label="verejných registrov" />
+            <Stat
+              value={companiesLabel}
+              label="subjektov v databáze"
+              title={companiesExact ? `Presne: ${companiesExact} aktívnych subjektov` : undefined}
+            />
+            <Stat value={sourcesLabel} label="verejných registrov" />
             <Stat value="99.9%" label="dostupnosť služby" />
           </div>
         </div>
