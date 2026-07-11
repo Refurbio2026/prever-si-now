@@ -622,6 +622,7 @@ export async function reconcileInsurance(
 
   // Phase 3: clear staging in chunks, so cleanup cannot timeout on a large run.
   await cleanupStaging(admin, "staging_insurance_debts", runId, `${label} cleanup`);
+  await retainStaging(admin, "staging_insurance_debts", "provider", provider, label);
   logDatahub(`${label} reconciliation finished inserted=${counts.inserted} updated=${counts.updated} unchanged=${counts.unchanged} deactivated=${counts.deactivated}`);
 
   return { counts, errorMessage: null };
