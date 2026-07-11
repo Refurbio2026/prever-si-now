@@ -174,32 +174,43 @@ export const getCompanyTaxStatusFn = createServerFn({ method: "POST" })
     const admin = supabaseAdmin as unknown as SupabaseClient;
     const ico = data.ico.padStart(8, "0");
 
-    const [{ data: rowsData }, { data: runsData }, { data: finstatData }] =
-      await Promise.all([
-        admin
-          .from("company_tax_status")
-          .select(
-            "source_dataset, tax_debtor_found, tax_debt_amount, vat_registered, ic_dph, vat_registration_date, tax_reliability_index, source_record_date, source_url, imported_at",
-          )
-          .eq("ico", ico)
-          .eq("is_current", true)
-          .order("imported_at", { ascending: false })
-          .limit(50),
-        admin
-          .from("tax_import_runs")
-          .select(
-            "dataset, status, started_at, finished_at, error_message, source_url, source_record_date",
-          )
-          .order("started_at", { ascending: false })
-          .limit(200),
-        // Finstat fallback for VAT (from company_registry.finstat_data JSONB
-        // if present); guarded — table may not have it, ignore errors.
-        admin
-          .from("company_registry")
-          .select("finstat_data")
-          .eq("ico", ico)
-          .maybeSingle(),
-      ]);
+    const [
+      { data: rowsData },
+      { data: runsData },
+      { data: finstatData },
+      { data: matchedDebt },
+    ] = await Promise.all([
+      admin
+        .from("company_tax_status")
+        .select(
+          "source_dataset, tax_debtor_found, tax_debt_amount, vat_registered, ic_dph, vat_registration_date, tax_reliability_index, source_record_date, source_url, imported_at",
+        )
+        .eq("ico", ico)
+        .eq("is_current", true)
+        .order("imported_at", { ascending: false })
+        .limit(50),
+      admin
+        .from("tax_import_runs")
+        .select(
+          "dataset, status, started_at, finished_at, error_message, source_url, source_record_date",
+        )
+        .order("started_at", { ascending: false })
+        .limit(200),
+      admin
+        .from("company_registry")
+        .select("finstat_data")
+        .eq("ico", ico)
+        .maybeSingle(),
+      admin
+        .from("company_tax_debts")
+        .select("amount, source_record_date, match_tier, match_confidence")
+        .eq("ico", ico)
+        .eq("source", "fs_tax_debtors")
+        .eq("is_current", true)
+        .order("valid_from", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
     const latest = new Map<TaxDatasetId, TaxRow>();
     for (const row of (rowsData as TaxRow[] | null) ?? []) {
@@ -217,7 +228,8 @@ export const getCompanyTaxStatusFn = createServerFn({ method: "POST" })
         !lastSuccess.has(d) &&
         (row.status === "success" ||
           row.status === "empty" ||
-          row.status === "unchanged")
+          row.status === "unchanged" ||
+          row.status === "success_partial")
       ) {
         lastSuccess.set(d, row);
       }
@@ -237,22 +249,24 @@ export const getCompanyTaxStatusFn = createServerFn({ method: "POST" })
       return { icDph: ic, registered: reg };
     })();
 
-    const debtorLatest = latest.get("tax_debtors");
     const vatLatest = latest.get("vat_registered");
     const relLatest = latest.get("tax_reliability");
+    const matchedDebtRow = (matchedDebt as MatchedDebtRow | null) ?? undefined;
 
     const debtor = {
       state: debtorStateFrom(
-        debtorLatest,
+        matchedDebtRow,
         lastSuccess.get("tax_debtors"),
         lastAny.get("tax_debtors"),
       ),
-      sourceUrl: debtorLatest?.source_url ?? null,
+      sourceUrl:
+        (matchedDebtRow ? null : null) ??
+        "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-dlznikov",
       lastImportAt: lastAny.get("tax_debtors")?.started_at ?? null,
       lastSuccessAt: lastSuccess.get("tax_debtors")?.started_at ?? null,
       sourceRecordDate:
+        matchedDebtRow?.source_record_date ??
         lastSuccess.get("tax_debtors")?.source_record_date ??
-        debtorLatest?.source_record_date ??
         null,
     };
     const vat = {
