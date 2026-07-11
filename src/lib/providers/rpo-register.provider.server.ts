@@ -310,58 +310,16 @@ export interface RpoDownloadOutcome {
   errorMessage: string | null;
 }
 
-/** Download every part of a batch to /tmp. Caller must call cleanup() on each
- *  DownloadedFile in a finally block. */
-export async function downloadRpoBatch(batch: RpoBatchListing): Promise<RpoDownloadOutcome> {
-  if (batch.files.length === 0) {
-    return {
-      status: "unchanged",
-      batch,
-      downloads: [],
-      contentHash: "",
-      errorMessage: null,
-    };
-  }
-  const downloads: DownloadedFile[] = [];
-  const hashes: string[] = [];
-  try {
-    let i = 0;
-    for (const url of batch.files) {
-      i++;
-      log(`downloading part ${i}/${batch.files.length}: ${url.split("/").pop()}`);
-      const dl = await downloadToTempFile({
-        url,
-        label: `RPO ${batch.kind} ${i}/${batch.files.length}`,
-        filename: `rpo-${batch.exportDate}-${String(i).padStart(3, "0")}.json.gz`,
-      });
-      downloads.push(dl);
-      hashes.push(dl.contentHash);
-    }
-    // Combined content hash = concatenation of per-part hashes.
-    const combined = hashes.join("");
-    return {
-      status: "success",
-      batch,
-      downloads,
-      contentHash: combined,
-      errorMessage: null,
-    };
-  } catch (err) {
-    // Best-effort cleanup of anything downloaded so far.
-    for (const dl of downloads) {
-      try {
-        await dl.cleanup();
-      } catch {
-        /* ignore */
-      }
-    }
-    logErr("download failed", err);
-    return {
-      status: "failed",
-      batch,
-      downloads: [],
-      contentHash: "",
-      errorMessage: err instanceof Error ? err.message : "download failed",
-    };
-  }
+/** Download+validate a single RPO part. Caller MUST call `cleanup()` on the
+ *  returned file when done streaming. */
+export async function downloadRpoPart(
+  batch: RpoBatchListing,
+  partIndex: number, // 1-based
+): Promise<DownloadedFile> {
+  const url = batch.files[partIndex - 1];
+  const filename = `rpo-${batch.exportDate}-${String(partIndex).padStart(3, "0")}.json.gz`;
+  const label = `RPO ${batch.kind} ${partIndex}/${batch.files.length}`;
+  log(`downloading ${label}: ${url.split("/").pop()}`);
+  return downloadAndValidatePart(url, label, filename);
 }
+
