@@ -260,7 +260,6 @@ export const getCompanyTaxStatusFn = createServerFn({ method: "POST" })
         lastAny.get("tax_debtors"),
       ),
       sourceUrl:
-        (matchedDebtRow ? null : null) ??
         "https://opendata.financnasprava.sk/mi/opendata/show/zoznam-danovych-dlznikov",
       lastImportAt: lastAny.get("tax_debtors")?.started_at ?? null,
       lastSuccessAt: lastSuccess.get("tax_debtors")?.started_at ?? null,
