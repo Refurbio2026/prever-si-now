@@ -247,7 +247,14 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
   const steps: GlobalStepResult[] = [];
   // Order matters: RPO must populate company_match_keys BEFORE the tax
   // debtors matching runs (FS dataset has no IČO — needs match keys).
-  const stepIds = ["social_insurance", "vat_registered", "rpo_register", "tax_debtors"] as const;
+  const stepIds = [
+    "social_insurance",
+    "union",
+    "vszp",
+    "vat_registered",
+    "rpo_register",
+    "tax_debtors",
+  ] as const;
 
   try {
     for (const step of stepIds) {
