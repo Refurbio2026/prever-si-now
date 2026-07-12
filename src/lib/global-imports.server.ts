@@ -67,6 +67,12 @@ async function tryAcquireLock(
     : 0;
   const stale = running && Date.now() - startedAt > LOCK_STALE_MS;
 
+  if (running && stale) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[global-imports] stale lock detected (>${LOCK_STALE_MS / 3_600_000}h) — clearing and taking over`,
+    );
+  }
   if (running && !stale) return false;
 
   const { error } = await sb
