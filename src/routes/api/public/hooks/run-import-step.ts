@@ -8,9 +8,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { verifyDatahubSecret } from "@/lib/hooks-auth.server";
 
-type StepId = "social_insurance" | "tax_debtors" | "vat_registered";
+type StepId = "social_insurance" | "union" | "vszp" | "tax_debtors" | "vat_registered";
 
-const ALLOWED: readonly StepId[] = ["social_insurance", "tax_debtors", "vat_registered"];
+const ALLOWED: readonly StepId[] = [
+  "social_insurance",
+  "union",
+  "vszp",
+  "tax_debtors",
+  "vat_registered",
+];
 
 async function run(request: Request): Promise<Response> {
   const denied = await verifyDatahubSecret(request);
