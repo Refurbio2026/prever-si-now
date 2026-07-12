@@ -8,7 +8,13 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-type StepId = "social_insurance" | "tax_debtors" | "vat_registered" | "rpo_register";
+type StepId =
+  | "social_insurance"
+  | "union"
+  | "vszp"
+  | "tax_debtors"
+  | "vat_registered"
+  | "rpo_register";
 
 export interface GlobalStepResult {
   step: string;
