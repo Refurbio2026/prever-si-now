@@ -250,10 +250,11 @@ function CompanyPreviewCard() {
     };
   }, []);
 
-  const grade: "A" | "C" | "?" =
-    data.hasSocialDebt || data.hasTaxDebt ? "C" : "A";
+  const grade: "A" | "C" = data.hasSocialDebt || data.hasTaxDebt ? "C" : "A";
   const gradeColor =
-    grade === "A" ? "text-signal-green border-signal-green" : "text-signal-amber border-signal-amber";
+    grade === "A"
+      ? "text-signal-green border-signal-green"
+      : "text-signal-amber border-signal-amber";
 
   return (
     <article className="rounded-[12px] border border-hairline bg-card p-6 sm:p-7">
