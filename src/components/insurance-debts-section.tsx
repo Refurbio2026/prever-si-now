@@ -11,6 +11,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SourceFreshness } from "@/components/source-freshness";
 import {
   getCompanyInsuranceDebtsFn,
   type CompanyInsuranceDebtsPayload,
@@ -191,13 +192,11 @@ export function InsuranceDebtsSection({ ico }: { ico: string }) {
 
   const rows = q.data?.rows ?? [];
   const socialRow = rows.find((r) => r.provider === "social_insurance");
-  const headerDate =
-    socialRow &&
-    (socialRow.state.kind === "debt_found"
-      ? socialRow.state.recordDate
-      : socialRow.state.kind === "not_in_list"
-        ? socialRow.lastSuccessAt
-        : null);
+  // The Sociálna poisťovňa dataset carries the meaningful "as-of" date; our
+  // importer runs nightly so `lastSuccessAt` is typically today.
+  const sourceRecordDate =
+    socialRow && socialRow.state.kind === "debt_found" ? socialRow.state.recordDate : null;
+  const lastCheckedAt = socialRow ? socialRow.lastSuccessAt : null;
 
   return (
     <Card className="rounded-2xl border-border/70 p-6 shadow-soft">
@@ -210,11 +209,11 @@ export function InsuranceDebtsSection({ ico }: { ico: string }) {
             nemá žiadne záväzky.
           </p>
         </div>
-        {headerDate && (
-          <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-            Údaje k: {formatDate(headerDate)}
-          </span>
-        )}
+        <SourceFreshness
+          sourceDate={sourceRecordDate}
+          sourceLabel="SP"
+          lastCheckedAt={lastCheckedAt}
+        />
       </div>
 
       {q.isLoading ? (

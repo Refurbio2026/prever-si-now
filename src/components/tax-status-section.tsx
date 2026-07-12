@@ -13,6 +13,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SourceFreshness } from "@/components/source-freshness";
 import { getCompanyTaxStatusFn } from "@/lib/tax-status.functions";
 import type { CompanyTaxPayload } from "@/lib/tax-status.types";
 
@@ -356,10 +357,15 @@ export function TaxStatusSection({ ico }: { ico: string }) {
     staleTime: 60 * 60_000,
   });
 
-  const headerDate =
+  // Source snapshot date from any of the three FS datasets (they may lag by
+  // ~1 month; whichever we have is fine). Our nightly importer's success
+  // timestamp lives on `lastSuccessAt` — usually today.
+  const sourceRecordDate =
     q.data?.debtor.sourceRecordDate ??
     q.data?.vat.sourceRecordDate ??
     q.data?.reliability.sourceRecordDate ??
+    null;
+  const lastCheckedAt =
     q.data?.debtor.lastSuccessAt ??
     q.data?.vat.lastSuccessAt ??
     q.data?.reliability.lastSuccessAt ??
@@ -375,11 +381,11 @@ export function TaxStatusSection({ ico }: { ico: string }) {
             v zozname dlžníkov nie je definitívnym potvrdením, že firma nemá žiadne nedoplatky.
           </p>
         </div>
-        {headerDate && (
-          <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-            Údaje k: {formatDate(headerDate)}
-          </span>
-        )}
+        <SourceFreshness
+          sourceDate={sourceRecordDate}
+          sourceLabel="FS"
+          lastCheckedAt={lastCheckedAt}
+        />
       </div>
 
       {q.isLoading ? (
