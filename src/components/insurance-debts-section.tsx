@@ -11,6 +11,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SourceFreshness } from "@/components/source-freshness";
 import {
   getCompanyInsuranceDebtsFn,
   type CompanyInsuranceDebtsPayload,
