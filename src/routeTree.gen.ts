@@ -29,6 +29,7 @@ import { Route as AdminImportsRouteImport } from './routes/admin.imports'
 import { Route as AdminDatahubRouteImport } from './routes/admin.datahub'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
 import { Route as AdminApiDebugRouteImport } from './routes/admin.api-debug'
+import { Route as ApiInternalImportStatusRouteImport } from './routes/api/internal/import-status'
 import { Route as AdminDatahubTaxMatchingRouteImport } from './routes/admin.datahub.tax-matching'
 import { Route as AdminDatahubTaxRouteImport } from './routes/admin.datahub.tax'
 import { Route as AdminDatahubInsuranceRouteImport } from './routes/admin.datahub.insurance'
@@ -138,6 +139,11 @@ const AdminApiDebugRoute = AdminApiDebugRouteImport.update({
   path: '/api-debug',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApiInternalImportStatusRoute = ApiInternalImportStatusRouteImport.update({
+  id: '/api/internal/import-status',
+  path: '/api/internal/import-status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminDatahubTaxMatchingRoute = AdminDatahubTaxMatchingRouteImport.update({
   id: '/tax-matching',
   path: '/tax-matching',
@@ -207,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/admin/datahub/insurance': typeof AdminDatahubInsuranceRoute
   '/admin/datahub/tax': typeof AdminDatahubTaxRoute
   '/admin/datahub/tax-matching': typeof AdminDatahubTaxMatchingRoute
+  '/api/internal/import-status': typeof ApiInternalImportStatusRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
   '/api/public/hooks/run-global-imports': typeof ApiPublicHooksRunGlobalImportsRoute
@@ -235,6 +242,7 @@ export interface FileRoutesByTo {
   '/admin/datahub/insurance': typeof AdminDatahubInsuranceRoute
   '/admin/datahub/tax': typeof AdminDatahubTaxRoute
   '/admin/datahub/tax-matching': typeof AdminDatahubTaxMatchingRoute
+  '/api/internal/import-status': typeof ApiInternalImportStatusRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
   '/api/public/hooks/run-global-imports': typeof ApiPublicHooksRunGlobalImportsRoute
@@ -266,6 +274,7 @@ export interface FileRoutesById {
   '/admin/datahub/insurance': typeof AdminDatahubInsuranceRoute
   '/admin/datahub/tax': typeof AdminDatahubTaxRoute
   '/admin/datahub/tax-matching': typeof AdminDatahubTaxMatchingRoute
+  '/api/internal/import-status': typeof ApiInternalImportStatusRoute
   '/api/public/hooks/datahub-worker': typeof ApiPublicHooksDatahubWorkerRoute
   '/api/public/hooks/insurance-worker': typeof ApiPublicHooksInsuranceWorkerRoute
   '/api/public/hooks/run-global-imports': typeof ApiPublicHooksRunGlobalImportsRoute
@@ -298,6 +307,7 @@ export interface FileRouteTypes {
     | '/admin/datahub/insurance'
     | '/admin/datahub/tax'
     | '/admin/datahub/tax-matching'
+    | '/api/internal/import-status'
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
     | '/api/public/hooks/run-global-imports'
@@ -326,6 +336,7 @@ export interface FileRouteTypes {
     | '/admin/datahub/insurance'
     | '/admin/datahub/tax'
     | '/admin/datahub/tax-matching'
+    | '/api/internal/import-status'
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
     | '/api/public/hooks/run-global-imports'
@@ -356,6 +367,7 @@ export interface FileRouteTypes {
     | '/admin/datahub/insurance'
     | '/admin/datahub/tax'
     | '/admin/datahub/tax-matching'
+    | '/api/internal/import-status'
     | '/api/public/hooks/datahub-worker'
     | '/api/public/hooks/insurance-worker'
     | '/api/public/hooks/run-global-imports'
@@ -371,6 +383,7 @@ export interface RootRouteChildren {
   RegisterRoute: typeof RegisterRoute
   SearchRoute: typeof SearchRoute
   CompanyIcoRoute: typeof CompanyIcoRoute
+  ApiInternalImportStatusRoute: typeof ApiInternalImportStatusRoute
   ApiPublicHooksDatahubWorkerRoute: typeof ApiPublicHooksDatahubWorkerRoute
   ApiPublicHooksInsuranceWorkerRoute: typeof ApiPublicHooksInsuranceWorkerRoute
   ApiPublicHooksRunGlobalImportsRoute: typeof ApiPublicHooksRunGlobalImportsRoute
@@ -520,6 +533,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminApiDebugRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/api/internal/import-status': {
+      id: '/api/internal/import-status'
+      path: '/api/internal/import-status'
+      fullPath: '/api/internal/import-status'
+      preLoaderRoute: typeof ApiInternalImportStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/datahub/tax-matching': {
       id: '/admin/datahub/tax-matching'
       path: '/tax-matching'
@@ -647,6 +667,7 @@ const rootRouteChildren: RootRouteChildren = {
   RegisterRoute: RegisterRoute,
   SearchRoute: SearchRoute,
   CompanyIcoRoute: CompanyIcoRoute,
+  ApiInternalImportStatusRoute: ApiInternalImportStatusRoute,
   ApiPublicHooksDatahubWorkerRoute: ApiPublicHooksDatahubWorkerRoute,
   ApiPublicHooksInsuranceWorkerRoute: ApiPublicHooksInsuranceWorkerRoute,
   ApiPublicHooksRunGlobalImportsRoute: ApiPublicHooksRunGlobalImportsRoute,
