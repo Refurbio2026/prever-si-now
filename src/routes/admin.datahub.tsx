@@ -695,6 +695,8 @@ async function fetchSchedulerOverview(): Promise<{
 
 const PROGRESS_SOURCES: Array<{ id: string; label: string }> = [
   { id: "social_insurance", label: "Sociálna poisťovňa" },
+  { id: "union", label: "Union zdravotná poisťovňa" },
+  { id: "vszp", label: "VšZP" },
   { id: "fs_tax_debtors", label: "Zoznam daňových dlžníkov" },
   { id: "fs_vat_registered", label: "Register platiteľov DPH" },
 ];

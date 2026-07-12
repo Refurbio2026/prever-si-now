@@ -8,7 +8,13 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-type StepId = "social_insurance" | "tax_debtors" | "vat_registered" | "rpo_register";
+type StepId =
+  | "social_insurance"
+  | "union"
+  | "vszp"
+  | "tax_debtors"
+  | "vat_registered"
+  | "rpo_register";
 
 export interface GlobalStepResult {
   step: string;
@@ -30,7 +36,7 @@ export interface GlobalImportResult {
   steps: GlobalStepResult[];
 }
 
-const LOCK_STALE_MS = 30 * 60 * 1000; // 30 minutes
+const LOCK_STALE_MS = 3 * 60 * 60 * 1000; // 3 hours
 
 function admin(): SupabaseClient {
   // Loaded on demand to avoid pulling client.server into route module scope.
@@ -61,6 +67,12 @@ async function tryAcquireLock(
     : 0;
   const stale = running && Date.now() - startedAt > LOCK_STALE_MS;
 
+  if (running && stale) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[global-imports] stale lock detected (>${LOCK_STALE_MS / 3_600_000}h) — clearing and taking over`,
+    );
+  }
   if (running && !stale) return false;
 
   const { error } = await sb
@@ -89,6 +101,8 @@ async function releaseLock(sb: SupabaseClient): Promise<void> {
 
 function stepSource(step: StepId): string {
   if (step === "social_insurance") return "social_insurance";
+  if (step === "union") return "union";
+  if (step === "vszp") return "vszp";
   if (step === "rpo_register") return "rpo_register";
   return `fs_${step}`;
 }
@@ -133,12 +147,16 @@ async function runStep(
   const started = Date.now();
   try {
     logStep(`step=${step} start`);
-    if (step === "social_insurance") {
+    if (step === "social_insurance" || step === "union" || step === "vszp") {
       const { importOneProvider } = await import("@/lib/insurance-debt.server");
-      const r = await importOneProvider("social_insurance", runId);
+      const r = await importOneProvider(step, runId);
       return {
         step,
-        ok: r.status === "success" || r.status === "unchanged" || r.status === "empty",
+        ok:
+          r.status === "success" ||
+          r.status === "unchanged" ||
+          r.status === "empty" ||
+          r.status === "not_implemented",
         status: r.status ?? null,
         errorMessage: r.errorMessage ?? null,
         recordsInserted: r.recordsInserted,
@@ -229,7 +247,14 @@ export async function runGlobalImports(): Promise<GlobalImportResult> {
   const steps: GlobalStepResult[] = [];
   // Order matters: RPO must populate company_match_keys BEFORE the tax
   // debtors matching runs (FS dataset has no IČO — needs match keys).
-  const stepIds = ["social_insurance", "vat_registered", "rpo_register", "tax_debtors"] as const;
+  const stepIds = [
+    "social_insurance",
+    "union",
+    "vszp",
+    "vat_registered",
+    "rpo_register",
+    "tax_debtors",
+  ] as const;
 
   try {
     for (const step of stepIds) {
