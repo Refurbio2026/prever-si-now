@@ -269,9 +269,7 @@ function CompanyPreviewCard() {
         </div>
         <div className="flex shrink-0 flex-col items-center">
           <div
-            className={`grid h-11 w-11 place-items-center rounded-full border-[3px] bg-card font-serif text-[18px] font-medium ${
-              grade === "?" ? "text-ink-muted border-hairline" : gradeColor
-            }`}
+            className={`grid h-11 w-11 place-items-center rounded-full border-[3px] bg-card font-serif text-[18px] font-medium ${gradeColor}`}
           >
             {grade}
           </div>
