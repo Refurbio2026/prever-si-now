@@ -36,7 +36,7 @@ export interface GlobalImportResult {
   steps: GlobalStepResult[];
 }
 
-const LOCK_STALE_MS = 30 * 60 * 1000; // 30 minutes
+const LOCK_STALE_MS = 3 * 60 * 60 * 1000; // 3 hours
 
 function admin(): SupabaseClient {
   // Loaded on demand to avoid pulling client.server into route module scope.
