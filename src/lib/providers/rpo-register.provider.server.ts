@@ -137,19 +137,47 @@ async function listBucket(prefix: string): Promise<Array<{ key: string; size: nu
   return out;
 }
 
+/** Fetch and parse an init batch manifest (_list.txt). Each non-empty line is
+ *  a filename (e.g. "init_2026-07-04_001.json.gz"). Returns null if missing. */
+async function fetchInitManifest(date: string): Promise<Set<string> | null> {
+  // The manifest key appears as batch-init/init_YYYY-MM-DD_list.txt.
+  const url = `${BUCKET_URL}/batch-init/init_${date}_list.txt`;
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": "PreverSi DataHub" } });
+    if (!res.ok) return null;
+    const text = await res.text();
+    const names = new Set<string>();
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      // Manifest may include a path or bare filename — normalize to basename.
+      const base = line.split("/").pop() ?? line;
+      if (base.endsWith(".json.gz")) names.add(base);
+    }
+    return names.size > 0 ? names : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Find the latest available RPO batch. Preference: newest daily since last
  *  known export → latest init snapshot. Caller passes the previously-imported
- *  export date to prefer deltas. */
+ *  export date to prefer deltas.
+ *
+ *  For dailies we return ALL pending dailies (in chronological order) as a
+ *  single multi-part "daily" batch, so a run catches up any backlog. */
 export async function findLatestRpoBatch(previousExportDate: string | null): Promise<RpoBatchListing> {
   const [initItems, dailyItems] = await Promise.all([
     listBucket("batch-init/"),
     listBucket("batch-daily/"),
   ]);
 
-  // Group init files by date.
+  // Group init files by date — ONLY *.json.gz data parts. Explicitly exclude
+  // manifests (_list.txt) and any other non-gz entries in the bucket.
   const initByDate = new Map<string, string[]>();
   for (const it of initItems) {
-    const m = it.key.match(/^batch-init\/init_(\d{4}-\d{2}-\d{2})_/);
+    if (!it.key.endsWith(".json.gz")) continue; // skips _list.txt, checksums, etc.
+    const m = it.key.match(/^batch-init\/init_(\d{4}-\d{2}-\d{2})_\d+\.json\.gz$/);
     if (!m) continue;
     if (!initByDate.has(m[1])) initByDate.set(m[1], []);
     initByDate.get(m[1])!.push(`${BUCKET_URL}/${it.key}`);
@@ -159,28 +187,50 @@ export async function findLatestRpoBatch(previousExportDate: string | null): Pro
   // Group dailies by date (single file per date).
   const dailyByDate = new Map<string, string>();
   for (const it of dailyItems) {
+    if (!it.key.endsWith(".json.gz")) continue;
     const m = it.key.match(/^batch-daily\/actual_(\d{4}-\d{2}-\d{2})\.json\.gz$/);
     if (m) dailyByDate.set(m[1], `${BUCKET_URL}/${it.key}`);
+  }
+
+  async function initBatch(date: string): Promise<RpoBatchListing> {
+    const files = (initByDate.get(date) ?? []).slice().sort();
+    // Cross-check against the manifest when available: warn if the bucket is
+    // missing parts the manifest promises. We keep the file set derived from
+    // the bucket listing (source of truth for what actually exists to
+    // download) but this surfaces missing-part gaps in the logs.
+    const manifest = await fetchInitManifest(date);
+    if (manifest) {
+      const present = new Set(files.map((u) => u.split("/").pop() ?? ""));
+      const missing = [...manifest].filter((n) => !present.has(n));
+      const extra = [...present].filter((n) => !manifest.has(n));
+      if (missing.length > 0) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[datahub] RPO manifest ${date}: bucket missing ${missing.length} listed parts: ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? "…" : ""}`,
+        );
+      }
+      if (extra.length > 0) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[datahub] RPO manifest ${date}: bucket has ${extra.length} extra parts not in manifest: ${extra.slice(0, 5).join(", ")}${extra.length > 5 ? "…" : ""}`,
+        );
+      }
+    } else {
+      log(`no manifest _list.txt for init ${date} (skipping cross-check)`);
+    }
+    return { kind: "init", exportDate: date, files };
   }
 
   // Decision:
   // - No previous import: always seed from latest init.
   // - Previous import present AND latest init is newer than what we have: take the init.
-  // - Otherwise: take the newest daily strictly after previousExportDate.
+  // - Otherwise: take ALL dailies strictly after previousExportDate.
   if (!previousExportDate) {
     if (!latestInitDate) throw new Error("No RPO init batch available.");
-    return {
-      kind: "init",
-      exportDate: latestInitDate,
-      files: (initByDate.get(latestInitDate) ?? []).sort(),
-    };
+    return initBatch(latestInitDate);
   }
   if (latestInitDate && latestInitDate > previousExportDate) {
-    return {
-      kind: "init",
-      exportDate: latestInitDate,
-      files: (initByDate.get(latestInitDate) ?? []).sort(),
-    };
+    return initBatch(latestInitDate);
   }
   const newerDailies = [...dailyByDate.entries()]
     .filter(([date]) => date > previousExportDate)
@@ -189,9 +239,12 @@ export async function findLatestRpoBatch(previousExportDate: string | null): Pro
     // Nothing new — return the previous date as a signal (files empty).
     return { kind: "daily", exportDate: previousExportDate, files: [] };
   }
-  // Return the newest daily (caller will apply it).
-  const [date, url] = newerDailies[newerDailies.length - 1];
-  return { kind: "daily", exportDate: date, files: [url] };
+  // Return ALL pending dailies in order; exportDate is the newest so the
+  // checkpoint moves forward once they've all been applied.
+  const files = newerDailies.map(([, url]) => url);
+  const newestDate = newerDailies[newerDailies.length - 1][0];
+  log(`daily catch-up: ${files.length} file(s) from ${newerDailies[0][0]} to ${newestDate}`);
+  return { kind: "daily", exportDate: newestDate, files };
 }
 
 // -------------------- Record parsing --------------------
