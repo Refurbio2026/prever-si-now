@@ -101,6 +101,8 @@ async function releaseLock(sb: SupabaseClient): Promise<void> {
 
 function stepSource(step: StepId): string {
   if (step === "social_insurance") return "social_insurance";
+  if (step === "union") return "union";
+  if (step === "vszp") return "vszp";
   if (step === "rpo_register") return "rpo_register";
   return `fs_${step}`;
 }
