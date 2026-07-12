@@ -40,11 +40,15 @@ async function run(request: Request): Promise<Response> {
 
   const startedAt = Date.now();
   try {
-    if (step === "social_insurance") {
+    if (step === "social_insurance" || step === "union" || step === "vszp") {
       const { importOneProvider } = await import("@/lib/insurance-debt.server");
-      const r = await importOneProvider("social_insurance");
+      const r = await importOneProvider(step);
       return Response.json({
-        ok: r.status === "success" || r.status === "unchanged" || r.status === "empty",
+        ok:
+          r.status === "success" ||
+          r.status === "unchanged" ||
+          r.status === "empty" ||
+          r.status === "not_implemented",
         step,
         status: r.status ?? null,
         errorMessage: r.errorMessage ?? null,
